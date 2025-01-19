@@ -63,3 +63,4 @@ Frontend/.env
 # Exclude folders
 X/
 backup/
+Backend/apikeys.json
