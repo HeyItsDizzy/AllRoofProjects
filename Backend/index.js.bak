@@ -1,0 +1,344 @@
+// index.js
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config(); // Load environment variables
+const express = require("express");
+const cors = require("cors");
+const httpStatus = require("http-status");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
+const app = express();
+const multer = require("multer");
+// Read SSL certificate paths from environment variables
+const sslOptions = {
+  key: fs.readFileSync(process.env.SSL_KEY_PATH),
+  cert: fs.readFileSync(process.env.SSL_CERT_PATH),
+  ca: fs.readFileSync(process.env.SSL_CA_PATH)
+};
+
+// Set the HTTP and HTTPS ports
+const PORT = process.env.PORT || 5000;
+const HTTPS_PORT = process.env.HTTPS_PORT || 443;
+
+// Redirect HTTP to HTTPS
+const http = require("http");
+http.createServer((req, res) => {
+    const httpsURL = `https://${req.headers.host}${req.url}`;
+    res.writeHead(301, { Location: httpsURL });
+    res.end(`Redirecting to HTTPS: ${httpsURL}`);
+}).listen(PORT, () => {
+    console.log(`HTTP server running on http://localhost:${PORT}, redirecting to HTTPS`);
+});
+
+// Start the HTTPS server (ensure your SSL configuration is set correctly)
+https.createServer(
+    {
+        key: fs.readFileSync(process.env.SSL_KEY_PATH),
+        cert: fs.readFileSync(process.env.SSL_CERT_PATH),
+        ca: fs.readFileSync(process.env.SSL_CA_PATH),
+    },
+    app
+).listen(HTTPS_PORT, () => {
+    console.log(`HTTPS server running on https://localhost:${HTTPS_PORT}`);
+});
+
+
+
+// Ensure the 'uploads/' directory exists
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+  console.log("Uploads directory created successfully.");
+} //This ensures that the uploads directory exists. It's correctly placed before multer configuration.
+
+// Configure Multer storage with unique file name generation
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/"); // Directory where files will be saved
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const uniqueFileName = `${file.fieldname}-${uniqueSuffix}${path.extname(
+      file.originalname
+    )}`;
+    file.uniqueFileName = uniqueFileName; // Add unique file name to the file object
+    cb(null, uniqueFileName);
+  },
+}); 
+const upload = multer({ storage }); //The multer configuration is sound, and it's appropriately placed after the directory creation logic.
+
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); //These middleware are correctly placed early to ensure the server can parse JSON and URL-encoded data.
+
+const allowedOrigins = [
+  "https://allrooftakeoffs.com.au",
+  "https://www.allrooftakeoffs.com.au",
+  "https://projects.allrooftakeoffs.com.au",
+  "http://localhost:5173", // For local development
+];
+
+
+app.use(  //Cors
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // Allow requests without origin
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // Allow cookies and headers
+  })
+);
+
+/**app.use((req, res, next) => {
+  const origin = req.header("Origin");
+  console.log("Request Origin:", origin); // Log the origin for debugging
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, Access-Control-Allow-Credentials, X-Requested-With"
+  );
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  next();
+});*/
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
+
+
+
+const uri = process.env.MONGODB_URI; 
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+const userCollection = client.db("ART").collection("Users");
+const projectsCollection = client.db("ART").collection("Projects");
+//MongoDB setup looks correct, and userCollection and projectsCollection are defined appropriately.
+
+async function run() {
+  try {
+    // Connect to MongoDB (only once)
+    await client.connect();
+    console.log("Successfully connected to MongoDB!");
+
+    // Validate environment variables
+    if (!process.env.JWT_SECRET || !process.env.BCRYPT_SALT_ROUND) {
+      console.error("Missing critical environment variables.");
+      process.exit(1);
+    }
+
+    /**
+     * =========================
+     *      MIDDLEWARES
+     * =========================
+     */
+
+    const authenticateToken = () => {
+      return async (req, res, next) => {
+        try {
+          const authHeader = req.headers["authorization"];
+          if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return res.status(httpStatus.UNAUTHORIZED).json({ message: "Access denied, token missing!" });
+          }
+
+          const token = authHeader.split(" ")[1];
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await userCollection.findOne({ email: decoded.email });
+
+          if (!user) {
+            return res.status(httpStatus.FORBIDDEN).json({ message: "Invalid or expired token" });
+          }
+
+          req.user = user;
+          next();
+        } catch (err) {
+          console.error("Token verification error:", err.message);
+          return res.status(httpStatus.FORBIDDEN).json({ message: "Invalid or expired token" });
+        }
+      };
+    };
+
+    const authenticateAdmin = () => {
+      return (req, res, next) => {
+        if (req.user.role !== "Admin") {
+          return res.status(httpStatus.FORBIDDEN).json({
+            message: "Access denied, admin privileges required",
+          });
+        }
+        next();
+      };
+    };
+
+    /**
+     * ==================================================
+     *                     USERS
+     * ==================================================
+     */
+
+    app.post("/register", async (req, res) => {
+      const newUserData = req.body;
+
+      try {
+        // Validate email
+        const email = newUserData?.email;
+        const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        if (!validateEmail(email)) throw new Error("Invalid email address");
+
+        // Check if email already exists
+        const isEmailExist = await userCollection.findOne({ email });
+        if (isEmailExist) throw new Error("This email is already in use");
+
+        // Hash password
+        const bcryptSaltRound = Number(process.env.BCRYPT_SALT_ROUND);
+        if (!bcryptSaltRound) throw new Error("Invalid bcrypt salt round configuration");
+
+        newUserData.password = await bcrypt.hash(newUserData.password, bcryptSaltRound);
+
+        // Create user
+        const user = { ...newUserData, role: "User", isBlock: false, isDeleted: false };
+        const createUser = await userCollection.insertOne(user);
+
+        res.json({
+          success: true,
+          status: httpStatus.OK,
+          message: "Registration successful",
+          data: createUser,
+        });
+      } catch (err) {
+        console.error("Registration error:", err.message);
+        res.status(httpStatus.BAD_REQUEST).json({
+          success: false,
+          status: httpStatus.BAD_REQUEST,
+          message: err.message || "Something went wrong",
+        });
+      }
+    });
+
+    app.post("/login", async (req, res) => {
+      try {
+        const { email, password } = req.body;
+        const user = await userCollection.findOne({ email });
+
+        if (!user) throw new Error("Invalid email or password");
+        if (user.isDeleted) throw new Error("User is deleted");
+        if (!await bcrypt.compare(password, user.password)) throw new Error("Invalid email or password");
+
+        const token = jwt.sign(
+          { userId: user._id, email: user.email },
+          process.env.JWT_SECRET,
+          { expiresIn: process.env.JWT_SECRET_EXPAIR_IN }
+        );
+
+        user.password = undefined; // Do not return the password
+        res.json({
+          success: true,
+          status: httpStatus.OK,
+          message: "Login successful",
+          data: { user, token },
+        });
+      } catch (err) {
+        console.error("Login error:", err.message);
+        res.status(httpStatus.UNAUTHORIZED).json({
+          success: false,
+          message: "Login failed",
+          error: err.message,
+        });
+      }
+    });
+
+    /**
+     * ==================================================
+     *               ERROR HANDLING
+     * ==================================================
+     */
+    app.use((err, req, res, next) => {
+      console.error("Global Error:", err);
+      res.status(500).json({ error: err.message || "Internal Server Error" });
+    });
+
+    // Ping MongoDB
+    await client.db("admin").command({ ping: 1 });
+    console.log("MongoDB ping successful");
+
+  } catch (err) {
+    console.error("MongoDB connection error:", err.message);
+    process.exit(1); // Exit if MongoDB connection fails
+  }
+}
+
+run().catch(console.dir);
+
+// Basic route
+app.get("/", (req, res) => {
+  const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Server Status</title>
+          <style>
+            body {
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              background-color: #f0f0f0;
+              margin: 0;
+              font-family: Arial, sans-serif;
+            }
+            .container {
+              text-align: center;
+              background-color: #fff;
+              padding: 50px;
+              border-radius: 10px;
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }
+            h1 {
+              color: #4caf50;
+              font-size: 2.5em;
+            }
+            p {
+              color: #333;
+              font-size: 1.2em;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Your server is running perfectly</h1>
+            <p>Everything is working as expected!</p>
+          </div>
+        </body>
+      </html>
+    `;
+  res.status(httpStatus.OK).send(html);
+});
+
+// Server listening
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

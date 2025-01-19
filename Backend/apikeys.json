@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "all-roof-take-offs-438902",
+  "private_key_id": "3a6cec2399f756b65125e37ed3ddb552c582295b",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDv6G9li4zUc5M9\njI2Ubb0wvLfUsjvgll/aVjeiBXUjXw/xlkcjUmFD9+EXSJmf4/rs5uqvtYlGysF6\n1GuE5/sonIXv7ZRdPjWcKtVOQcWBusWJqQ6qMhSLEDdNP8JVtDgNl8mVTSv37hjF\nB7360oeTi0XRUkUHECEGdPuSyZCzisxZaovlo2rD9qH/lkzRH1aMJoFMBlYFKP2I\nwbGKNBk47COkeiqYN5S4ALdLM6YwJ2bpUmNahfqPSUGzT0CBZLv8hUtcUbOQk30L\n5ZQ0oCI4n/74xkKwTylcXdha8Aj1/vWUFY71Rl/IqwnMB4gUWXmfmxNw8IoO1tN1\n1XtZbWeTAgMBAAECggEAAcM56kuTrc3pk4awVZpWzQBd82SZ1wUT0DVY9EpI+YkN\nw28gt6w3xbmRAExKwKd6pPnvWHojd48uy7m6zn+r0zkPLNuYfvThjPOtnIUUL+dQ\n4zmIP4zdpMXqOhmRUnLgBI2McBngjFJGAVCUvz6Du3xG94o8spgWPgdm/8WWWBNV\n18OISLUKD7SonvxBzu2aAN5YyGnfM7GED0o6ABWQMfASph7yKDR0pYk5SV4KPDx0\nTHvQGOBt98aqkBY241Lrbk8uyZWjgqOGvEZLGM2eNuzHN2O7YF7Mkqe91UiZCOzN\nEf13IA3N0CEKv0wE+Q/DMRUtf3DiOfxrWFsNHMhH5QKBgQD5CvHywGl1/MS9vnWj\nzkvaJjAAyzHYihhRsRWVFofRYs+9GuYI8oSe2QbF5X8rLBnQZ+CYc6QYh1u7NuGk\nwqJSqBTVA+l42EEQR8aOz/8fNzXyENOAT+NaCLppQUw0ZSN/Em1dN6Yb20BG3RlK\nmK5pQDxOX84dQaIHq2M1YIlFlwKBgQD2nClai+7ZADuNx/ig7//qvHBwrjSpTxYe\nhWB1m4O5nRRhHiFoi5ZUP0chMwXFkaSQbKZil+o03MqFScWdDdChkLk/+QLlPThw\nl/ojYZcql52MJvqXyd1aHgnJeJSCJQPfW1uSfqkb0mD9xMlpTY2v9Nbigvmpv04j\n5vIoSX8FZQKBgGhOnkG3NzSUtu5l7C28hOaMogRjFrCEPmVQzyJPenlHcozYzEop\nEUTaz0xpr9asNO+l4lrX7H3di50hAmcYohYOkhMZ/VqA8NdZyJ8eHNO9Mxn81Cjk\nzOtzxme5UqqLRc++LxIg8bCvJv/HMQWeZ0ZsAhYtaE22pJ+jt/yuPzBnAoGBAL9H\ntye9XEDC1m6NigLCxRy8lvY/mSct6bk4uO3f9xc0iIcfyMf/ZVXpUvGkUrjA1AUV\n0SSuMoJYM1mZNAcynP2EdLvzGFTY3Hsw1ls1KfxmZ1Q7M6oicGei3vJ/balYrp1D\njk6doeurjYGobpUYC2tMnJRLBP2uHhzo2DF5eGWlAoGAS0iecRVKlxN7antoA8Jw\n5kVMD8YszEJpqFpYuuxtPy89owxc7bWHNU+isr4kGAEjG5T24ET18hb7d7RX8I8C\n10aZHnFy5p3S1yjl2/RdboA5+qqaWzihRTHNDpLzgq7XaBbEwxk/+G+OPJxaZJZ3\nhoDAFPG8knjnTaiq/FTt2ao=\n-----END PRIVATE KEY-----\n",
+  "client_email": "allrooftakeoffs@all-roof-take-offs-438902.iam.gserviceaccount.com",
+  "client_id": "105683083946352447469",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/allrooftakeoffs%40all-roof-take-offs-438902.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
