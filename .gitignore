@@ -1,0 +1,64 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# Build and distribution directories
+dist/
+dist-ssr/
+build/
+
+# Editor and OS-specific files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Netlify and Vercel configuration
+.netlify/
+.vercel/
+
+# Uploads and temporary files
+uploads/
+
+# Local override files
+*.local
+
+# Ignore generated lock files if not necessary for CI
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Miscellaneous
+*.log
+.vscode/*
+!.vscode/extensions.json
+
+# Backend-specific exclusions
+Backend/node_modules/
+Backend/uploads/
+Backend/.env
+
+# Frontend-specific exclusions
+Frontend/node_modules/
+Frontend/dist/
+Frontend/vercel.json
+Frontend/.env
+
+# Exclude "X" folder
+X/
