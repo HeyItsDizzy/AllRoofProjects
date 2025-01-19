@@ -60,5 +60,6 @@ Frontend/dist/
 Frontend/vercel.json
 Frontend/.env
 
-# Exclude "X" folder
+# Exclude folders
 X/
+backup/
