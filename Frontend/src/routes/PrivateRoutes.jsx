@@ -3,7 +3,7 @@ import { Navigate, useLocation } from "react-router-dom"; // Added useLocation
 import { AuthContext } from "../auth/AuthProvider";
 
 // eslint-disable-next-line react/prop-types
-/*// Temp Overide of Authentication, remove comments when working
+// Temp Overide of Authentication, remove comments when working
 const PrivateRoutes = ({ children }) => {
   const { loading, user } = useContext(AuthContext);
 
@@ -28,10 +28,10 @@ const PrivateRoutes = ({ children }) => {
   // If no user is logged in, redirect to the login page
   return <Navigate to="/login" state={{ from: location }} />;
 };
-*/
+
+/* Bypass all authentication and directly return children
 const PrivateRoutes = ({ children }) => {
-  // Bypass all authentication and directly return children
   return children;
-};
+};*/
 
 export default PrivateRoutes;

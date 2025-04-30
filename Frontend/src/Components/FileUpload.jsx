@@ -1,5 +1,5 @@
 import { useState } from "react";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import Dragger from "antd/es/upload/Dragger";
 import { Button, message, Spin } from "antd";
 import { InboxOutlined } from "@ant-design/icons";

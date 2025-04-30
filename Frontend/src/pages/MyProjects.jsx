@@ -1,12 +1,13 @@
 import { useContext, useEffect, useState } from "react";
-import { GoChevronDown } from "react-icons/go";
-import { CiSearch } from "react-icons/ci";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import { IconDown } from "../shared/IconSet";
+import { IconSearch } from "../shared/IconSet";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Button } from "antd";
 import { Link } from "react-router-dom";
-import Swal from "sweetalert2";
-import { MdIncompleteCircle } from "react-icons/md";
-import { IoCheckmarkDoneCircleOutline } from "react-icons/io5";
+import Swal from '@/shared/swalConfig';
+//import Swal from "sweetalert2";
+import { IconPending } from "../shared/IconSet";
+import { IconComplete } from "../shared/IconSet";
 import { AuthContext } from "../auth/AuthProvider";
 
 const MyProjects = () => {
@@ -15,28 +16,30 @@ const MyProjects = () => {
   const [search, setSearch] = useState("");
   const axiosSecure = useAxiosSecure();
   const { user } = useContext(AuthContext);
-  const id = user._id;
+  const id = user._id; // Fetch logged-in user ID
+  const url = `/projects/get-projects/${id}`;
 
+  // Handle search input
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
   };
 
-  // Determine start date based on selected filter
+  // Determine date filter based on selected button
   const getStartDate = () => {
     const today = new Date();
     if (activeButton === "New Projects") {
-      today.setDate(today.getDate() - 7); // Last week
+      today.setDate(today.getDate() - 7);
     } else if (activeButton === "Last Updated") {
-      today.setDate(today.getDate() - 3); // Last 3 days
+      today.setDate(today.getDate() - 3);
     }
     return activeButton === "All Projects" ? null : today.toISOString();
   };
 
-  // Fetch projects based on search, active button, and date filter
+  // Fetch projects
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const response = await axiosSecure.get(`/get-projects/${id}`, {
+        const response = await axiosSecure.get(url, {
           params: {
             search,
             startDate: getStartDate(),
@@ -51,11 +54,9 @@ const MyProjects = () => {
     const debounceFetch = setTimeout(fetchProjects, 500);
 
     return () => clearTimeout(debounceFetch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [axiosSecure, search, activeButton]);
 
-  // Fetch users for assignment options
-
+  // Mark project as complete
   const handleMarkComplete = async (projectId) => {
     Swal.fire({
       title: "Are you sure?",
@@ -67,11 +68,8 @@ const MyProjects = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          const response = await axiosSecure.put(
-            `/updateProjectToComplete/${projectId}`
-          );
+          const response = await axiosSecure.put(`/updateProjectToComplete/${projectId}`);
           if (response.data.success) {
-            // Update the state to reflect the status change
             setProjects((prevProjects) =>
               prevProjects.map((project) =>
                 project._id === projectId
@@ -79,33 +77,24 @@ const MyProjects = () => {
                   : project
               )
             );
-            Swal.fire(
-              "Success!",
-              "Project has been marked as complete.",
-              "success"
-            );
+            Swal.fire("Success!", "Project has been marked as complete.", "success");
           } else {
-            Swal.fire(
-              "Error",
-              response.data.message || "Failed to update project status",
-              "error"
-            );
+            Swal.fire("Error", response.data.message || "Failed to update project status", "error");
           }
         } catch (error) {
           console.error("Error marking project as complete:", error);
           Swal.fire("Error", "An error occurred. Please try again.", "error");
         }
-      } else if (result.dismiss === Swal.DismissReason.cancel) {
-        Swal.fire("Cancelled", "The project remains unchanged.", "info");
       }
     });
   };
 
   return (
     <div className="min-h-screen">
+      {/* Search and Filters */}
       <div className="w-full mx-auto my-6 flex flex-col md:flex-row md:justify-between items-center gap-4">
         <div className="relative">
-          <CiSearch className="absolute top-[11px] left-2" />
+          <IconSearch className="absolute top-[11px] left-2" />
           <input
             type="text"
             placeholder="Search"
@@ -118,9 +107,7 @@ const MyProjects = () => {
             <button
               key={label}
               className={`px-4 py-1 rounded-full transition-colors duration-300 ${
-                activeButton === label
-                  ? "bg-secondary text-white"
-                  : "bg-transparent text-textGray"
+                activeButton === label ? "bg-secondary text-white" : "bg-transparent text-textGray"
               }`}
               onClick={() => setActiveButton(label)}
             >
@@ -130,20 +117,21 @@ const MyProjects = () => {
         </div>
       </div>
 
+      {/* Projects Table */}
       <div className="overflow-x-auto bg-white p-4 rounded-md">
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="text-left h-10 bg-primary-10 text-medium">
               <td className="pl-2 max-w-52">
                 <span className="flex items-center">
-                  Project Name <GoChevronDown />
+                  Project Name <IconDown />
                 </span>
               </td>
-              <td>Assign With</td>
-              <td>Country</td>
-              <td>Posting Date</td>
+              <td>Linked User</td>
+              <td>Address</td>
+              <td>Date Posted</td>
               <td>Cost</td>
-              <td>Deadline</td>
+              <td>Due Date</td>
               <td>Action</td>
             </tr>
           </thead>
@@ -159,50 +147,47 @@ const MyProjects = () => {
                     )}
                   </td>
                   <td>
-                    <div className="flex gap-2">
-                      {project.assignedOn ? (
-                        <>
-                          {project.assignedOn?.image ? (
-                            <img
-                              className="rounded-full w-10 h-10 my-1"
-                              src={project.assignedOn?.image}
-                              alt=""
-                            />
-                          ) : (
-                            <div className="rounded-full w-10 h-10 flex justify-center align-middle bg-bgGray">
-                              <h1 className="h-fit my-auto text-xl text-textBlack font-serif font-medium">
-                                {project.name.slice(0, 2)}
-                              </h1>
-                            </div>
-                          )}
-                          <p className="my-2">{project.assignedOn?.name}</p>
-                        </>
-                      ) : (
-                        <p>Not Assigned</p>
-                      )}
-                    </div>
+                    {project.linkedUsers ? (
+                      <>
+                        {project.linkedUsers?.image ? (
+                          <img
+                            className="rounded-full w-10 h-10 my-1"
+                            src={project.linkedUsers?.image}
+                            alt=""
+                          />
+                        ) : (
+                          <div className="rounded-full w-10 h-10 flex justify-center align-middle bg-bgGray">
+                            <h1 className="h-fit my-auto text-xl text-textBlack font-serif font-medium">
+                              {project.name.slice(0, 2)}
+                            </h1>
+                          </div>
+                        )}
+                        <p className="my-2">{project.linkedUsers?.name}</p>
+                      </>
+                    ) : (
+                      <p>Not Assigned</p>
+                    )}
                   </td>
                   <td>{project.location}</td>
                   <td>{project.posting_date}</td>
                   <td>${project.total}</td>
-                  <td>{project.dateline}</td>
+                  <td>{project.due_date}</td>
                   <td className="text-primary">
                     <div className="flex justify-around">
                       <Button>
                         <Link to={`/project/${project._id}`}>View</Link>
                       </Button>
                       <div className="w-fit my-auto ">
-                        {project.status === "running" || !project.status ? (
+                        {project.status === "New Lead" || !project.status ? (
                           <button className="flex">
-                            <MdIncompleteCircle
+                            <IconPending
                               className="text-secondary border-2 text-2xl rounded-full  p-1 border-secondary"
                               onClick={() => handleMarkComplete(project._id)}
                             />
                           </button>
                         ) : (
                           <p className="text-success font-semibold text-center w-full capitalize">
-                            {/* {project.status} */}
-                            <IoCheckmarkDoneCircleOutline className="text-2xl" />
+                            <IconComplete className="text-2xl" />
                           </p>
                         )}
                       </div>

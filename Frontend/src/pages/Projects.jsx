@@ -1,9 +1,9 @@
 import { Button, Drawer, Space } from "antd";
 import { useEffect, useState } from "react";
-import { CiSearch } from "react-icons/ci";
-import { GoChevronDown } from "react-icons/go";
-import { MdOutlineFileDownload } from "react-icons/md";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import { IconSearch } from "../shared/IconSet";
+import { IconDown } from "../shared/IconSet";
+import { IconDownload } from "../shared/IconSet";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 
 const Projects = () => {
   const [activeButton, setActiveButton] = useState("All Project");
@@ -17,10 +17,10 @@ const Projects = () => {
     setOpen(false);
   };
 
-  const axoisSecure = useAxiosSecure();
-  const url = "/get-projects";
+  const axiosSecure = useAxiosSecure();
+  const url = "/projects/get-projects";
   useEffect(() => {
-    axoisSecure
+    axiosSecure
       .get(url)
       .then((res) => {
         setTData(res.data);
@@ -29,14 +29,14 @@ const Projects = () => {
       .catch((err) => {
         console.log(err);
       });
-  }, [axoisSecure, url]);
+  }, [axiosSecure, url]);
 
   return (
     <div className="min-h-screen">
       <div className="flex justify-between my-6">
         <div>
           <div className="relative">
-            <CiSearch className="absolute top-[11px] left-2" />
+            <IconSearch className="absolute top-[11px] left-2" />
             <input
               type="text"
               className="pl-10 h-9 rounded-md placeholder:text-medium "
@@ -83,13 +83,13 @@ const Projects = () => {
             <tr className="text-left h-10 bg-primary-10 text-medium ">
               <td className="pl-2">
                 <span className="flex">
-                  Project Name <GoChevronDown />
+                  Project Name <IconDown />
                 </span>
               </td>
-              <td>Country</td>
-              <td>Posting date</td>
+              <td>Address</td>
+              <td>Date Posted</td>
               <td>Cost</td>
-              <td>Dateline</td>
+              <td>Due Date</td>
               <td>Action</td>
             </tr>
           </thead>
@@ -102,10 +102,10 @@ const Projects = () => {
                     <br />
                     <span>{data.description}</span>
                   </td>
-                  <td>{data.country}</td>
+                  <td>{data.Address}</td>
                   <td>{data.posting_date}</td>
                   <td>${data.cost}</td>
-                  <td>{data.dateline}</td>
+                  <td>{data.due_date}</td>
                   <td className="flex gap-2 text-primary my-2">
                     <>
                       <Button
@@ -135,7 +135,7 @@ const Projects = () => {
                     </>
                     <button className="px-2 py-1 rounded-md border-2 border-primary">
                       <span className="flex gap-2">
-                        <MdOutlineFileDownload className="mt-1" /> Download
+                        <IconDownload className="mt-1" /> Download
                       </span>
                     </button>
                   </td>

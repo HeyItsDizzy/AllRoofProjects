@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button, Spin } from "antd";
-import { GoChevronDown } from "react-icons/go";
-import { CiSearch } from "react-icons/ci";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import { IconDown } from "../shared/IconSet";
+import { IconSearch } from "../shared/IconSet";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Link } from "react-router-dom";
 import dayjs from "dayjs";
 
@@ -13,7 +13,7 @@ const UserTable = () => {
   const [search, setSearch] = useState("");
   const [, setErrors] = useState("");
   const axiosSecure = useAxiosSecure();
-  const url = "/get-projects";
+  const url = "/projects/get-projects";
 
   const fetchData = (query) => {
     setLoading(true);
@@ -45,7 +45,7 @@ const UserTable = () => {
 
         <div className="w-fit  mx-auto md:mx-0 lg:mx-0 my-2">
           <div className="relative">
-            <CiSearch className="absolute top-[11px] left-2" />
+            <IconSearch className="absolute top-[11px] left-2" />
             <input
               type="text"
               name="search"
@@ -93,13 +93,13 @@ const UserTable = () => {
               <tr className="text-left h-10 bg-primary-10 text-medium">
                 <td className="pl-2">
                   <span className="flex">
-                    Project Name <GoChevronDown />
+                    Project Name <IconDown />
                   </span>
                 </td>
-                <td>Country</td>
-                <td>Posting date</td>
+                <td>Address</td>
+                <td>Date Posted</td>
                 <td>Cost</td>
-                <td>Dateline</td>
+                <td>Due Date</td>
                 <td>Action</td>
               </tr>
             </thead>
@@ -116,7 +116,7 @@ const UserTable = () => {
                   <td>{data.location}</td>
                   <td>{data.posting_date}</td>
                   <td>${data?.subTotal + data?.gst}</td>
-                  <td>{data.dateline}</td>
+                  <td>{data.due_date}</td>
                   <td className="text-primary my-2">
                     <div className="flex gap-2">
                       <Button>

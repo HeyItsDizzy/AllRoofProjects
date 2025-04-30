@@ -1,68 +1,71 @@
 import { Button, Drawer, message, Spin } from "antd";
 import { useState } from "react";
-import { FaArrowLeftLong, FaFileArrowUp } from "react-icons/fa6";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import { IconBackArrow, IconFileArrowUp } from "../shared/IconSet";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import Dragger from "antd/es/upload/Dragger";
 import { InboxOutlined } from "@ant-design/icons";
 
-const UploadFile = ({ projectId }) => {
+const UploadFile = ({ projectId, triggerId }) => {
   const [open, setOpen] = useState(false);
-  const [file, setFile] = useState(null); // Single file state
+  const [files, setFiles] = useState([]);
   const [uploadStatus, setUploadStatus] = useState("");
   const [uploading, setUploading] = useState(false);
   const axiosSecure = useAxiosSecure();
   const url = `/upload-file/${projectId}`;
 
-  const showDrawer = () => {
-    setOpen(true);
-  };
+
+    const showDrawer = () => {
+      setOpen(true);
+    };
+  
+  
+    const handleUpload = async () => {
+      if (!files.length) return;
+    
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file)); // backend must support array "files[]"
+    
+      setUploading(true);
+      setUploadStatus("");
+    
+      try {
+        const response = await axiosSecure.post(url, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        setUploadStatus("Files uploaded successfully!");
+        message.success("Files uploaded successfully!");
+        setFiles([]); // Clear selection after upload
+      } catch (error) {
+        console.error("Upload failed:", error);
+        setUploadStatus("File upload failed. Please try again.");
+        message.error("File upload failed. Please try again.");
+      } finally {
+        setUploading(false);
+      }
+    };
+    
 
   const onClose = () => {
     setOpen(false);
   };
 
-  const handleUpload = async () => {
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file); // Attach the file
-
-    setUploading(true); // Start loading
-    setUploadStatus(""); // Clear any previous messages
-
-    try {
-      // eslint-disable-next-line no-unused-vars
-      const response = await axiosSecure.post(url, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data", // Set content type
-        },
-      });
-      setUploadStatus("File uploaded successfully!");
-      message.success("File uploaded successfully!");
-    } catch (error) {
-      console.error("Upload failed:", error);
-      setUploadStatus("File upload failed. Please try again.");
-      message.error("File upload failed. Please try again.");
-    } finally {
-      setUploading(false); // End loading
-    }
-  };
 
   return (
     <div>
-      <button
-        className="px-2 py-1 w-full rounded-md border-2 border-secondary"
-        onClick={showDrawer}
-      >
+<button
+  id={triggerId || ""}
+  className="px-2 py-1 w-full rounded-md border-2 border-secondary"
+  onClick={showDrawer}
+>
         <span className="flex justify-center gap-2">
-          <FaFileArrowUp className="mt-1 " /> Upload File
+          <IconFileArrowUp className="mt-1 " /> Upload File
         </span>
       </button>
       <Drawer
         title={
           <>
             <div className="flex gap-3">
-              <FaArrowLeftLong
+              <IconBackArrow
                 className="my-auto hover:bottom-2"
                 onClick={onClose}
               />
@@ -78,13 +81,15 @@ const UploadFile = ({ projectId }) => {
         <div>
           <Dragger
             name="file"
-            multiple={false}
+            multiple={true}
             beforeUpload={(file) => {
-              setFile(file);
-              message.success(`${file.name} file selected.`);
-              return false; // Prevents automatic upload
+              setFiles((prev) => [...prev, file]);
+              message.success(`${file.name} added to upload list.`);
+              return false; // Prevent auto upload
             }}
-            onRemove={() => setFile(null)} // Optional: clear file on remove
+            onRemove={(file) => {
+              setFiles((prev) => prev.filter((f) => f.uid !== file.uid));
+            }}
           >
             <p className="ant-upload-drag-icon">
               <InboxOutlined />
@@ -93,13 +98,14 @@ const UploadFile = ({ projectId }) => {
               Click or drag file to this area to upload
             </p>
             <p className="ant-upload-hint">
-              Support for a single or bulk upload. Strictly prohibited from
-              uploading company data or other banned files.
-            </p>
+  Upload one or more files. Drag-and-drop or click to select.
+</p>
+
           </Dragger>
           <Button
-            onClick={handleUpload}
-            disabled={!file || uploading}
+  onClick={handleUpload}
+  disabled={files.length === 0 || uploading}
+
             className="mt-4 bg-secondary text-white w-full"
           >
             {uploading ? (

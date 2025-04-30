@@ -1,90 +1,123 @@
-import { Input, notification } from "antd"; // Import notification
-import authImg from "../assets/auth.png";
+//Login.jsx
+import { Input, notification } from "antd"; 
 import logo from "../assets/logo.png";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { AuthContext } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
+import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic"; 
+import ForgotPasswordModal from "../Components/ForgotPasswordModal"; // Ensure this is the correct path
 
 const Login = () => {
-  const { login } = useContext(AuthContext);
-  const navigate = useNavigate();
+  const { setUser } = useContext(AuthContext); 
+  const [showResetModal, setShowResetModal] = useState(false);
 
-  const handelLogin = (e) => {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Handle form submission for login
+  const handleLogin = async (e) => {
     e.preventDefault();
 
-    const form = e.target;
-    const email = form.email.value;
-    const password = form.password.value;
+    try {
+      console.log("Attempting login with:", { email, password });
 
-    login({ email, password })
-      .then(() => {
-        navigate("/");
-      })
-      .catch((err) => {
-        // Show notification on login failure
-        notification.error({
-          message: "Login Failed",
-          description:
-            err.response?.data?.message || "Invalid email or password",
-          placement: "topRight",
-        });
+      const response = await axiosPublic.post("/login", { email, password });
+
+      console.log("Login Response:", response);
+
+      if (response.data.success) {
+        const { user, token } = response.data.data;
+
+        localStorage.setItem("authUser", JSON.stringify(user));
+        localStorage.setItem("authToken", token);
+
+        setUser(user);
+        console.log("User successfully logged in:", user);
+
+        if (user.role === "Admin") {
+          console.log("Redirecting Admin to /projects");
+          navigate("/projects"); 
+        } else {
+          navigate("/MyProjects"); 
+        }
+      } else {
+        alert(`Login failed: ${response.data.message}`);
+      }
+    } catch (error) {
+      console.error("Login Error:", error.message); 
+      notification.error({
+        message: "Login Failed",
+        description: error.response?.data?.message || "Invalid email or password",
+        placement: "topRight",
       });
+    }
   };
 
   return (
-    <div className="flex flex-col-reverse md:flex-row lg:flex-row">
-      {/* Left side: Image */}
-      <div className=" md:w-1/2 lg:w-1/2">
-        <img src={authImg} className="h-screen w-full" alt="Auth image" />
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <div className="bg-white p-20 rounded-xl shadow-lg w-full max-w-md mx-auto">
+        <div className="py-4 flex flex-col justify-center mx-auto w-full">
+          <div className="w-full text-center">
+            <img src={logo} className="w-32 mx-auto" alt="Logo" />
+            <div className="my-4">
+              <h2 className="text-smallBold text-textBlack">Welcome Back!</h2>
+              <p className="text-textGray text-semiBold">
+                Enter your email and password to login.
+              </p>
+            </div>
+          </div>
 
-      {/* Right side: Form and logo */}
-      <div className="py-4 flex flex-col justify-center mx-auto">
-        <div className="w-full ">
-          <img src={logo} className="w-32 " alt="Logo" />
-          <div className="my-4 ">
-            <h2 className="text-smallBold text-textBlack">Welcome Back!</h2>
-            <p className="text-textGray text-semiBold">
-              Enter your email and password to login.
-            </p>
-          </div>
-        </div>
+          <form onSubmit={handleLogin} className="w-full max-w-xs mx-auto">
+            <div className="flex flex-col mb-4">
+              <label className="mb-2 text-semiBold">Email</label>
+              <Input
+                name="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                className="w-full"
+                variant="filled"
+              />
+            </div>
+            <div className="flex flex-col mb-4">
+              <label className="mb-2 text-semiBold">Password</label>
+              <Input.Password
+                name="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full"
+                variant="filled"
+              />
+            </div>
+            <button className="w-full bg-primary text-white font-semibold py-2 rounded-md">
+              Login
+            </button>
+          </form>
+          <Link
+            to="/register"
+            className="text-blue-400 underline mt-4 text-center"
+          >
+            Create account
+          </Link>
 
-        {/* Login form */}
-        <form
-          action=""
-          onSubmit={handelLogin}
-          className="w-full max-w-xs mx-auto"
-        >
-          <div className="flex flex-col mb-4">
-            <label className="mb-2 text-semiBold">Email</label>
-            <Input
-              name="email"
-              placeholder="Enter your email"
-              className="w-full"
-              variant="filled"
-            />
-          </div>
-          <div className="flex flex-col mb-4">
-            <label className="mb-2 text-semiBold">Password</label>
-            <Input.Password
-              name="password"
-              placeholder="Enter your password"
-              className="w-full"
-              variant="filled"
-            />
-          </div>
-          <button className="w-full bg-primary text-white font-semibold py-2 rounded-md">
-            Login
+          {/* Forgot Password Button */}
+          <button
+            type="button"
+            onClick={() => setShowResetModal(true)}
+            className="text-sm text-primary underline mt-2"
+          >
+            Forgot Password?
           </button>
-        </form>
-        <Link
-          to="/register"
-          className="text-blue-400 underline mt-4 text-center"
-        >
-          Create account
-        </Link>
+        </div>
       </div>
+
+      {/* ForgotPasswordModal Component */}
+      <ForgotPasswordModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+      />
     </div>
   );
 };

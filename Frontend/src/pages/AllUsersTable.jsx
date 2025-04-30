@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CiSearch } from "react-icons/ci";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import { IconSearch } from "../shared/IconSet";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Button } from "antd";
 import { Link } from "react-router-dom";
 
@@ -10,7 +10,7 @@ export default function AllUsersTable() {
   const [users, setUsers] = useState([]);
 
   const axiosSecure = useAxiosSecure();
-  const url = "/get-users";
+  const url = "/users/get-users";
 
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
@@ -38,7 +38,7 @@ export default function AllUsersTable() {
       <div className="w-fit mx-auto gap-2  md:flex md:justify-between md:w-full lg:w-full my-6">
         <div className="w-fit my-2">
           <div className="relative">
-            <CiSearch className="absolute top-[11px] left-2" />
+            <IconSearch className="absolute top-[11px] left-2" />
             <input
               type="text"
               className="pl-10 h-9 rounded-md placeholder:text-medium"
@@ -93,7 +93,7 @@ export default function AllUsersTable() {
                         <img
                           className="rounded-full w-full h-full"
                           src={data.image}
-                          alt=""
+                          alt="this is the ALt"
                         />
                       ) : (
                         <div className="rounded-full w-full h-10 flex justify-center align-middle bg-bgGray">

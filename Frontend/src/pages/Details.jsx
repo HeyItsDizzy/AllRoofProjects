@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { FaChevronDown, FaChevronUp } from "react-icons/fa";
+import { IconDown, IconUp } from "../shared/IconSet";
 import { Button, Drawer, Space } from "antd";
-import { FaArrowLeftLong } from "react-icons/fa6";
-import { MdOutlineFileDownload } from "react-icons/md";
+import { IconBackArrow } from "../shared/IconSet";
+import { IconDownload } from "../shared/IconSet";
 // eslint-disable-next-line react/prop-types
 const Details = ({ data }) => {
   // console.log(data);
@@ -46,7 +46,7 @@ const Details = ({ data }) => {
         title={
           <>
             <div className="flex gap-3">
-              <FaArrowLeftLong
+              <IconBackArrow
                 className=" my-auto hover:bottom-2"
                 onClick={onClose}
               />
@@ -64,7 +64,7 @@ const Details = ({ data }) => {
             {/* BUTTON SECTION */}
             <div className="flex justify-between" onClick={toggleDetails}>
               <h2 className="font-semibold text-textBlack">Project details</h2>
-              {isOpen ? <FaChevronUp /> : <FaChevronDown />}
+              {isOpen ? <IconUp /> : <IconDown />}
             </div>
 
             {/* DETAIL SECTION */}
@@ -76,16 +76,16 @@ const Details = ({ data }) => {
                   <p className="text-textGray font-sans my-2">
                     <span>{data?.name}:</span> <span>{data?.description}</span>
                   </p>
-                  <p className="text-textGray font-sans mt-3">Country</p>
+                  <p className="text-textGray font-sans mt-3">Address</p>
                   <h3 className="font-semibold text-textBlack">
-                    {data?.country}
+                    {data?.Address}
                   </h3>
                 </div>
                 <div>
                   <div className="h-[1px] my-2 bg-stoke" />
-                  <p className="text-textGray font-sans mt-3">Deadline</p>
+                  <p className="text-textGray font-sans mt-3">Due Date</p>
                   <h3 className="font-semibold text-textBlack">
-                    {data?.dateline}
+                    {data?.due_date}
                   </h3>
                 </div>
                 <div>
@@ -113,7 +113,7 @@ const Details = ({ data }) => {
               <h2 className="font-semibold text-textBlack">
                 Organisation Details{" "}
               </h2>
-              {isOpenOrg ? <FaChevronUp /> : <FaChevronDown />}
+              {isOpenOrg ? <IconUp /> : <IconDown />}
             </div>
 
             {/* DETAIL SECTION */}
@@ -125,16 +125,16 @@ const Details = ({ data }) => {
                   <p className="text-textGray font-sans my-2">
                     <span>{data?.name}:</span> <span>{data?.description}</span>
                   </p>
-                  <p className="text-textGray font-sans mt-3">Country</p>
+                  <p className="text-textGray font-sans mt-3">Address</p>
                   <h3 className="font-semibold text-textBlack">
-                    {data?.country}
+                    {data?.Address}
                   </h3>
                 </div>
                 <div>
                   <div className="h-[1px] my-2 bg-stoke" />
-                  <p className="text-textGray font-sans mt-3">Deadline</p>
+                  <p className="text-textGray font-sans mt-3">Due Date</p>
                   <h3 className="font-semibold text-textBlack">
-                    {data?.dateline}
+                    {data?.due_date}
                   </h3>
                 </div>
                 <div>
@@ -162,8 +162,8 @@ const Details = ({ data }) => {
               <h2 className="font-semibold text-textBlack">
                 Notice Details and document
               </h2>
-              <FaChevronDown />
-              {/* {isOpenOrg ? <FaChevronUp /> : <FaChevronDown />} */}
+              <IconDown />
+              {/* {isOpenOrg ? <IconUp /> : <IconDown />} */}
             </div>
             <div>
               <div className="h-[1px] my-2 bg-stoke" />
@@ -174,7 +174,7 @@ const Details = ({ data }) => {
               </p>
               <button className="px-2 py-1 rounded-md w-full  bg-primary">
                 <span className="flex justify-center gap-2">
-                  <MdOutlineFileDownload className="mt-1" /> Download
+                  <IconDownload className="mt-1" /> Download
                 </span>
               </button>
             </div>

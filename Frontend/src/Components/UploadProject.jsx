@@ -1,10 +1,10 @@
 import { Button, Drawer, Space, Upload, message } from "antd";
 import { useState } from "react";
-import { FaArrowLeftLong } from "react-icons/fa6";
-import { MdOutlineFileDownload, MdUploadFile } from "react-icons/md";
+import { IconBackArrow } from "../shared/IconSet";
+import { IconDownload, IconUploadFile } from "../shared/IconSet";
 import * as XLSX from "xlsx"; // Import XLSX for file extraction
 import axios from "axios"; // Use axios to send data to the backend
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 
 const UploadProject = () => {
   const [open, setOpen] = useState(false);
@@ -83,7 +83,7 @@ const UploadProject = () => {
         extra={<Space></Space>}
         title={
           <div className="flex gap-3">
-            <FaArrowLeftLong
+            <IconBackArrow
               className="my-auto hover:bottom-2"
               onClick={onClose}
             />
@@ -99,7 +99,7 @@ const UploadProject = () => {
           <div className="h-44 bg-blue-50 border-dotted border-blue-600 rounded-md">
             <Dragger {...props} className="bg-secondary">
               <p className="flex justify-center my-2">
-                <MdUploadFile className="text-2xl text-textGray" />
+                <IconUploadFile className="text-2xl text-textGray" />
               </p>
               <p className="ant-upload-text">
                 Click or drag file to this area to upload
@@ -109,7 +109,7 @@ const UploadProject = () => {
           <div>
             <button className="px-2 py-2 rounded-md w-full bg-primary">
               <span className="flex justify-center gap-2">
-                <MdOutlineFileDownload className="mt-1" /> Upload
+                <IconDownload className="mt-1" /> Upload
               </span>
             </button>
           </div>

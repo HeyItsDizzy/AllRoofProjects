@@ -1,18 +1,51 @@
 const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
-// Define storage configuration
+// Dynamically create path
 const storage = multer.diskStorage({
-  // Set the destination directory for uploaded files
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Ensure this directory exists
+  destination: function (req, file, cb) {
+    const projectId = req.params.projectId;
+    const folderPath = req.body.folderPath || "";
+    const uploadPath = path.join(__dirname, "../uploads", projectId, folderPath);
+
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
   },
-  // Define the filename format
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);
   },
 });
 
-// Initialize multer with the storage configuration
 const upload = multer({ storage });
 
-module.exports = upload;
+module.exports = { upload };
+
+// Avatar upload (logos)
+const avatarStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/avatars/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, `${req.user.userId}.jpg`);
+  },
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 800 * 1024 }, // 800KB
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = /jpeg|jpg|png|webp/;
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.test(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPG, PNG, and WEBP files are allowed"));
+    }
+  },
+});
+
+module.exports = {
+  upload,
+  avatarUpload,
+};

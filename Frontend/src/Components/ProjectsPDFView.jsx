@@ -69,21 +69,21 @@ const ProjectPDFView = React.forwardRef(({ project }, ref) => {
           <strong>Location:</strong> {project.location}
         </p>
         <p>
-          <strong>Dateline:</strong> {project.dateline}
+          <strong>Due Date:</strong> {project.due_date}
         </p>
 
         <h3>Owner Details</h3>
         <p>
-          <strong>Name:</strong> {project.onarDetail?.userName}
+          <strong>Name:</strong> {project.linkedUsers?.userName}
         </p>
         <p>
-          <strong>Address:</strong> {project.onarDetail?.userAddress}
+          <strong>Address:</strong> {project.linkedUsers?.userAddress}
         </p>
         <p>
-          <strong>Phone:</strong> {project.onarDetail?.userPhone}
+          <strong>Phone:</strong> {project.linkedUsers?.userPhone}
         </p>
         <p>
-          <strong>Email:</strong> {project.onarDetail?.userEmail}
+          <strong>Email:</strong> {project.linkedUsers?.userEmail}
         </p>
 
         <h3>Project Description</h3>

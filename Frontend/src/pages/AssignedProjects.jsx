@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Button, Spin } from "antd";
-import { GoChevronDown } from "react-icons/go";
+import { IconDown } from "../shared/IconSet";
 
 const AssignedProjects = () => {
   const [loading, setLoading] = useState(true);
   const [tData, setTData] = useState([]);
   const { id } = useParams();
   const axiosSecure = useAxiosSecure();
-  const url = `/get-projects/${id}`;
+  const url = `/projects/get-projects/${id}`;
 
   useEffect(() => {
     axiosSecure
@@ -35,13 +35,13 @@ const AssignedProjects = () => {
               <tr className="text-left h-10 bg-primary-10 text-medium">
                 <td className="pl-2">
                   <span className="flex">
-                    Project Name <GoChevronDown />
+                    Project Name <IconDown />
                   </span>
                 </td>
-                <td>Country</td>
-                <td>Posting date</td>
+                <td>Address</td>
+                <td>Date Posted</td>
                 <td>Cost</td>
-                <td>Dateline</td>
+                <td>Due Date</td>
                 <td>Action</td>
               </tr>
             </thead>
@@ -56,7 +56,7 @@ const AssignedProjects = () => {
                   <td>{data.location}</td>
                   <td>{data.posting_date}</td>
                   <td>${data?.subTotal + data?.gst}</td>
-                  <td>{data.dateline}</td>
+                  <td>{data.due_date}</td>
                   <td className="text-primary my-2">
                     <div className="flex gap-2">
                       <Button>

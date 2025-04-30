@@ -1,14 +1,22 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import dotenv from "dotenv";
+import path from "path"; // ✅ Required for path.resolve
 
-dotenv.config(); // Explicitly load .env
+export default defineConfig(({ mode }) => {
+  process.env = { ...process.env, ...loadEnv(mode, process.cwd(), '') };
 
-console.log("VITE_API_BASE_URL from dotenv:", process.env.VITE_API_BASE_URL);
+  console.log("✅ Vite Loaded ENV Variables:", process.env); // Debugging
+  console.log("✅ Mapbox API Key from Vite:", process.env.VITE_MAPBOX_API_KEY);
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  //base: './', // Use relative paths for assets
+  return {
+    plugins: [react()],
+    define: {
+      "process.env": process.env, // ✅ Ensure .env variables are available globally
+    },
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "src"), // ✅ Enables "@/..." paths
+      },
+    },
+  };
 });
-

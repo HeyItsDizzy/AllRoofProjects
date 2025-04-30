@@ -9,19 +9,31 @@ const cors = require("cors");
 const httpStatus = require("http-status");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { authenticateToken, authenticateAdmin } = require("./middleware/auth");
 const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
+
+
 // Initialize Express
 const app = express();
+
+// Connect to Mongoose before routes
+const connectMongoose = require("./config/mongoose");
+connectMongoose();
+
 // Import Routes
 const generalRoutes = require("./routes/generalRoutes");
 const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
-const fileRoutes = require("./routes/fileRoutes");
 const errorHandler = require("./routes/errorHandler");
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-//app.use("/api", router);
+const fileRoutes = require("./features/fileManager/routes/fileRoutes"); //temp direct path until FMindex is ready
 
+// Middlewares
+//app.use(cors());  // Allow cross-origin requests
+app.use(express.json());  // Body parsing for JSON
+app.use(express.urlencoded({ extended: true }));  // Body parsing for URL-encoded data
+app.use("/uploads/avatars", express.static(path.join(__dirname, "uploads/avatars")));
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 //Console Logs Delete when Bugs are fixed
 console.log("SSL Options:");
@@ -53,49 +65,75 @@ console.log("HTTPS_PORT:", HTTPS_PORT);
 
 // CORS Configuration
 const allowedOrigins = [
-  "https://allrooftakeoffs.com.au",
-  "https://www.allrooftakeoffs.com.au",
-  "https://projects.allrooftakeoffs.com.au",
-  "http://localhost:5000", // Backend development server
-  "http://localhost:5173", // Frontend development server
+  "https://allrooftakeoffs.com.au",   // Production domain
+  "https://www.allrooftakeoffs.com.au", // Production domain
+  "https://projects.allrooftakeoffs.com.au", // Subdomain for the project
+  "http://192.168.10.84:5000", // Backend development server (for mobile testing)
+  "http://192.168.10.84:5173", // Frontend development server (for mobile testing)
+  "http://localhost:5000", // Backend development server (for local testing)
+  "http://localhost:5173", // Frontend development server (for local testing)
 ];
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      // Allow all valid origins, or if there is no origin (e.g. direct postman requests)
+      callback(null, true); 
+    } else {
+      callback(new Error("CORS policy error")); // Reject any other origin
+    }
+  },
+  credentials: true,  // Allow credentials (cookies, authorization headers)
+}));
+
+// ✅ Mount file manager routes AFTER app is created
+/*const FMindex = require("./features/fileManager/FMindex");
+FMindex(app);*/
 
 // MongoDB Connection
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
   serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
 });
-const userCollection = client.db("ART").collection("Users");
-const projectsCollection = client.db("ART").collection("Projects");
 
 // Log all incoming requests
 app.use((req, res, next) => {
-  console.log(`Incoming request: ${req.method} ${req.url} - Body: ${JSON.stringify(req.body)}`);
+  const now = new Date();  const timestamp = now.toTimeString().split(' ')[0]; // "HH:MM:SS"
+  console.log(timestamp, `- Incoming request: ${req.method} ${req.url} - Body: ${JSON.stringify(req.body)}`);
+
   next(); // Pass control to the next middleware or route
 });
 
+// Register public routes
+app.use("/", generalRoutes);  // (PUBLIC ROUTES) Handles `/register`, `/login`, etc.
+app.use("/users", userRoutes);  // Handles `/get-users`, `/block-user`, etc.
+app.use("/projects", projectRoutes);  // Register project routes
+app.use("/files", fileRoutes);  // file routes should come from FMindex.js
+
+// Error handling middleware
+app.use(errorHandler);
 
 // Test MongoDB Connection
 (async function run() {
   try {
     await client.connect();
     console.log("Successfully connected to MongoDB!");
+    console.log("==================================");
     await client.db("admin").command({ ping: 1 });
   } catch (err) {
     console.error("MongoDB connection error:", err);
+    console.log("==================================");
     process.exit(1);
   }
 })();
 
-// Route Middleware
-app.use("/", generalRoutes); // (PUBLIC ROUTES) Handles `/register`, `/login`, and other general endpoints
-app.use("/users", userRoutes); // Handles `/get-users`, `/block-user`, etc.
-app.use("/projects", projectRoutes);
-app.use("/files", fileRoutes);
+// Log confirmation after registering routes
+if (projectRoutes) {
+  console.log("✅ projectRoutes.js is being used in Express!");
+} else {
+  console.error("🚨 projectRoutes.js failed to load!");
+}
 
-// Error Handling Middleware
-app.use(errorHandler);
 
 // List registered routes
 console.log("Registered routes:");
@@ -104,9 +142,6 @@ app._router.stack.forEach((layer) => {
         console.log(Object.keys(layer.route.methods).join(', ').toUpperCase(), layer.route.path);
     }
 });
-
-
-
 
 // Redirect HTTP to HTTPS
 if (process.env.NODE_ENV === "production") {
@@ -122,7 +157,6 @@ if (process.env.NODE_ENV === "production") {
   });
 } else {
   
-
   // Local Development
   app.listen(HTTP_PORT, () => {
     console.log(`Server is running locally on http://localhost:${HTTP_PORT}`);

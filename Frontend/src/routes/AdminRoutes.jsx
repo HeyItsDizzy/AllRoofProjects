@@ -1,15 +1,13 @@
 import { useContext } from "react";
-import { Navigate, useLocation } from "react-router-dom"; // Added useLocation
-import { AuthContext } from "../auth/AuthProvider";
+import { Navigate, useLocation } from "react-router-dom"; // Import required hooks
+import { AuthContext } from "../auth/AuthProvider"; // Import AuthContext
 
 // eslint-disable-next-line react/prop-types
-/*// Temp Bypass of AUTH, uncomment when working
 const AdminRoutes = ({ children }) => {
-  const { loading, user } = useContext(AuthContext);
+  const { loading, user } = useContext(AuthContext); // Extract loading and user from AuthContext
+  const location = useLocation(); // Get the current location for redirection
 
-  const location = useLocation(); // Get the current location for redirection after login
-
-  const existToken = localStorage.getItem("authToken");
+  const existToken = localStorage.getItem("authToken"); // Check for authToken in localStorage
 
   // If the authentication state is still loading, display a loading message
   if (loading) {
@@ -20,18 +18,18 @@ const AdminRoutes = ({ children }) => {
     );
   }
 
-  // If user exists, render the protected children (i.e., the page content)
+  // If user exists and is an Admin, render the protected children (i.e., the page content)
   if (user && existToken && user.role === "Admin") {
     return children;
   }
 
+  // If user exists but is not an Admin, redirect to the "No Access" page
+  if (user && existToken && user.role !== "Admin") {
+    return <Navigate to="/forbidden" state={{ from: location }} />;
+  }
+
   // If no user is logged in, redirect to the login page
   return <Navigate to="/login" state={{ from: location }} />;
-};
-*/
-const AdminRoutes = ({ children }) => {
-  // Bypass all authentication and directly return children
-  return children;
 };
 
 export default AdminRoutes;

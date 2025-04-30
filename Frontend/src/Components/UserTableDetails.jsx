@@ -1,10 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { FaChevronDown, FaChevronUp } from "react-icons/fa";
+import { IconDown, IconUp } from "../shared/IconSet";
 import { Button, Drawer, Space } from "antd";
-import { FaArrowLeftLong } from "react-icons/fa6";
-import { MdOutlineFileDownload } from "react-icons/md";
-import useAxiosSecure from "../hooks/AxoisSecure/useAxiosSecure";
+import { IconBackArrow } from "../shared/IconSet";
+import { IconDownload } from "../shared/IconSet";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { useParams } from "react-router-dom";
 
 const UserTableDetails = ({ id }) => {
@@ -48,7 +48,7 @@ const UserTableDetails = ({ id }) => {
         title={
           <>
             <div className="flex gap-3">
-              <FaArrowLeftLong
+              <IconBackArrow
                 className=" my-auto hover:bottom-2"
                 onClick={onClose}
               />
