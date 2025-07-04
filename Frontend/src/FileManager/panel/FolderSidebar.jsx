@@ -6,8 +6,8 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { IconUp, IconNewFolder } from "@/shared/IconSet";
-import { sortFolderKeys, normalizePath, } from "@/FileManager/utils/FMFunctions";
+import { IconUp, IconNewFolder } from "@/shared/IconSet.jsx";
+import { sortFolderKeys, normalizePath, isVisibleFolderKey, } from "@/FileManager/utils/FMFunctions";
 import renderTree from "@/FileManager/utils/renderTree";
 import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
@@ -30,8 +30,18 @@ const FolderSidebar = ({
   folderListRef,
   loadingFolders,
   onMoveFolder = () => {},
+  meta,
+  editable = false,
+  handleRename = () => {},
+  handleDelete = () => {},
+
 }) => {
   const [expandedFolders, setExpandedFolders] = useState({});
+  useEffect(() => {
+    setExpandedFolders((prev) => ({ ...prev, ".": true }));
+  }, []);
+  
+
   const sensors = useSensors(useSensor(PointerSensor));
   const folderRefs = useRef({});
   const folderDepth = selectedPath.split("/").length;
@@ -74,6 +84,8 @@ const FolderSidebar = ({
     onMoveFolder(active.id, over.id);
   };
 
+const scrollContainerRef = useRef();
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -82,11 +94,13 @@ const FolderSidebar = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
-              if (selectedPath.includes("/")) {
-                const parts = selectedPath.split("/");
+              if (selectedPath) {
+                const parts = selectedPath.split("/").filter(Boolean);
                 parts.pop();
-                setSelectedPath(parts.join("/") || "Project");
+                const newPath = parts.length === 0 ? "." : parts.join("/");
+                setSelectedPath(newPath);
               }
+              
             }}
             title="Go up one level"
             className="p-1 rounded hover:bg-gray-100"
@@ -112,8 +126,17 @@ const FolderSidebar = ({
     if (folderName && folderName.trim()) {
       const finalName = folderName.trim();
       setNewFolderName(finalName);
-      createFolder(finalName);
-      removeTempFolder(createdTempName, parentPath); // 💥 use parent path
+    
+      // Save to disk
+      await createFolder(finalName);
+    
+      // ✅ Reflect new folder instantly
+      addTempUIFolder(finalName);
+    
+      // ✅ Remove ghost
+      removeTempFolder(createdTempName, parentPath);
+    
+    
 
       
     } else {
@@ -141,10 +164,13 @@ const FolderSidebar = ({
       </div>
 
       {/* Folder Tree */}
-      <div
-        ref={folderListRef}
-        className="flex-1 overflow-y-auto overflow-x-auto pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
-      >
+
+
+<div
+  ref={scrollContainerRef}
+  className="flex-1 overflow-y-auto overflow-x-auto pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+>
+
         <div className="min-w-max">
           <DndContext
             sensors={sensors}
@@ -152,15 +178,25 @@ const FolderSidebar = ({
             onDragEnd={handleDragEnd}
           >
             <div className="space-y-1">
-              {renderTree(
-                folderTree,
-                expandedFolders,
-                selectedPath,
-                setSelectedPath,
-                toggleExpand,
-                0,
-                folderRefs
-              )}
+
+
+            {renderTree(
+              { ".": folderTree["."] },
+              expandedFolders,
+              selectedPath,
+              setSelectedPath,
+              toggleExpand,
+              0,
+              folderRefs,
+              userRole,
+              meta,
+              ".",            // parentPath
+              editable,       
+              handleRename,   
+              handleDelete,    
+              scrollContainerRef
+            )}
+
             </div>
           </DndContext>
         </div>

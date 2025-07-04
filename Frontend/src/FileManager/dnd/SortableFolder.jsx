@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  IconFolder,  IconExpandBox,  IconCollapseBox,} from "../../shared/IconSet";
+import {  IconFolder,  IconExpandBox,  IconCollapseBox, IconEdit, IconDelete} from "../../shared/IconSet.jsx";
 
 /**
  * SortableFolder component for rendering a sortable folder item.
@@ -22,57 +22,144 @@ const SortableFolder = ({
   selected,
   onClick,
   onToggleExpand,
-  hasChildren = false // ✅ pass this in from renderTree
+  hasChildren = false,
+  onRename, 
+  onDelete,
+  scrollContainerRef // ✅ add this 
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
-
+  const [hoverPos, setHoverPos] = useState(null);
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
-  return (
-<div
-  ref={setNodeRef}
-  style={style}
-  onMouseDown={onClick}
-  className={`inline-flex items-center pl-2 pr-3 py-1 rounded text-sm whitespace-nowrap truncate overflow-hidden
-    ${selected
-      ? "bg-blue-100 border border-blue-300 shadow"
-      : "hover:bg-blue-50 hover:border hover:border-blue-400 hover:shadow-sm"
-    }`}
-  
->
+  const hoverAnchorX = hoverPos?.anchorX || hoverPos?.x;
+  const tooltipRef = useRef(null);
 
-      {/* Expand/Collapse Toggle */}
+
+return (
+  <div
+    ref={setNodeRef}
+    style={style}
+    onMouseDown={onClick}
+onMouseEnter={(e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+
+  let x = rect.right;
+let maxX = window.innerWidth - 10;
+
+if (scrollContainerRef?.current) {
+  const containerRect = scrollContainerRef.current.getBoundingClientRect();
+  maxX = containerRect.right - 10;
+  x = Math.min(rect.right, maxX);
+}
+
+  const anchorY = rect.top + rect.height / 2;
+
+setHoverPos({
+  id,
+  x,
+  anchorY,
+  label
+});
+
+}}
+
+
+    onMouseLeave={() => setHoverPos(null)}
+    className={`group inline-flex items-center justify-between pl-2 pr-3 py-1 rounded text-sm whitespace-nowrap w-full
+      ${selected
+        ? "bg-blue-100 border border-blue-300 shadow"
+        : "hover:bg-blue-50 hover:border hover:border-blue-400 hover:shadow-sm"
+      }`}
+  >
+    {/* 👈 Left: Expand Toggle, Icon, Label */}
+    <div className="flex items-center gap-2 overflow-hidden">
       {hasChildren ? (
         <button
           onMouseDown={(e) => {
-            e.stopPropagation(); // ✅ stops DND and parent click
-            onToggleExpand();    // ✅ works now
+            e.stopPropagation();
+            onToggleExpand();
           }}
-          className="mr-1 text-gray-400 hover:text-gray-700 shrink-0"
+          className="text-gray-400 hover:text-gray-700 shrink-0"
         >
           {isExpanded ? <IconCollapseBox size={16} /> : <IconExpandBox size={16} />}
         </button>
       ) : (
-        <span className="w-[16px] mr-1 inline-block" />
+        <span className="w-[16px] inline-block" />
       )}
-  
-      {/* Folder Icon */}
-      <IconFolder className="text-gray-500 mr-2 shrink-0" size={16} />
-  
-      {/* Folder Label (click + drag logic here) */}
+
+      <IconFolder className="text-gray-500 shrink-0" size={16} />
+
       <span
         className="truncate cursor-pointer flex-1"
-        onMouseDown={onClick}
         {...attributes}
-        {...listeners} // ✅ apply DND only to this span
+        {...listeners}
       >
         {label}
       </span>
     </div>
-  );
+
+    {/* 👉 Right: Edit + Delete on hover */}
+    <div className="relative">
+      {(onRename || onDelete) && hoverPos && (
+<div
+  ref={tooltipRef} // ← 👈 NEW
+style={{
+  position: "fixed",
+  top: `${hoverPos.anchorY - 10}px`,
+  //left: `${Math.min(hoverPos.x, hoverPos.maxX-20)}px`, // removed +50
+  left: `${hoverPos.x}px`, //New
+
+  maxWidth: "180px",
+  zIndex: 50,
+}}
+
+
+  className="flex items-center gap-2 bg-white border border-gray-300 rounded shadow px-2 py-1"
+>
+
+
+          {onRename && (
+            <IconEdit
+              size={16}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRename(id);
+                setHoverPos(null);
+              }}
+              title="Rename folder"
+              className="text-gray-500 hover:text-blue-500 cursor-pointer"
+            />
+          )}
+
+          {onDelete && (
+            <IconDelete
+              size={16}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(id);
+                setHoverPos(null);
+              }}
+              title="Delete folder"
+              className="text-gray-500 hover:text-red-500 cursor-pointer"
+            />
+          )}
+
+          {/* ✅ Folder name preview */}
+<span className="ml-2 text-gray-400 text-xs italic truncate max-w-[100px]">
+  {label}
+</span>
+
+
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+  
   
 };
 

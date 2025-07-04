@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "antd";
 import { Link, useNavigate } from "react-router-dom";
-import { IconSearch, IconDown, IconPending, IconComplete } from "../shared/IconSet";
+import { IconSearch, IconDown, IconPending, IconComplete } from "../shared/IconSet.jsx";
 import AssignUser from "../components/AssignUser";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";

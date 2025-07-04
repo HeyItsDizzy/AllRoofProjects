@@ -1,0 +1,24 @@
+{
+  "projectId": "67957e8d9b2ef3d7cec18cb6",
+  "projectNumber": "25-01005",
+  "projectName": "xcvdscds",
+  "region": "AU",
+  "createdAt": "2025-05-08T13:13:49.517Z",
+  "allowedRoles": {
+    "BOQ": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "BOQ",
+    "Admin",
+    "Estimator"
+  ]
+}

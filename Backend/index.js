@@ -105,10 +105,11 @@ app.use((req, res, next) => {
 });
 
 // Register public routes
-app.use("/", generalRoutes);  // (PUBLIC ROUTES) Handles `/register`, `/login`, etc.
-app.use("/users", userRoutes);  // Handles `/get-users`, `/block-user`, etc.
-app.use("/projects", projectRoutes);  // Register project routes
-app.use("/files", fileRoutes);  // file routes should come from FMindex.js
+app.use("/api", generalRoutes);           // Now: /api/login, /api/register, etc.
+app.use("/api/users", userRoutes);        // Now: /api/users, /api/users/get-users, etc.
+app.use("/api/projects", projectRoutes);  // Now: /api/projects
+app.use("/api/files", fileRoutes);        // Now: /api/files
+
 
 // Error handling middleware
 app.use(errorHandler);

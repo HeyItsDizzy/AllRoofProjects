@@ -1,28 +1,74 @@
 # Logs
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist-ssr
-vercel.json
-*.local
+# Node modules
+node_modules/
+Backend/node_modules/
+Frontend/node_modules/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.vercel
+# Build and distribution directories
+dist/
+dist-ssr/
+build/
+Frontend/dist/
 
+# Lock files (optional, include if using in CI/CD)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment variables
+.env
+.env.local
+Backend/.env
+Frontend/.env
+
+# Uploads and runtime folders
+uploads/
+Backend/uploads/
+Backend/.FM/
+
+# Editor and OS-specific files
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-.vercel
+# Netlify and Vercel configuration
+.netlify/
+.vercel/
+Frontend/vercel.json
+
+# Local override files
+*.local
+
+# Backup and archive
+*.bak
+*.backup.*
+*.tar.gz
+*.raw
+X/
+backup/
+Backend/x.Archive/
+Backend/oneoffscripts/
+Frontend/test.js
+Frontend/filetree.txt
+Backend/filetree.txt
+
+# Ignore test or temp folders
+TODO*
+USer test backup.json
+tailwind_cheatsheet.xlsx
+
+# Ignore VSCode workspace-specific settings, except extensions.json
+.vscode/*
+!.vscode/extensions.json

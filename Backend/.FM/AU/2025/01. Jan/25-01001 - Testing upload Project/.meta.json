@@ -1,0 +1,24 @@
+{
+  "projectId": "67770a48453714e026ccd0ff",
+  "projectNumber": "25-01001",
+  "projectName": "Testing upload Project",
+  "region": "AU",
+  "createdAt": "2025-05-01T17:50:05.481Z",
+  "allowedRoles": {
+    "BOQ": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "Project",
+    "Admin",
+    "Estimator"
+  ]
+}

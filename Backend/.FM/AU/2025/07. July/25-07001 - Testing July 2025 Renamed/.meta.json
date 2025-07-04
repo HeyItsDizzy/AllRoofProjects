@@ -1,0 +1,24 @@
+{
+  "projectId": "686551a0f3b212f129f90488",
+  "projectNumber": "25-07001",
+  "projectName": "Testing July 2025",
+  "region": "AU",
+  "createdAt": "2025-07-02T15:34:56.220Z",
+  "allowedRoles": {
+    "BOQ": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "BOQ",
+    "Admin",
+    "Estimator"
+  ]
+}

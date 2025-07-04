@@ -1,0 +1,24 @@
+{
+  "projectId": "677f13fd3c47bcac69a17be0",
+  "projectNumber": "25-01002",
+  "projectName": "Rename onto DB check",
+  "region": "AU",
+  "createdAt": "2025-05-08T12:46:26.849Z",
+  "allowedRoles": {
+    "BOQ": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "BOQ",
+    "Admin",
+    "Estimator"
+  ]
+}

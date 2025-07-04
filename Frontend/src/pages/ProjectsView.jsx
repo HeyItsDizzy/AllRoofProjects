@@ -1,6 +1,7 @@
+//ProjectsView.jsx
 import { Button } from "antd";
 import { useEffect, useRef, useState, useContext } from "react";
-import { IconBackArrow, IconDownload, IconFolder } from "../shared/IconSet";
+import { IconBackArrow, IconDownload, IconFolder } from "../shared/IconSet.jsx";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import jsPDF from "jspdf";
@@ -14,10 +15,12 @@ import FileDropModal from "@/FileManager/components/FileDropModal";
 import { useFolderManager } from "@/FileManager/hooks/useFolderManager";
 import FolderPanelWrapper from "@/FileManager/shared/FolderPanelWrapper";
 
+
 const DEFAULT_USER_ROLE = "User";
 
 
 const ProjectsView = () => {
+  const ENABLE_WATCHERS = import.meta.env.VITE_ENABLE_WATCHERS !== "false";
   const [project, setProject] = useState({});
   const [isDragging, setIsDragging] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState([]);
@@ -25,7 +28,16 @@ const ProjectsView = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [originalProject, setOriginalProject] = useState(null);
   const [userCache, setUserCache] = useState({});
+  const [folderPanelRefreshKey, setFolderPanelRefreshKey] = useState(0);
+  const [modalSelectedPath, setModalSelectedPath] = useState(".");
+  const [sharedFiles, setSharedFiles] = useState([]);
+  const [sharedGhosts, setSharedGhosts] = useState({});
 
+
+  const folderPanelRef = useRef();
+  const [lockedHeight, setLockedHeight] = useState(null);
+
+  const { projectId } = useParams();
   const { id } = useParams();
   const axiosSecure = useAxiosSecure();
   const componentRef = useRef();
@@ -49,6 +61,13 @@ const ProjectsView = () => {
   const isEstimatorEditingAllowed = isEditing && userRole === "Estimator"; // 🔒 Future use
   
   useEffect(() => {
+  if (showFolderModal) {
+    setModalSelectedPath("."); // Reset modal path to root
+  }
+}, [showFolderModal]);
+
+
+  useEffect(() => {
     console.log("🧹 ProjectView mounted for ID:", id);
     return () => {
       console.log("🧹 ProjectView unmounted for ID:", id);
@@ -71,7 +90,7 @@ const ProjectsView = () => {
 
     axiosSecure.get(`/projects/get-project/${id}`)
       .then((res) => {
-        console.log("🔍 Debug: Project Data:", res.data.data);
+        //console.log("🔍 Debug: Project Data:", res.data.data);
         const fetchedProject = res.data.data;
 
         if (!fetchedProject.linkedUsers.includes(user?.id) && userRole === "User") {
@@ -109,31 +128,30 @@ const ProjectsView = () => {
 
 // ✅ Long Poll once per change – no infinite loop
 useEffect(() => {
+  if (!ENABLE_WATCHERS) {
+    console.log("🔕 Disk watcher is disabled (frontend).");
+    return;
+  }
+
   if (!id) return;
 
   let isCancelled = false;
 
   const longPollForDiskChanges = async () => {
     try {
-      //x/console.log("🛰️ Long poll triggered");
       const res = await axiosSecure.get(`/files/${id}/watch-disk`);
-
       if (isCancelled) return;
 
       if (res?.data?.changed) {
         console.log("📦 Detected disk change, refreshing folder tree...");
         await fetchFolders();
-      } else {
-        //x/console.log("🟡 No change this cycle.");
       }
 
-      // Always re-call after response
       longPollForDiskChanges();
-
     } catch (err) {
       if (!isCancelled) {
         console.error("❌ Long polling error:", err);
-        setTimeout(() => longPollForDiskChanges(), 5000); // Retry after delay
+        setTimeout(() => longPollForDiskChanges(), 5000);
       }
     }
   };
@@ -146,113 +164,82 @@ useEffect(() => {
 }, [id, fetchFolders, axiosSecure]);
 
 
-  // Handle project update
-  const handleUpdateProject = async () => {
-    try {
-      if (!project) {
-        console.error("❌ Project is not defined!");
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "Project data is missing!",
-        });
-        return;
-      }
-  
-      console.log("🔍 Project before update:", project);
-      console.log("🔍 Original Project:", originalProject);
-  
-      if (!originalProject) {
-        console.warn("⚠️ No original project available, exiting edit mode.");
-        setIsEditing(false);
-        return;
-      }
-  
-      const { _id, ...updatedProject } = project;
-      const { _id: originalId, ...originalData } = originalProject;
-  
-      // 🛠️ FIX: Normalize malformed location
-      if (
-        typeof updatedProject.location === "object" &&
-        (!updatedProject.location.full_address || updatedProject.location.full_address.trim() === "")
-      ) {
-        updatedProject.location = "";
-      }
-  
-      if (JSON.stringify(updatedProject) === JSON.stringify(originalData)) {
-        console.log("🔍 No changes detected. Exiting edit mode.");
-        setIsEditing(false);
-        return;
-      }
-  
-      console.log("🚀 Sending update request to server...");
-      const response = await axiosSecure.patch(`/projects/update/${id}`, updatedProject);
-  
-      if (response?.data?.success) {
-        Swal.fire({
-          icon: "success",
-          title: "Project Updated",
-          text: "Project updated successfully!",
-          timer: 2000,
-          showConfirmButton: false,
-        });
-        setIsEditing(false);
-        setOriginalProject(project);
-      } else {
-        throw new Error("Update failed");
-      }
-    } catch (error) {
-      console.error("❌ Error updating project:", error);
+
+// Handle project update
+const handleUpdateProject = async () => {
+  try {
+    if (!project) {
+      console.error("❌ Project is not defined!");
       Swal.fire({
         icon: "error",
-        title: "Update Failed",
-        text: "Failed to update project. Please try again.",
+        title: "Error",
+        text: "Project data is missing!",
       });
+      return;
     }
-  };
-  
 
-  // Handle download all files
-  const handleDownloadAll = () => {
-    project?.files?.forEach((file) => {
-      if (file?.downloadableLink) {
-        const link = document.createElement("a");
-        link.href = file.downloadableLink;
-        link.download = file.fileName || "downloaded-file";
-        link.click();
+    console.log("🔍 Project before update:", project);
+    console.log("🔍 Original Project:", originalProject);
+
+    if (!originalProject) {
+      console.warn("⚠️ No original project available, exiting edit mode.");
+      setIsEditing(false);
+      return;
+    }
+
+    const { _id, ...updatedProject } = project;
+    const { _id: originalId, ...originalData } = originalProject;
+
+    // 🛠️ FIX: Normalize malformed location
+    if (
+      typeof updatedProject.location === "object" &&
+      (!updatedProject.location.full_address || updatedProject.location.full_address.trim() === "")
+    ) {
+      updatedProject.location = "";
+    }
+
+    if (JSON.stringify(updatedProject) === JSON.stringify(originalData)) {
+      console.log("🔍 No changes detected. Exiting edit mode.");
+      setIsEditing(false);
+      return;
+    }
+
+    console.log("🚀 Sending update request to server...");
+    const response = await axiosSecure.patch(`/projects/update/${id}`, updatedProject);
+
+    if (response?.data?.success) {
+      Swal.fire({
+        icon: "success",
+        title: "Project Updated",
+        text: "Project updated successfully!",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      setIsEditing(false);
+      setOriginalProject(project);
+
+      // ✅ Rename folder on disk to match new project name
+      try {
+        const newFolderName = `${project.projectNumber} - ${project.name}`;
+        await axiosSecure.put(`/files/${id}/folders/${id}`, {
+          newName: newFolderName,
+        });
+        console.log("📁 Disk folder renamed to:", newFolderName);
+      } catch (renameErr) {
+        console.warn("⚠️ Disk folder rename failed:", renameErr?.response?.data || renameErr.message);
       }
+    } else {
+      throw new Error("Update failed");
+    }
+  } catch (error) {
+    console.error("❌ Error updating project:", error);
+    Swal.fire({
+      icon: "error",
+      title: "Update Failed",
+      text: "Failed to update project. Please try again.",
     });
-  };
-
-  // Handle download project details as PDF
-  const handleDownloadPDF = async () => {
-    const element = componentRef.current;
-    const canvas = await html2canvas(element, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pdfWidth;
-    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    while (heightLeft > 0) {
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, Math.min(imgHeight, pdfHeight));
-      heightLeft -= pdfHeight;
-      position -= pdfHeight;
-
-      if (heightLeft > 0) {
-        pdf.addPage();
-        position = 0;
-      }
-    }
-
-    pdf.save(`${project?.name || "Project_Details"}.pdf`);
-  };
-    
-  
-  //console.log("🧩 Final folderTree being passed to FolderTreeDND:", folderTree);
+  }
+};
 
 
 
@@ -291,14 +278,14 @@ return (
             Edit
           </button>
         )}
-        <button
+        {/*<button
           className="px-4 py-2 rounded-md border-2 border-gray-500"
           onClick={handleDownloadPDF}
         >
           <span className="flex gap-2 items-center">
             <IconDownload className="text-lg" /> Download
           </span>
-        </button>
+        </button>*/}
       </div>
     </div>
 
@@ -413,24 +400,12 @@ return (
         ))}
       </div>
 
-      <div
+<div
+  ref={folderPanelRef}
   className="relative bg-white p-4 rounded-md shadow-sm w-full mt-6"
-  onDragOver={(e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }}
-  onDragLeave={(e) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }}
-  onDrop={(e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const dropped = Array.from(e.dataTransfer.files);
-    setDroppedFiles(dropped);
-    setShowFolderModal(true); // This opens the modal
-  }}
+  style={{ minHeight: lockedHeight || "auto" }}
 >
+
   {isDragging && (
     <div className="absolute inset-0 bg-blue-100 bg-opacity-60 flex items-center justify-center text-blue-700 font-semibold rounded-md z-50 pointer-events-none">
       Drop files here to upload
@@ -442,55 +417,40 @@ return (
       <IconFolder className="text-gray-500" />
       File and attachment
     </h3>
-    {project?.files?.length > 0 && (
+   
   <div className="flex gap-2 items-center">
     <Button
+      title="Edit Files/folders"
       className="bg-transparent border-blue-500 text-blue-600"
       onClick={() => setShowFolderModal(true)}
     >
-      View
+      Edit Files/folders
     </Button>
-
-    <label
-      htmlFor="uploadButtonProjectsView"
-      className="border border-green-500 text-green-600 px-4 py-[6px] rounded-md cursor-pointer flex items-center justify-center text-sm h-[32px] hover:bg-green-50 transition"
-    >
-      Upload Files
-      <input
-        id="uploadButtonProjectsView"
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          const selected = Array.from(e.target.files);
-          if (selected?.length > 0) {
-            setDroppedFiles(selected);
-            setShowFolderModal(true);
-          }
-        }}
-      />
-    </label>
-
-    <Button
-      className="bg-transparent border-primary text-primary"
-      onClick={handleDownloadAll}
-    >
-      Download all
-    </Button>
-  </div>
-)}
 
   </div>
 
-  <FolderPanelWrapper projectId={id} userRole={user?.role || "User"}>
+  </div>
+
+<FolderPanelWrapper
+  projectId={id}
+  userRole={user?.role || "User"}
+  refreshKey={folderPanelRefreshKey} // ✅ pass refreshKey as prop
+>
   {(folderManager) => (
-    <FileDirectoryPanel
-    {...folderManager}
-    folderList={folderManager.folderList}
-  />
-  
+<FileDirectoryPanel
+  {...folderManager}
+  projectId={id}
+  folderList={folderManager.folderList}
+  uploadEnabled={!showFolderModal} // 🟢 only active if modal is closed
+  files={sharedFiles}
+  setFiles={setSharedFiles}
+  ghostFilesByPath={sharedGhosts}
+  setGhostFilesByPath={setSharedGhosts}
+  folderContents={folderManager.folderContents}
+/>
   )}
 </FolderPanelWrapper>
+
 
 
 
@@ -542,20 +502,33 @@ return (
       {/* Folder Modal */}
       {showFolderModal && (
         <FileDropModal
-  projectId={id}
-  projectAlias={projectAlias}
-  files={droppedFiles}
-  userRole={user?.role || "user"} // ✅ This line enables role-based folder access
-  onClose={() => {
-    setShowFolderModal(false);
-    setDroppedFiles([]);
-  }}
-  onUpload={({ files, folderPath }) => {
-    console.log("Upload these files to:", folderPath, files);
-  }}
-/>
+          projectId={id}
+          projectAlias={projectAlias}
+          selectedPath={modalSelectedPath}
+          setSelectedPath={setModalSelectedPath}
+          files={sharedFiles}
+          setFiles={setSharedFiles}
+          ghostFilesByPath={sharedGhosts}
+          setGhostFilesByPath={setSharedGhosts}
+          userRole={user?.role || "user"} // ✅ This line enables role-based folder access
+          onClose={async () => {
+            if (folderPanelRef.current) {
+              setLockedHeight(`${folderPanelRef.current.offsetHeight}px`);
+            }
 
+            setShowFolderModal(false);
+            setDroppedFiles([]);
+            setFolderPanelRefreshKey((prev) => prev + 1);
+
+            // Let animation settle before removing height lock
+            setTimeout(() => setLockedHeight(null), 600);
+          }}
+          onUpload={({ files, folderPath }) => {
+            console.log("Upload these files to:", folderPath, files);
+          }}
+        />
       )}
+
 
       {/* Footer */}
       <div className="bg-white p-4 mt-4 rounded-md shadow-sm">

@@ -1,0 +1,48 @@
+{
+  "_id": {
+    "$oid": "676fa98b453714e026ccd0fc"
+  },
+  "// Working Project MongoDB Document": "",
+  "name": "25 Minerva Street (2nd test)",
+  "location": {
+    "full_address": "25 Minerva Street, Rochedale South Queensland 4123, Australia",
+    "address_line_1": "Minerva Street",
+    "city": "Brisbane",
+    "state": "Queensland",
+    "zip": "4123",
+    "country": "Australia"
+  },
+  "due_date": "2025-04-10",
+  "posting_date": "2024-12-28",
+  "linkedUsers": [
+    "67980b1ee80fba443dae03ae"
+  ],
+  "description": "Hey buddy\n\nPlease see attached project in Altona.\n\n1-\tCan you please quote all roof coverings\n2-\tAll fascia and gutter\n3-\tAll cappings and flashings including all brick to clad flashings around the perimeter\n4-\tAlso, please quote the entire job in colorbond ultra as its only 1 street away from the beach \n\nKind Regards,\n\nChris Stafford\n",
+  "subTotal": "60",
+  "total": 106,
+  "gst": "46",
+  "status": "Estimate Completed",
+  "projectNumber": "24-12001",
+  "files": [
+    {
+      "fileName": "GrimOutFile.json",
+      "uniqueFileName": "file-1735593980092-572204347.json"
+    },
+    {
+      "fileName": "GrimOutFile.json",
+      "uniqueFileName": "file-1735593983642-437326697.json"
+    },
+    {
+      "fileName": "GrimOutFile.json",
+      "uniqueFileName": "file-1735593989865-239672825.json"
+    },
+    {
+      "fileName": "GrimOutFile.gro",
+      "uniqueFileName": "file-1735595826870-840643719.gro"
+    },
+    {
+      "fileName": "A M Sayed Resume.pdf",
+      "uniqueFileName": "file-1735827157574-452297768.pdf"
+    }
+  ]
+}

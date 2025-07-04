@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Button, Spin } from "antd";
-import { IconDown } from "../shared/IconSet";
+import { IconDown } from "../shared/IconSet.jsx";
 
 const AssignedProjects = () => {
   const [loading, setLoading] = useState(true);

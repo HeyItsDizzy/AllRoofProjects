@@ -4,6 +4,8 @@ const { projectsCollection, userCollection } = require("../db");
 const { authenticateToken, authenticateAdmin } = require("../middleware/auth");
 const { ObjectId } = require("mongodb");
 const { tryRenameProjectFolder } = require("../features/fileManager/services/tryRenameProjectFolder");
+const { createInitialProjectFolders } = require("../features/fileManager/controllers/folderController"); // ✅ NEW
+
 
 console.log("✅ projectRoutes.js is being loaded...");
 
@@ -146,10 +148,27 @@ router.patch("/update/:id", authenticateToken(), async (req, res) => {
     );
 
     if (result.modifiedCount > 0) {
-      // Folder rename logic
-      const updatedProject = { ...existingProject, ...updates }; // simulate what Mongo now contains
-      await tryRenameProjectFolder(existingProject, updatedProject);
+      const updatedProject = {
+        ...existingProject,
+        ...updates,
+        createdAt: existingProject.createdAt, // ✅ lock in disk location
+      };
+    
+      try {
+        const renameResult = await tryRenameProjectFolder(existingProject, updatedProject);
+        
+        if (!renameResult?.success) {
+          console.warn("⚠️ Rename failed or folder missing. Attempting to create folder structure...");
+          await createInitialProjectFolders(updatedProject);
+        } else {
+          console.log("✅ Folder renamed successfully.");
+        }
+      } catch (err) {
+        console.warn("⚠️ Error during folder rename. Fallback to creating folder structure:", err.message);
+        await createInitialProjectFolders(updatedProject);
+      }
     }
+    
 
     return res.json({ success: true, message: "Project updated successfully." });
 
@@ -216,8 +235,7 @@ const generateProjectNumber = async (collection) => {
   return `${baseNumber}${String(count + 1).padStart(3, "0")}`;
 };
 
-
-// Route to add a single project
+// Route to add a project
 router.post("/addProject", async (req, res) => {
   try {
     console.log("📩 Received Project Data:", req.body);
@@ -245,20 +263,16 @@ router.post("/addProject", async (req, res) => {
       throw new Error("Failed to add project.");
     }
 
-// Auto-create folder structure
-const { createInitialProjectFolders } = require("../features/fileManager/services/folderScaffolder");
+    // ✅ Auto-create folder structure after project creation
+    const fullProject = { ...newProject, _id: result.insertedId };
 
-const fullProject = { ...newProject, _id: result.insertedId };
+    try {
+      await createInitialProjectFolders(fullProject);
+      console.log("📁 Root folder and role-protected subfolders created.");
+    } catch (folderErr) {
+      console.warn("⚠️ Folder structure creation failed:", folderErr.message);
+    }
 
-try {
-  await createInitialProjectFolders(fullProject);
-  console.log("📁 Root folder and role-protected subfolders created.");
-} catch (folderErr) {
-  console.warn("⚠️ Folder structure creation failed:", folderErr.message);
-}
-
-
-    // ✅ Only One Response Sent Now
     return res.status(201).json({
       success: true,
       message: "Project added successfully",
@@ -267,11 +281,13 @@ try {
 
   } catch (error) {
     console.error("❌ Error adding project:", error);
-    return res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 });
-
-
 
 // Route to get projects (Admin)
 router.get("/get-projects", authenticateToken(), authenticateAdmin(), async (req, res) => {
@@ -334,31 +350,6 @@ router.get("/get-user-projects", authenticateToken(), async (req, res) => {
     });
   }
 });
-
-
-
-
-
-// Route to retrieve user data
-/*router.get("/get-userData", authenticateToken(), async (req, res) => {
-  try {
-    const collection = await userCollection(); // Ensure this is defined correctly
-    const users = await collection.find({}).toArray(); // Adjust filter logic as needed
-    return res.json({
-      success: true,
-      message: "User data retrieved successfully",
-      data: users,
-    });
-  } catch (err) {
-    console.error("Error retrieving user data:", err.message);
-    res.status(500).json({
-      success: false,
-      message: "Failed to retrieve user data",
-      error: err.message,
-    });
-  }
-});*/
-
 
 // Route to update a project's status to "complete"
 router.put("/updateProjectToComplete/:id", authenticateToken(), async (req, res) => {
@@ -432,7 +423,6 @@ router.get("/get-project/:id", authenticateToken(), async (req, res) => {
     });
   }
 });
-
 
 // Route to retrieve projects by user ID
 router.get("/get-projects/:id", authenticateToken(), async (req, res) => {

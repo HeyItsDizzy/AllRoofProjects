@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Spin } from "antd";
-import { IconDown } from "../shared/IconSet";
-import { IconSearch } from "../shared/IconSet";
+import { IconDown } from "../shared/IconSet.jsx";
+import { IconSearch } from "../shared/IconSet.jsx";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Link } from "react-router-dom";
 import dayjs from "dayjs";

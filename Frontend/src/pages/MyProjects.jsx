@@ -1,13 +1,13 @@
 import { useContext, useEffect, useState } from "react";
-import { IconDown } from "../shared/IconSet";
-import { IconSearch } from "../shared/IconSet";
+import { IconDown } from "../shared/IconSet.jsx";
+import { IconSearch } from "../shared/IconSet.jsx";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { Button } from "antd";
 import { Link } from "react-router-dom";
 import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
-import { IconPending } from "../shared/IconSet";
-import { IconComplete } from "../shared/IconSet";
+import { IconPending } from "../shared/IconSet.jsx";
+import { IconComplete } from "../shared/IconSet.jsx";
 import { AuthContext } from "../auth/AuthProvider";
 
 const MyProjects = () => {

@@ -3,6 +3,9 @@ const fs = require("fs");
 const { ObjectId } = require("mongodb");
 const { uploadsRoot: root, getProjectDiskPath } = require("./pathUtils");
 const { projectsCollection } = require("../../../db");
+const { readMeta } = require("./metaUtils");
+const debounce = require("lodash.debounce");
+const debouncedLog = debounce((msg) => console.log(msg), 500);
 
 // Find project folder by scanning .meta.json files
 function findProjectFolderByMeta(projectId, region) {
@@ -20,7 +23,9 @@ function findProjectFolderByMeta(projectId, region) {
         const metaPath = path.join(folderPath, ".meta.json");
         if (fs.existsSync(metaPath)) {
           try {
-            const meta = JSON.parse(fs.readFileSync(metaPath));
+            const meta = readMeta(folderPath);
+
+            
             if (String(meta.projectId) === String(projectId)) {
               return folderPath;
             }
@@ -37,11 +42,9 @@ function findProjectFolderByMeta(projectId, region) {
 
 // Build a nested object representing folders
 function walk(dir) {
-  console.log("📂 Walking directory:", dir);
+  debouncedLog("📂 Walking directory:", dir);
 
   const entries = fs.readdirSync(dir, { withFileTypes: true });
-  console.log("📂 Contents found:", entries.map(e => e.name));
-
   const tree = {};
 
   for (const entry of entries) {
@@ -49,16 +52,17 @@ function walk(dir) {
 
     const fullPath = path.join(dir, entry.name);
 
-    if (entry.isDirectory()) {
-      console.log("📁 Folder:", entry.name);
-      tree[entry.name] = walk(fullPath);
-    } else {
-      console.log("📄 Skipping file (not shown in left panel):", entry.name);
+if (entry.isDirectory() && entry.name !== "__files") {
+  tree[entry.name] = walk(fullPath);
+} else {
+      if (!tree.__files) tree.__files = [];
+      tree.__files.push(entry.name);
     }
   }
 
   return tree;
 }
+
 
 
 

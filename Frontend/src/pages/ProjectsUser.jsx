@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "antd";
 import { Link, useNavigate } from "react-router-dom";
-import { IconSearch } from "../shared/IconSet";
-import { IconDown } from "../shared/IconSet";
-import { IconPending } from "../shared/IconSet";
-import { IconComplete } from "../shared/IconSet";
+import { IconSearch } from "../shared/IconSet.jsx";
+import { IconDown } from "../shared/IconSet.jsx";
+import { IconPending } from "../shared/IconSet.jsx";
+import { IconComplete } from "../shared/IconSet.jsx";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../Components/ProjectTable";
 import { projectStatuses } from "../shared/projectStatuses";

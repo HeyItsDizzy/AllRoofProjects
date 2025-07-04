@@ -1,9 +1,9 @@
 import { Button, Drawer, Space } from "antd";
 import { useContext, useState } from "react";
-import { IconBackArrow } from "../shared/IconSet";
+import { IconBackArrow } from "../shared/IconSet.jsx";
 import { AuthContext } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
-import { IconMenuDots } from "../shared/IconSet";
+import { IconMenuDots } from "../shared/IconSet.jsx";
 import Avatar from "../shared/Avatar";
 
 const ProfileDrawer = () => {

@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { IconDown, IconUp } from "../shared/IconSet";
+import { IconDown, IconUp } from "../shared/IconSet.jsx";
 import { Button, Drawer, Space } from "antd";
-import { IconBackArrow } from "../shared/IconSet";
-import { IconDownload } from "../shared/IconSet";
+import { IconBackArrow } from "../shared/IconSet.jsx";
+import { IconDownload } from "../shared/IconSet.jsx";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { useParams } from "react-router-dom";
 

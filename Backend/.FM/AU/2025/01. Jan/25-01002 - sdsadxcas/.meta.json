@@ -1,0 +1,24 @@
+{
+  "projectId": "677f13fd3c47bcac69a17be0",
+  "projectNumber": "25-01002",
+  "projectName": "sdsadxcas",
+  "region": "AU",
+  "createdAt": "2025-05-08T12:45:32.316Z",
+  "allowedRoles": {
+    "BOQ": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "BOQ",
+    "Admin",
+    "Estimator"
+  ]
+}

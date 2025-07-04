@@ -1,7 +1,6 @@
 import axios from "axios";
 
-console.log("private VITE_API_BASE_URL:", import.meta.env.VITE_API_BASE_URL);
-console.log("Full environment:", import.meta.env);
+console.log("Full environment:\n- API_URL:", import.meta.env.VITE_API_BASE_URL, import.meta.env);
 
 const axiosSecure = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL, // Using Vite's environment variable

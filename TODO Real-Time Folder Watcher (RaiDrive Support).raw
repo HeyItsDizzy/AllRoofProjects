@@ -1,0 +1,68 @@
+===============================
+📦 TODO: Real-Time Folder Watcher (RaiDrive Support)
+===============================
+
+PHASE 1 — Backend Watch Logic (diskWatcher.js)
+-----------------------------------------------
+- [X] Create `startWatcher(projectId, fullPath)` using chokidar
+- [X] Create `stopWatcher(projectId)` to cleanly close the watcher
+- [X] Watch for `addDir` and `unlinkDir` events
+- [X] On event, trigger `syncFromDisk(projectId)`
+
+PHASE 2 — Connect Watcher to Backend Routes
+-----------------------------------------------
+- [X] In fileRoutes.js (or folderRoutes.js):
+    - [X] Add `GET /files/:projectId/folder-tree`
+        - [X] If watcher not running:
+            - [X] Run `syncFromDisk(projectId)`
+            - [X] Call `startWatcher(projectId)`
+    - [X] Add `POST /files/:projectId/unwatch`
+        - [X] Calls `stopWatcher(projectId)` to clean up watcher on project switch or exit
+
+PHASE 3 — Sync From Disk Logic
+-----------------------------------------------
+- [X] Create or update `syncFromDisk(projectId)`:
+    - [X] Read full disk structure under `.FM/.../projectFolder`
+    - [X] Update MongoDB `.meta.json` (if needed)
+    - [X] (optional) Emit WebSocket event to frontend or set flag to trigger UI refresh
+
+PHASE 4 — Frontend Integration (ProjectView.jsx)
+-----------------------------------------------
+- [X] On component mount:
+    - [X] Call `GET /files/:projectId/folder-tree`
+- [X] On component unmount or project switch:
+    - [X] Call `POST /files/:projectId/unwatch`
+
+PHASE 5 — Optional UX Enhancements
+-----------------------------------------------
+- [ ] Add WebSocket support:
+    - [ ] Listen for folder change events from backend
+    - [ ] Call `fetchFolders()` or trigger `setRefreshFlag()` on update
+- [ ] Auto-scroll to selected or newly created folders
+- [ ] Add visual flash/highlight to updated folders or files
+
+PHASE 6 — Testing & Stability
+-----------------------------------------------
+- [ ] Test watcher when:
+    - [ ] User adds folders via RaiDrive
+    - [ ] User uploads via File Explorer or web UI
+- [ ] Confirm watcher is removed:
+    - [ ] On navigation away from ProjectView
+    - [ ] After 8 hours (optional timeout)
+
+BONUS — Future Proofing
+-----------------------------------------------
+- [ ] Add max watcher cap (e.g. 100 watchers)
+- [ ] Track active watchers (in memory or Redis)
+- [ ] Use `.meta.json` per project folder to manage roles or visibility
+- [ ] Backend: add an idle timeout (`setTimeout`) that auto-stops a watcher after, say, 10 minutes of no confirmed polling activity
+- [ ] Frontend: use `document.visibilitychange` to pause polling if tab is hidden for a long time
+- [ ] Frontend: add connection watchdog — if user loses network, auto-unwatch after X retries
+- [ ] Frontend: for optimistic folder creation, add optional `pending: true` flag inside folder metadata (for future "Uploading..." or pending visual badges)
+
+OTHER — Additional things before final Publish
+-----------------------------------------------
+- [ ] When Project has no address, save address to DB as 'Address Unavailable' (suitable for concept builds and new estate builds)
+- [ ] Create `createFolderOptimistic()` helper inside `useFolderManager.js` to simplify folder creation without passing full prop objects every time (supports optimistic UI updates)
+- [ ] Add pending folder animations (e.g., shimmer effect or "Creating..." badge) while waiting for disk sync confirmation after optimistic folder creation
+- [ ] Auto-enter rename mode after creating a folder, like Windows Explorer does

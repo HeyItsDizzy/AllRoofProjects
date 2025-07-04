@@ -1,0 +1,24 @@
+{
+  "projectId": "679580a59b2ef3d7cec18cb7",
+  "projectNumber": "25-01006",
+  "projectName": "Testing again (spelling fix)",
+  "region": "AU",
+  "createdAt": "2025-05-07T11:07:08.205Z",
+  "allowedRoles": {
+    "Project": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "Project",
+    "Admin",
+    "Estimator"
+  ]
+}

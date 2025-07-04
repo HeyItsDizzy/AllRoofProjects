@@ -1,5 +1,5 @@
 import { Button } from "antd";
-import { IconBackArrow } from "../shared/IconSet";
+import { IconBackArrow } from "../shared/IconSet.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import { useContext, useEffect, useState, useRef } from "react";

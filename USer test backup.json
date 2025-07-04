@@ -1,0 +1,17 @@
+{
+  "_id": {
+    "$oid": "67620a0de8847a1f6e4247ff"
+  },
+  "name": "TEST USER",
+  "email": "user@allrooftest.com",
+  "address": "120 User Street",
+  "phone": "93096948",
+  "org": "123",
+  "password": "$2b$10$WwYCRjr/i5NNE9fk3aD0h.yWqL16dWiVp3QcnQabE32uhz40uxTRS",
+  "role": "User",
+  "isBlock": false,
+  "isDeleted": false,
+  "projectAssign": {
+      "$numberDouble": "NaN"
+  }
+  }

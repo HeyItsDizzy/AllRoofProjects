@@ -1,0 +1,24 @@
+{
+  "projectId": "6856d9ea0ebf3592204be35b",
+  "projectNumber": "25-06001",
+  "projectName": "new",
+  "region": "AU",
+  "createdAt": "2025-06-21T16:12:27.143Z",
+  "allowedRoles": {
+    "BOQ": [
+      "Admin",
+      "User"
+    ],
+    "Admin": [
+      "Admin"
+    ],
+    "Estimator": [
+      "Estimator"
+    ]
+  },
+  "structure": [
+    "BOQ",
+    "Admin",
+    "Estimator"
+  ]
+}

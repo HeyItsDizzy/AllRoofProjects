@@ -3,125 +3,118 @@ const fs = require("fs");
 const path = require("path");
 const { ObjectId } = require("mongodb");
 const { projectsCollection } = require("../../../db");
+const { getProjectUploadPath } = require("../services/pathUtils");
 const { buildFolderTreeFromDisk } = require("../services/syncService");
-const { getProjectDiskPath, getProjectUploadPath, uploadsRoot: root } = require("../services/pathUtils");
-const { createInitialProjectFolders } = require("../services/folderScaffolder");
-const Folder = require("../models/Folder");
 
 
-function normalizePathFromDisk(p) {
-  return p
-    .replace(/\\/g, "/")
-    .replace(/\/?children\/?/g, "/")
-    .replace(/\/?hasMeta\/?/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "")
-    .replace(/\/{2,}/g, "/");
-}
+//const { initMeta } = require("../services/metaUtils");
 
+// 🔒 Global root folders and access rules
+const FOLDER_ACCESS_RULES = {
+  BOQ: ["Admin", "User"],
+  Admin: ["Admin"],
+  Estimator: ["Estimator"]
+};
+
+const RootFolders = Object.keys(FOLDER_ACCESS_RULES);
+
+const createInitialProjectFolders = (project, region = "AU") => {
+  const rootPath = getProjectUploadPath(project, region);
+  const subfolders = RootFolders;
+
+  if (!fs.existsSync(rootPath)) {
+    fs.mkdirSync(rootPath, { recursive: true });
+    console.log("📁 Created root project folder:", rootPath);
+  }
+
+  const rootMeta = {
+    projectId: project._id.toString(),
+    projectNumber: project.projectNumber,
+    projectName: project.name,
+    region,
+    createdAt: new Date().toISOString(),
+    allowedRoles: FOLDER_ACCESS_RULES,
+    structure: subfolders
+  };
+
+  const rootMetaPath = path.join(rootPath, ".meta.json");
+  fs.writeFileSync(rootMetaPath, JSON.stringify(rootMeta, null, 2));
+  console.log(`📝 Root .meta.json written: ${rootMetaPath}`);
+
+  for (const folder of subfolders) {
+    const fullPath = path.join(rootPath, folder);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+      console.log(`📂 Created subfolder: ${fullPath}`);
+    }
+  }
+
+  return true;
+};
 
 const createFolder = async (req, res) => {
   try {
-    console.log("📥 Incoming folder creation request");
+    console.log("📥 Incoming folder create request");
 
     const { projectId } = req.params;
-    const { path: name, role = "all", region = "AU" } = req.body;
+    const { path: relativePath } = req.body;
 
+    if (!relativePath || typeof relativePath !== "string") {
+      return res.status(400).json({ error: "Missing or invalid folder path" });
+    }
 
     const collection = await projectsCollection();
     const project = await collection.findOne({ _id: new ObjectId(projectId) });
+    if (!project) return res.status(404).json({ error: "Project not found" });
 
-    if (!project) {
-      console.log("❌ Project not found:", projectId);
-      return res.status(404).json({ error: "Project not found" });
+    const basePath = await getProjectUploadPath(project);
+    const newFolderPath = path.join(basePath, relativePath);
+
+    if (fs.existsSync(newFolderPath)) {
+      return res.status(400).json({ error: "Folder already exists" });
     }
 
-    console.log("📦 Matched Project:", project.projectNumber, "-", project.name);
+    fs.mkdirSync(newFolderPath, { recursive: true });
+    console.log(`📁 Folder created: ${newFolderPath}`);
 
-    const [yearShort, monthSeq] = project.projectNumber.split("-");
-    const fullYear = `20${yearShort}`;
-    const monthNum = parseInt(monthSeq.slice(0, 2), 10);
+    return res.status(200).json({
+  message: "Folder created successfully",
+  fullPath: relativePath, // <-- relative to project root, e.g., "Admin/New Folder"
+});
 
-    // Localized month name
-    const locales = {
-      AU: "en-AU",
-      US: "en-US",
-      NO: "nb-NO",
-    };
-    const locale = locales[region] || "en";
-    const monthName = new Date(2000, monthNum - 1).toLocaleString(locale, { month: "short" });
-    const monthFolder = `${monthNum.toString().padStart(2, "0")}. ${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
-
-
-    const fullPath = getProjectDiskPath(project, name, region);
-    
-    
-
-    console.log("📁 Final disk path:", fullPath);
-
-    fs.mkdirSync(fullPath, { recursive: true });
-    console.log("✅ Folder created on disk");
-      if (!name) {
-        console.warn("❌ No folder name/path provided");
-        return res.status(400).json({ error: "Missing folder path" });
-      }
-      
-
-      if (!name.includes("/")) {
-        const metaPath = path.join(fullPath, ".meta.json");
-        fs.writeFileSync(metaPath, JSON.stringify({ projectId: project._id }, null, 2));
-        console.log("📝 .meta.json written:", metaPath);
-      }
-    
-
-    const label = name.split("/").pop();
-    const existing = await Folder.findOne({ projectId, name });
-
-    if (!existing) {
-      const folder = await Folder.create({ projectId, name, label, role });
-      return res.status(200).json({ message: "Folder created", folder });
-    }
-
-    return res.status(200).json({ message: "Folder already exists" });
   } catch (err) {
     console.error("🔥 Error in createFolder:", err);
     return res.status(500).json({ error: "Server error", details: err.message });
   }
 };
 
+
 const deleteFolder = async (req, res) => {
-    try {
-      console.log("📥 Incoming folder delete request");
-  
-      const { projectId, folderId } = req.params;
-  
-      // Find the folder to be deleted from the DB
-      const folder = await Folder.findOne({ _id: folderId, projectId });
-  
-      if (!folder) {
-        return res.status(404).json({ error: "Folder not found" });
-      }
-  
-      const folderPath = path.join(
-        root,
-        projectId,
-        folder.name
-      );
-      
-  
-      // Delete folder from disk
-      fs.rmdirSync(folderPath, { recursive: true });
-      console.log(`✅ Folder deleted from disk: ${folderPath}`);
-  
-      // Delete from MongoDB
-      await Folder.deleteOne({ _id: folderId });
-      console.log(`✅ Folder deleted from database`);
-  
-      return res.status(200).json({ message: "Folder deleted successfully" });
-    } catch (err) {
-      console.error("🔥 Error in deleteFolder:", err);
-      return res.status(500).json({ error: "Server error", details: err.message });
+  try {
+    console.log("📥 Incoming folder delete request");
+
+    const { projectId, folderId } = req.params;
+
+    if (RootFolders.includes(folderId)) {
+      return res.status(403).json({ error: "Cannot delete root folders." });
     }
+
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    const basePath = await getProjectUploadPath(project);
+    const folderPath = path.join(basePath, folderId);
+
+    fs.rmdirSync(folderPath, { recursive: true });
+    console.log(`✅ Folder deleted from disk: ${folderPath}`);
+
+    return res.status(200).json({ message: "Folder deleted successfully" });
+  } catch (err) {
+    console.error("🔥 Error in deleteFolder:", err);
+    return res.status(500).json({ error: "Server error", details: err.message });
+  }
 };
 
 const renameFolder = async (req, res) => {
@@ -131,42 +124,31 @@ const renameFolder = async (req, res) => {
     const { projectId, folderId } = req.params;
     const { newName } = req.body;
 
-    const folder = await Folder.findOne({ _id: folderId, projectId });
-    if (!folder) {
-      return res.status(404).json({ error: "Folder not found" });
-    }
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
 
-    const oldFolderPath = path.join(root, projectId, folder.name);
-    const newFolderPath = path.join(root, projectId, newName);
-    
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
+    const basePath = await getProjectUploadPath(project);
+    const oldFolderPath = path.join(basePath, folderId);
+    const parentDir = path.dirname(oldFolderPath);
+    const newFolderPath = path.join(parentDir, newName);
 
     console.log("🔄 Attempting rename:");
     console.log("   FROM:", oldFolderPath);
     console.log("   TO  :", newFolderPath);
 
-    // ❌ Check if source folder actually exists
     if (!fs.existsSync(oldFolderPath)) {
       console.warn("❌ Source folder does not exist:", oldFolderPath);
-      return res.status(200).json({
-        warning: "Source folder was not found on disk. Possibly already moved or renamed.",
-        folder,
-      });
+      return res.status(200).json({ warning: "Source folder was not found on disk. Possibly already moved or renamed." });
     }
 
-    // ❌ Avoid renaming to same path
-    if (oldFolderPath === newFolderPath) {
-      return res.status(200).json({ message: "No changes made" });
-    }
-
-    // ❌ Destination already exists
     if (fs.existsSync(newFolderPath)) {
       return res.status(400).json({ error: "Target folder already exists" });
     }
 
-    // ✅ Ensure destination parent exists
     fs.mkdirSync(path.dirname(newFolderPath), { recursive: true });
 
-    // ✅ Try native rename
     try {
       fs.renameSync(oldFolderPath, newFolderPath);
       console.log("✅ renameSync succeeded");
@@ -180,35 +162,25 @@ const renameFolder = async (req, res) => {
         console.log("✅ Fallback copy+delete succeeded");
       } catch (deepErr) {
         console.error("🔥 Copy/delete fallback failed:", deepErr);
-        return res.status(500).json({
-          error: "Rename failed (fallback also failed)",
-          details: deepErr.message,
-        });
+        return res.status(500).json({ error: "Rename failed (fallback also failed)", details: deepErr.message });
       }
     }
 
-    // ✅ Update in DB
-    folder.name = newName;
-    folder.label = newName.split("/").pop();
-    await folder.save();
-
-    return res.status(200).json({ message: "Folder renamed successfully", folder });
-
+    return res.status(200).json({ message: "Folder renamed successfully" });
   } catch (err) {
     console.error("🔥 Critical Error in renameFolder:", err);
     return res.status(500).json({ error: "Server error", details: err.message });
   }
 };
- 
+
 const getFolders = async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const rawFolders = await Folder.find({ projectId });
-
-    const folders = rawFolders.map(folder => ({
-      ...folder.toObject(),
-      name: normalizePathFromDisk(folder.name),
+    // Assuming folders are stored on disk and need to be read from there
+    const projectPath = path.join(root, projectId);
+    const folders = fs.readdirSync(projectPath).map(folderName => ({
+      name: normalizePathFromDisk(folderName),
     }));
 
     return res.status(200).json({ folders });
@@ -217,7 +189,6 @@ const getFolders = async (req, res) => {
     return res.status(500).json({ error: "Server error", details: err.message });
   }
 };
-
 
 const getFolderTree = async (req, res) => {
   const { projectId } = req.params;
@@ -242,22 +213,17 @@ const getFolderTree = async (req, res) => {
     // Build and return the tree
     const folderTree = await buildFolderTreeFromDisk(projectId);
     return res.status(200).json(folderTree);
-
   } catch (err) {
     console.error("🔥 Error building folder tree:", err);
     return res.status(500).json({ error: "Failed to build folder tree", details: err.message });
   }
 };
 
-
-
-
-
 module.exports = {
   createFolder,
   deleteFolder,
   renameFolder,
+  createInitialProjectFolders,
   getFolders,
   getFolderTree,
 };
-
