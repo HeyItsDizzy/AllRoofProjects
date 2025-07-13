@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "Backend",
+			"path": "Y:/Backend"
+		},
+		{
+			"name": "Frontend",
+			"path": "Frontend"
+		}
+	],
+	"settings": {
+		"CodeGPT.apiKey": "CodeGPT Plus Beta"
+	}
+}
