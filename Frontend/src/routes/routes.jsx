@@ -19,6 +19,7 @@ import NotFound from "../pages/404NotFound"; // ✅ Import the 404 Page
 import Profile from "../pages/Profile"; // ✅ Add at the top
 import ResetPassword from "../pages/ResetPassword";   // Placeholder page
 import IconGallery from "../pages/IconGallery";
+import JobBoard from "../pages/JobBoard";
 
 
 
@@ -60,7 +61,6 @@ export const router = createBrowserRouter([
           </PrivateRoutes>
         ),
       },
-      
       {
         path: "/users",
         element: (
@@ -117,7 +117,14 @@ export const router = createBrowserRouter([
           </PrivateRoutes>
         ),
       },
-      
+      {
+        path: "/job-board",
+        element: (
+          <PrivateRoutes>
+            <JobBoard />
+          </PrivateRoutes>
+        ),
+      },
     ],
   },
   {

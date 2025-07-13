@@ -40,7 +40,13 @@ const NavBar = () => {
       path: "/users",
       show: isAdmin || isEstimator,
     },
+    {
+      name: "Job Board",
+      path: "/job-board",
+      show: isAdmin || isEstimator,
+    },
   ];
+
 
   const renderLink = (link) => (
     <li key={link.name}>

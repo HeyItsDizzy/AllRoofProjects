@@ -22,6 +22,13 @@ const ProjectTable = ({
 
   const navigate = useNavigate();
 
+  // ✅ Function to handle status changeconst projectsToDisplay =
+const projectsToDisplay =
+  sortColumn === "projectNumber"
+    ? [...projects].sort((a, b) => numericProjectNumberSort(a, b, sortOrder))
+    : projects;
+
+
   // ✅ Function to update project status in the database & UI
   const updateProjectStatus = async (projectId, newStatus) => {
     try {
@@ -46,6 +53,31 @@ const ProjectTable = ({
     }
   };
 
+
+function numericProjectNumberSort(a, b, sortOrder = "desc") {
+  const [aYear, aRest] = (a.projectNumber || "0-00000").split("-");
+  const [bYear, bRest] = (b.projectNumber || "0-00000").split("-");
+
+  const aYearNum = parseInt(aYear, 10);
+  const bYearNum = parseInt(bYear, 10);
+  if (aYearNum !== bYearNum)
+    return sortOrder === "asc" ? aYearNum - bYearNum : bYearNum - aYearNum;
+
+  const aMonthNum = parseInt(aRest.slice(0, 2), 10);
+  const bMonthNum = parseInt(bRest.slice(0, 2), 10);
+  if (aMonthNum !== bMonthNum)
+    return sortOrder === "asc" ? aMonthNum - bMonthNum : bMonthNum - aMonthNum;
+
+  const aSeqNum = parseInt(aRest.slice(2), 10);
+  const bSeqNum = parseInt(bRest.slice(2), 10);
+  return sortOrder === "asc" ? aSeqNum - bSeqNum : bSeqNum - aSeqNum;
+}
+
+
+
+
+
+
   // ProjectTable.jsx Return Block
   return (
     <div className="overflow-x-auto bg-white p-4 rounded-md">
@@ -55,9 +87,10 @@ const ProjectTable = ({
     {/* ✅ Table Headers */}
     <thead>
       <tr className="text-left h-8 bg-primary-10 text-medium">
-        <th className="w-[150px] cursor-pointer" onClick={() => handleSort("_id")}>
-          Project ID {sortColumn === "_id" ? (sortOrder === "asc" ? "🔼" : "🔽") : ""}
-        </th>
+<th className="w-[150px] cursor-pointer" onClick={() => handleSort("projectNumber")}>
+  Project ID {sortColumn === "projectNumber" ? (sortOrder === "asc" ? "🔼" : "🔽") : ""}
+</th>
+
         {!isUserView && (
   <th className="w-[150px]">Linked User</th>
 )}
@@ -93,9 +126,9 @@ const ProjectTable = ({
     </thead>
 
     {/* ✅ Table Body */}
-    <tbody>
-      {projects.length > 0 ? (
-        projects.map((project) => {
+   <tbody>
+  {projectsToDisplay.length > 0 ? (
+    projectsToDisplay.map((project) => {
           const currentStatus = statuses?.find((s) => s.label === project?.status) || { label: "New Lead", color: "bg-gray-300" };
 
           return (
@@ -214,8 +247,8 @@ const ProjectTable = ({
   
       {/* ✅ Mobile View (Fixed Long Username Overflow) */}
 <div className="md:hidden space-y-4 px-2">
-  {projects.length > 0 ? (
-    projects.map((project) => {
+  {projectsToDisplay.length > 0 ? (
+    projectsToDisplay.map((project) => {
       const currentStatus = statuses?.find((s) => s.label === project?.status) || { label: "New Lead", color: "bg-gray-300" };
 
       return (

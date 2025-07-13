@@ -6,7 +6,7 @@ import { IconDown } from "../shared/IconSet.jsx";
 import { IconPending } from "../shared/IconSet.jsx";
 import { IconComplete } from "../shared/IconSet.jsx";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
-import ProjectTable from "../Components/ProjectTable";
+import ProjectTable from "../components/ProjectTable";
 import { projectStatuses } from "../shared/projectStatuses";
 
 const UserProjectTable = () => {

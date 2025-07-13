@@ -1,120 +1,174 @@
 // Register.jsx
+/* PRODUCTION READY*/
 import logo from "../assets/logo.png";
 import { Input, Checkbox } from "antd";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom"; // Added useNavigate for navigation
+import { useState, useContext } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic";
 import Swal from '@/shared/swalConfig';
-//import Swal from "sweetalert2";
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
-import AddressInput from "../Components/AddressInput"; // adjust if path is different
+import AddressInput from "../Components/AddressInput";
+import { AuthContext } from "../auth/AuthProvider";
 
 const Register = () => {
+  // State management for form validation and error handling
   const [passErr, setPassErr] = useState("");
   const [resError, setResError] = useState({});
   const [isAgreed, setIsAgreed] = useState(false);
   const [address, setAddress] = useState({});
-  const navigate = useNavigate(); // Added navigate for redirection
+  
+  // Navigation and authentication context
+  const navigate = useNavigate();
+  const { setUser } = useContext(AuthContext);
 
+  /**
+   * Validates email format using regex pattern
+   * @param {string} email - Email address to validate
+   * @returns {boolean} - True if email is valid
+   */
+  const validateEmail = (email) => {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailPattern.test(email);
+  };
+
+  /**
+   * Validates and formats phone number using libphonenumber-js
+   * @param {string} rawPhone - Raw phone number input
+   * @returns {object} - Object containing validation status and formatted numbers
+   */
+  const validateAndFormatPhone = (rawPhone) => {
+    const phoneNumber = parsePhoneNumberFromString(rawPhone, 'AU');
+    if (!phoneNumber || !phoneNumber.isValid()) {
+      return { isValid: false };
+    }
+    
+    return {
+      isValid: true,
+      smsReadyPhone: phoneNumber.format("E.164"),      // For backend/API usage
+      displayPhone: phoneNumber.formatNational()       // For UI display
+    };
+  };
+
+  /**
+   * Handles user authentication after successful registration
+   * @param {string} email - User email
+   * @param {string} password - User password
+   */
+  const handleAutoLogin = async (email, password) => {
+    try {
+      const loginResponse = await axiosPublic.post("/login", { email, password });
+
+      if (loginResponse.data.success) {
+        const { user: loggedInUser, token } = loginResponse.data.data;
+        
+        // Store authentication data in localStorage
+        localStorage.setItem("authUser", JSON.stringify(loggedInUser));
+        localStorage.setItem("authToken", token);
+        
+        // Update React context with user data
+        setUser(loggedInUser);
+
+        // Show success notification
+        Swal.fire({
+          icon: "success",
+          title: "Welcome!",
+          text: "Your account was created and you've been logged in.",
+          timer: 2000,
+          showConfirmButton: false,
+        });
+
+        // Navigate to user dashboard
+        navigate("/MyProjects");
+      } else {
+        setResError({ message: "Account created, but login failed. Please try logging in." });
+      }
+    } catch (err) {
+      setResError({ message: "Login failed after registration. Please try logging in manually." });
+    }
+  };
+
+  /**
+   * Main registration handler - validates form data and processes registration
+   * @param {Event} e - Form submission event
+   */
   const handleRegister = async (e) => {
     e.preventDefault();
     const form = e.target;
   
+    // Extract and clean form data
     const fullName = form.fullName.value.trim();
     const nameParts = fullName.split(" ");
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(" ") || "";
-  
     const company = form.company.value.trim();
     const email = form.email.value.trim();
     const rawPhone = form.phone.value.trim();
     const password = form.password.value;
     const reTypePassword = form.reTypePassword.value;
   
-    // ✅ Check email format
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email)) {
+    // Validate email format
+    if (!validateEmail(email)) {
       setResError({ message: "Please enter a valid email address." });
       return;
     }
   
-    // ✅ Format + validate phone number (default country = AU)
-    const phoneNumber = parsePhoneNumberFromString(rawPhone, 'AU');
-    if (!phoneNumber || !phoneNumber.isValid()) {
+    // Validate and format phone number
+    const phoneValidation = validateAndFormatPhone(rawPhone);
+    if (!phoneValidation.isValid) {
       setResError({ message: "Please enter a valid phone number." });
       return;
     }
   
-    const smsReadyPhone = phoneNumber.format("E.164");       // For backend/API
-    const displayPhone = phoneNumber.formatNational();       // For UI use if needed
-  
+    // Validate password confirmation
     if (password !== reTypePassword) {
       setPassErr("Passwords do not match.");
       return;
     }
-  
+
+    // Prepare user data for registration
     const userData = {
       firstName,
       lastName,
       name: fullName,
       company,
       email,
-      phone: smsReadyPhone,     // E.164 format for backend/API
-      displayPhone: displayPhone, // Local-friendly view for profile page
+      phone: phoneValidation.smsReadyPhone,
+      displayPhone: phoneValidation.displayPhone,
       password,
     };
-    
-  
+
     try {
+      // Attempt user registration
       const response = await axiosPublic.post("/register", userData);
+
       if (response.data.success) {
-        // 🔐 Immediately log in
-        const loginResponse = await axiosPublic.post("/login", {
-          email,
-          password,
-        });
-      
-        if (loginResponse.data.success) {
-          // ✅ Store user in localStorage/context
-          localStorage.setItem("authUser", JSON.stringify(loginResponse.data.data));
-      
-          setUser(loginResponse.data.data); // <- assuming you're using AuthContext
-      
-          Swal.fire({
-            icon: "success",
-            title: "Welcome!",
-            text: "Your account was created and you’ve been logged in.",
-            timer: 2000,
-            showConfirmButton: false,
-          });
-      
-          navigate("/MyProjects"); // or wherever the logged-in user should go
-        } else {
-          setResError({ message: "Account created, but login failed. Please try logging in." });
-        }
-      }
-       else {
+        // Registration successful, attempt automatic login
+        await handleAutoLogin(email, password);
+      } else {
         setResError(response.data);
       }
     } catch (err) {
-      console.error("❌ Registration error:", err);
       setResError({ message: err?.response?.data?.message || "Something went wrong." });
     }
   };
 
-  const onChange = (e) => {
+  /**
+   * Handles terms and conditions agreement checkbox
+   * @param {Event} e - Checkbox change event
+   */
+  const handleAgreementChange = (e) => {
     setIsAgreed(e.target.checked);
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      {/* Light Grey Container */}
+      {/* Main registration container */}
       <div className="bg-white p-10 rounded-xl shadow-lg w-full max-w-md mx-auto">
-      
-        {/* Form and logo */}
+        
+        {/* Logo and header section */}
         <div className="py-4 flex flex-col justify-center mx-auto w-full">
           <div className="w-full text-center">
-            <img src={logo} className="w-32 mx-auto" alt="Logo" />
+            <img src={logo} className="w-32 mx-auto" alt="Company Logo" />
             <div className="my-4">
               <h2 className="text-smallBold text-textBlack">Create an Account</h2>
               <p className="text-textGray text-semiBold">
@@ -125,11 +179,12 @@ const Register = () => {
   
           {/* Registration form */}
           <form onSubmit={handleRegister} className="w-full max-w-xs mx-auto">
-          {resError?.message && (
-            <p className="text-red-500 text-sm mb-2">{resError.message}</p>
-          )}
+            {/* Error message display */}
+            {resError?.message && (
+              <p className="text-red-500 text-sm mb-2">{resError.message}</p>
+            )}
 
-  
+            {/* Full Name Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Full Name</label>
               <Input
@@ -141,6 +196,7 @@ const Register = () => {
               />
             </div>
   
+            {/* Company Name Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Company Name</label>
               <Input
@@ -152,6 +208,7 @@ const Register = () => {
               />
             </div>
   
+            {/* Email Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Email</label>
               <Input
@@ -163,6 +220,7 @@ const Register = () => {
               />
             </div>
   
+            {/* Phone Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Phone</label>
               <Input
@@ -174,6 +232,7 @@ const Register = () => {
               />
             </div>
   
+            {/* Password Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Password</label>
               <Input.Password
@@ -185,6 +244,7 @@ const Register = () => {
               />
             </div>
   
+            {/* Confirm Password Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Retype Password</label>
               <Input.Password
@@ -197,23 +257,27 @@ const Register = () => {
               />
             </div>
   
+            {/* Password mismatch error */}
             {passErr && <p className="text-red-500">{passErr}</p>}
   
+            {/* Terms and conditions agreement */}
             <div>
-              <Checkbox onChange={onChange}>
+              <Checkbox onChange={handleAgreementChange}>
                 By clicking create account button, you agree to our{" "}
                 <span className="text-semiBold">
-                  <a href="#">Terms and Conditions</a>
+                  <a href="#" aria-label="Terms and Conditions">Terms and Conditions</a>
                 </span>{" "}
                 and{" "}
                 <span className="text-semiBold">
-                  <a href="#">Privacy Policy</a>
+                  <a href="#" aria-label="Privacy Policy">Privacy Policy</a>
                 </span>
                 .
               </Checkbox>
             </div>
   
+            {/* Submit button */}
             <button
+              type="submit"
               disabled={!isAgreed}
               className={`w-full bg-primary text-white font-semibold py-2 rounded-md ${
                 !isAgreed ? "opacity-50 cursor-not-allowed" : ""
@@ -223,6 +287,7 @@ const Register = () => {
             </button>
           </form>
   
+          {/* Login link */}
           <p className="text-blue-400 underline mt-4">
             <Link to="/login">Already have an account? Login</Link>
           </p>

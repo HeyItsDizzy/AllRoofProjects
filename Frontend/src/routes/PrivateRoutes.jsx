@@ -1,37 +1,30 @@
+/* PRODUCTION READY*/
 import { useContext } from "react";
-import { Navigate, useLocation } from "react-router-dom"; // Added useLocation
+import { Navigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../auth/AuthProvider";
 
-// eslint-disable-next-line react/prop-types
-// Temp Overide of Authentication, remove comments when working
+// Keep the same signature you were using (children)
+// so nothing changes in your routes.jsx
 const PrivateRoutes = ({ children }) => {
-  const { loading, user } = useContext(AuthContext);
+  const { user, isAuthReady } = useContext(AuthContext);
+  const location = useLocation();
 
-  const location = useLocation(); // Get the current location for redirection after login
-
-  const existToken = localStorage.getItem("authToken");
-
-  // If the authentication state is still loading, display a loading message
-  if (loading) {
+  // 1) While we haven’t finished the initial auth check, show a spinner/UI
+  if (!isAuthReady) {
     return (
       <div className="h-screen flex justify-center items-center">
-        <p className="text-center">Loading...</p>
+        <p className="text-center">Checking authentication…</p>
       </div>
     );
   }
 
-  // If user exists, render the protected children (i.e., the page content)
-  if (user && existToken) {
-    return children;
+  // 2) Once auth is ready, if there's no user, redirect to login
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // If no user is logged in, redirect to the login page
-  return <Navigate to="/login" state={{ from: location }} />;
-};
-
-/* Bypass all authentication and directly return children
-const PrivateRoutes = ({ children }) => {
+  // 3) Otherwise render whatever was inside <PrivateRoutes>…</PrivateRoutes>
   return children;
-};*/
+};
 
 export default PrivateRoutes;
