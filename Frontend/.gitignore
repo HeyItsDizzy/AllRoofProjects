@@ -59,6 +59,7 @@ Frontend/vercel.json
 X/
 backup/
 Backend/x.Archive/
+Backend/*.env
 Backend/oneoffscripts/
 Frontend/test.js
 Frontend/filetree.txt
@@ -72,3 +73,4 @@ tailwind_cheatsheet.xlsx
 # Ignore VSCode workspace-specific settings, except extensions.json
 .vscode/*
 !.vscode/extensions.json
+Backend/Production.env
