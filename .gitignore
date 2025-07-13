@@ -64,3 +64,4 @@ Frontend/.env
 X/
 backup/
 Backend/apikeys.json
+Backend/*.env
