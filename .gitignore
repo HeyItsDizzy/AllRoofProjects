@@ -72,3 +72,5 @@ Backend_old_*/
 *-backup-*.tar.gz
 # local ZIP artifacts
 *.zip
+Backend/.FM/
+**/.FM/
