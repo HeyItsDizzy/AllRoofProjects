@@ -79,3 +79,8 @@ Backend/.FM/
 /node_modules/
 /Frontend/node_modules/
 /Backend/node_modules/
+
+# dependencies
+/node_modules/
+/Frontend/node_modules/
+/Backend/node_modules/
