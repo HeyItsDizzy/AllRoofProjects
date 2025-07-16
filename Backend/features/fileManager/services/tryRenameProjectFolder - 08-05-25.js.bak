@@ -1,0 +1,39 @@
+const fs = require("fs");
+const path = require("path");
+const { getProjectDiskPath } = require("./pathUtils");
+const { moveMeta } = require("./metaUtils");
+
+async function tryRenameProjectFolder(originalProject, updatedProject, region = "AU") {
+  const oldPath = getProjectDiskPath(originalProject, "", region);
+  const newPath = getProjectDiskPath(updatedProject, "", region);
+
+  if (oldPath === newPath) {
+    console.log("📂 No rename needed — project folder alias unchanged.");
+    return { success: true, reason: "No rename needed" };
+  }
+
+  try {
+    if (!fs.existsSync(oldPath)) {
+      console.warn("⚠️ Old folder path does not exist:", oldPath);
+      return { success: false, reason: "Original folder not found" };
+    }
+
+    if (fs.existsSync(newPath)) {
+      console.warn("⚠️ Cannot rename — destination folder already exists:", newPath);
+      return { success: false, reason: "Destination folder already exists" };
+    }
+
+    fs.mkdirSync(path.dirname(newPath), { recursive: true });
+    fs.renameSync(oldPath, newPath);
+    console.log("✅ Project folder renamed from:\n", oldPath, "\n➡️ to:\n", newPath);
+
+    moveMeta(oldPath, newPath); // ✅ move .meta.json with it
+
+    return { success: true };
+  } catch (err) {
+    console.error("🔥 Error renaming project folder:", err);
+    return { success: false, reason: err.message };
+  }
+}
+
+module.exports = { tryRenameProjectFolder };

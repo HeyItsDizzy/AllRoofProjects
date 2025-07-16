@@ -1,0 +1,45 @@
+require("../dotenv").config(); // ✅ Ensures .env is loaded
+const { projectsCollection } = require("../db");
+
+const assignProjectNumbers = async () => {
+  try {
+    console.log("✅ MONGODB_URI:", process.env.MONGODB_URI); // Debugging
+    const collection = await projectsCollection();
+    
+    console.log("✅ Connected to Projects collection!");
+
+    const projectsWithoutNumbers = await collection.find({ projectNumber: { $exists: false } }).toArray();
+
+    if (projectsWithoutNumbers.length === 0) {
+      console.log("✅ All projects already have a project number.");
+      return;
+    }
+
+    for (const project of projectsWithoutNumbers) {
+      // Generate project number
+      const now = new Date();
+      const year = now.getFullYear().toString().slice(-2);
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const baseNumber = `${year}-${month}`;
+
+      // Count existing projects with same base number
+      const count = await collection.countDocuments({ projectNumber: { $regex: `^${baseNumber}` } });
+      const newProjectNumber = `${baseNumber}${String(count + 1).padStart(3, "0")}`;
+
+      // Update project
+      await collection.updateOne(
+        { _id: project._id },
+        { $set: { projectNumber: newProjectNumber } }
+      );
+
+      console.log(`✅ Assigned Project Number: ${newProjectNumber} to project ID: ${project._id}`);
+    }
+
+    console.log("🎉 All missing project numbers have been assigned!");
+  } catch (error) {
+    console.error("❌ Error assigning project numbers:", error.message);
+  }
+};
+
+// Run script
+assignProjectNumbers();

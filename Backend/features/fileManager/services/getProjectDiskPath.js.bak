@@ -1,0 +1,25 @@
+const path = require("path");
+const { uploadsRoot } = require("./pathUtils");
+
+function getProjectDiskPath(project, folderName = "", region = "AU") {
+  const [yearShort, monthSeq] = project.projectNumber.split("-");
+  const fullYear = `20${yearShort}`;
+  const monthNum = parseInt(monthSeq.slice(0, 2), 10);
+
+  const locales = {
+    AU: "en-AU",
+    US: "en-US",
+    NO: "nb-NO",
+  };
+  const locale = locales[region] || "en";
+  const monthName = new Date(2000, monthNum - 1).toLocaleString(locale, {
+    month: "short",
+  });
+
+  const monthFolder = `${monthNum.toString().padStart(2, "0")}. ${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}`;
+  const projectFolder = `${project.projectNumber} - ${project.name}`;
+
+  return path.join(uploadsRoot, region.toUpperCase(), fullYear, monthFolder, projectFolder, folderName);
+}
+
+module.exports = { getProjectDiskPath };

@@ -1,0 +1,28 @@
+# documents (legacy-safe)
+pdf
+doc,cfb
+docx
+xls,cfb
+xlsx
+ppt,cfb
+txt
+
+# images
+jpg
+jpeg
+png
+gif
+webp
+
+# cad
+dwg
+dxf
+
+# archives
+zip
+rar
+7z
+
+# data & code
+csv
+json

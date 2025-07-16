@@ -1,0 +1,10 @@
+# Node modules
+node_modules/
+
+# Environment variables
+
+# Local Netlify folder
+.netlify
+
+.vercel
+uploads/
