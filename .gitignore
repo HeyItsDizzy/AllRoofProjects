@@ -85,3 +85,4 @@ Backend/.FM/
 /Frontend/node_modules/
 /Backend/node_modules/
 Backend/Production.env
+Backend_old_*/
