@@ -84,3 +84,4 @@ Backend/.FM/
 /node_modules/
 /Frontend/node_modules/
 /Backend/node_modules/
+Backend/Production.env
