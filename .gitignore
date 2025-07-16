@@ -66,3 +66,4 @@ backup/
 Backend/apikeys.json
 Backend/*.env
 Front End 1st Live 02-07-2025.zip
+Backend/.env
