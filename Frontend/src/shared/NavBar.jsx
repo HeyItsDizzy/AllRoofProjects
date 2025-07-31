@@ -30,6 +30,11 @@ const NavBar = () => {
 
   const navLinks = [
     {
+      name: "Job Board",
+      path: "/job-board",
+      show: isAdmin || isEstimator,
+    },
+    {
       name: "Projects",
       path: getProjectsPath(),
       show: !!role,
@@ -38,11 +43,6 @@ const NavBar = () => {
     {
       name: "Users",
       path: "/users",
-      show: isAdmin || isEstimator,
-    },
-    {
-      name: "Job Board",
-      path: "/job-board",
       show: isAdmin || isEstimator,
     },
   ];

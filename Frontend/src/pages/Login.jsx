@@ -5,7 +5,7 @@ import { useContext, useState } from "react";
 import { AuthContext } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
 import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic"; 
-import ForgotPasswordModal from "../Components/ForgotPasswordModal"; // Ensure this is the correct path
+import ForgotPasswordModal from "../components/ForgotPasswordModal"; // Ensure this is the correct path
 
 const Login = () => {
   const { setUser } = useContext(AuthContext); 
@@ -35,9 +35,16 @@ const Login = () => {
         setUser(user);
         console.log("User successfully logged in:", user);
 
+        // ── Redirect non-admins without company info ────────────────────────
+        if (user.role !== "Admin" && (!user.company || !user.companyId)) {
+          console.log("No company linked → redirecting to /company-choice");
+          return navigate("/company-choice");
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         if (user.role === "Admin") {
-          console.log("Redirecting Admin to /projects");
-          navigate("/projects"); 
+          console.log("Redirecting Admin to /job-board");
+          navigate("/job-board"); 
         } else {
           navigate("/MyProjects"); 
         }
@@ -113,10 +120,15 @@ const Login = () => {
         </div>
       </div>
 
-      {/* ForgotPasswordModal Component */}
+      {/* ForgotPasswordModal Component (3-step: send, verify, reset) */}
       <ForgotPasswordModal
         isOpen={showResetModal}
         onClose={() => setShowResetModal(false)}
+        onComplete={() => {
+          setShowResetModal(false);
+          // After full flow, route to company choice (then eventually login)
+          navigate("/company-choice");
+        }}
       />
     </div>
   );

@@ -1,212 +1,266 @@
-import { useContext, useEffect, useState } from "react";
-import { IconDown } from "../shared/IconSet.jsx";
-import { IconSearch } from "../shared/IconSet.jsx";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import React, { useState, useEffect } from "react";
 import { Button } from "antd";
-import { Link } from "react-router-dom";
-import Swal from '@/shared/swalConfig';
-//import Swal from "sweetalert2";
+import { Link, useNavigate } from "react-router-dom";
+import { IconSearch } from "../shared/IconSet.jsx";
+import { IconDown } from "../shared/IconSet.jsx";
 import { IconPending } from "../shared/IconSet.jsx";
 import { IconComplete } from "../shared/IconSet.jsx";
-import { AuthContext } from "../auth/AuthProvider";
+import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import ProjectTable from "../components/ProjectTable";
+import { projectStatuses } from "../shared/projectStatuses";
 
-const MyProjects = () => {
-  const [activeButton, setActiveButton] = useState("All Projects");
-  const [projects, setProjects] = useState([]);
-  const [search, setSearch] = useState("");
+const UserProjectTable = () => {
+  const [projects, setProjects] = useState([]); // Holds all projects
+  const [userData, setUserData] = useState({}); // Holds user details (avatars & names)
+  const [search, setSearch] = useState(""); // Search query
+  const [activeButton, setActiveButton] = useState("All Projects"); // Filter state
+  const navigate = useNavigate(); // Get navigate function
   const axiosSecure = useAxiosSecure();
-  const { user } = useContext(AuthContext);
-  const id = user._id; // Fetch logged-in user ID
-  const url = `/projects/get-projects/${id}`;
 
-  // Handle search input
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-  };
-
-  // Determine date filter based on selected button
-  const getStartDate = () => {
-    const today = new Date();
-    if (activeButton === "New Projects") {
-      today.setDate(today.getDate() - 7);
-    } else if (activeButton === "Last Updated") {
-      today.setDate(today.getDate() - 3);
-    }
-    return activeButton === "All Projects" ? null : today.toISOString();
-  };
+  // Sorting and filtering states
+  const [filteredProjects, setFilteredProjects] = useState([]); // Stores filtered projects
+  const [sortColumn, setSortColumn] = useState(null); // Stores active sort column
+  const [sortOrder, setSortOrder] = useState("asc"); // Stores sorting order
+  const [filters, setFilters] = useState({}); // Stores applied filters
 
   // Fetch projects
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const response = await axiosSecure.get(url, {
-          params: {
-            search,
-            startDate: getStartDate(),
-          },
-        });
+        const response = await axiosSecure.get("/projects/get-user-projects");
+        console.log("User Project Data Response:", response.data); // Debug entire response
         setProjects(response.data.data || []);
       } catch (error) {
         console.error("Error fetching projects:", error);
       }
     };
+    fetchProjects();
+  }, []);
 
-    const debounceFetch = setTimeout(fetchProjects, 500);
-
-    return () => clearTimeout(debounceFetch);
-  }, [axiosSecure, search, activeButton]);
-
-  // Mark project as complete
-  const handleMarkComplete = async (projectId) => {
-    Swal.fire({
-      title: "Are you sure?",
-      text: "Do you want to mark this project as complete?",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Yes, mark it complete!",
-      cancelButtonText: "No, keep it running",
-    }).then(async (result) => {
-      if (result.isConfirmed) {
-        try {
-          const response = await axiosSecure.put(`/updateProjectToComplete/${projectId}`);
-          if (response.data.success) {
-            setProjects((prevProjects) =>
-              prevProjects.map((project) =>
-                project._id === projectId
-                  ? { ...project, status: "complete" }
-                  : project
-              )
-            );
-            Swal.fire("Success!", "Project has been marked as complete.", "success");
-          } else {
-            Swal.fire("Error", response.data.message || "Failed to update project status", "error");
+  // Fetch user details based on linked users
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      if (!projects.length) return;
+  
+      const userIds = projects.flatMap((p) => p.linkedUsers || []);
+      const uniqueUserIds = [...new Set(userIds)].filter(Boolean); // 👈 removes null/undefined/empty
+  
+      try {
+        const responses = await Promise.all(
+          uniqueUserIds.map((userId) => {
+            if (!userId) return null; // extra guard
+            return axiosSecure.get(`/users/get-user/${userId}`);
+          })
+        );
+  
+        const userMap = responses.reduce((acc, response) => {
+          if (response && response.data?.success) {
+            acc[response.data.data._id] = response.data.data;
           }
-        } catch (error) {
-          console.error("Error marking project as complete:", error);
-          Swal.fire("Error", "An error occurred. Please try again.", "error");
+          return acc;
+        }, {});
+  
+        setUserData(userMap);
+      } catch (error) {
+        console.error("Error fetching user details:", error);
+      }
+    };
+  
+    fetchUserDetails();
+  }, [projects]);
+  
+
+  // Filter projects based on active button
+  useEffect(() => {
+    filterProjects(activeButton); // Apply filtering when projects update
+  }, [projects, activeButton]);
+
+  // Filter projects based on search query
+  useEffect(() => {
+    let filtered = [...projects];
+
+    // Apply Tab Filters (All Projects / Open Projects)
+    if (activeButton === "Open Projects") {
+      filtered = filtered.filter((project) => isProjectOpen(project.status));
+    }
+
+    // Apply Column Filters (Ignore "All")
+    Object.keys(filters).forEach((column) => {
+      if (filters[column] && filters[column].length > 0) {
+        if (!filters[column].includes("All")) { // Ensure "All" does not filter anything
+          filtered = filtered.filter((project) => filters[column].includes(project[column]));
         }
       }
     });
+
+    // Apply Search Filter
+    if (search.trim()) {
+      const lowerSearch = search.toLowerCase();
+      filtered = filtered.filter((project) =>
+        (project.name && project.name.toLowerCase().includes(lowerSearch)) ||
+        (project.location && project.location.toLowerCase().includes(lowerSearch)) ||
+        (Array.isArray(project.linkedUsers) &&
+          project.linkedUsers.some((userId) => {
+            const user = userData[userId];
+            return user && user.name.toLowerCase().includes(lowerSearch);
+          })) ||
+        (project.status && project.status.toLowerCase().includes(lowerSearch))
+      );
+    }
+
+    setFilteredProjects(filtered);
+  }, [projects, activeButton, filters, search]); // Ensures filters update correctly
+
+  // Sort projects based on a specific field
+  const handleSort = (column) => {
+    const newSortOrder = sortColumn === column && sortOrder === "asc" ? "desc" : "asc";
+    setSortColumn(column);
+    setSortOrder(newSortOrder);
+
+    // First, sort the full projects list
+    const sortedProjects = [...projects].sort((a, b) => {
+      if (a[column] < b[column]) return newSortOrder === "asc" ? -1 : 1;
+      if (a[column] > b[column]) return newSortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    setProjects(sortedProjects); // Update the full list
+    setFilteredProjects(sortedProjects); // Ensure displayed projects are sorted
   };
 
+  const handleFilterChange = (column, value) => {
+    setFilters((prevFilters) => {
+      const updatedFilters = { ...prevFilters };
+
+      if (value === "All") {
+        delete updatedFilters[column]; // Remove filter completely
+      } else {
+        updatedFilters[column] = [value]; // Store selected value
+      }
+
+      return { ...updatedFilters }; // Force state update
+    });
+
+    // Ensure `useEffect` detects the filter change
+    setFilteredProjects([...projects]); // Refresh filteredProjects immediately
+  };
+
+  const isProjectOpen = (status) => {
+    const openStatuses = [
+      "New Lead",
+      "Estimate Requested",
+      "Estimate Completed",
+      "Quote Sent",
+      "Approved",
+      "Project Active",
+    ];
+    return openStatuses.includes(status);
+  };
+
+  // Handle main filtering of projects including search
+  const filterProjects = (label, searchTerm = "") => {
+    let filtered = [...projects]; // Start with all projects
+
+    // Apply Tab Filters (All Projects / Open Projects)
+    if (label === "Open Projects") {
+      filtered = filtered.filter((project) => isProjectOpen(project.status));
+    }
+
+    // Ensure searchTerm is always a string to prevent trim() errors
+    if (typeof searchTerm !== "string") {
+      searchTerm = "";
+    }
+
+    // Apply Search Filter
+    if (searchTerm.trim()) {
+      const lowerSearch = searchTerm.toLowerCase();
+      filtered = filtered.filter((project) =>
+        (project.name && project.name.toLowerCase().includes(lowerSearch)) ||
+        (project.location && project.location.toLowerCase().includes(lowerSearch)) ||
+        (Array.isArray(project.linkedUsers) &&
+          project.linkedUsers.some((userId) => {
+            const user = userData[userId];
+            return user && user.name.toLowerCase().includes(lowerSearch);
+          })) ||
+        (project.status && project.status.toLowerCase().includes(lowerSearch))
+      );
+    }
+
+    setFilteredProjects(filtered); // Update UI
+  };
+
+  const handleSearchChange = (e) => {
+    const newSearch = e.target.value || ""; // Ensure it's always a string
+    setSearch(newSearch);
+    filterProjects(activeButton, newSearch);
+  };
+
+  const handleProjectTabClick = (label) => {
+    if (label === "Create New") {
+      navigate("/addNewProject"); // 👈 Go to Add Project Page
+      return;
+    }
+  
+    if (activeButton === label) {
+      // Clear filters
+      setFilters({});
+      setSearch("");
+      setSortColumn(null);
+      setSortOrder(null);
+      filterProjects("All Projects", "");
+    } else {
+      setActiveButton(label);
+      filterProjects(label, search || "");
+    }
+  };
+  
+
+  // MyProjects.jsx Return
   return (
     <div className="min-h-screen">
-      {/* Search and Filters */}
+      {/* Search & Filter Section */}
       <div className="w-full mx-auto my-6 flex flex-col md:flex-row md:justify-between items-center gap-4">
-        <div className="relative">
+        <div className="relative flex-1 max-w-[450px] w-full">
           <IconSearch className="absolute top-[11px] left-2" />
           <input
             type="text"
-            placeholder="Search"
-            className="pl-10 h-9 rounded-md placeholder:text-medium"
+            placeholder="Search projects by name, user, or address..."
+            className="pl-10 h-9 rounded-md placeholder:text-medium w-full"
             onChange={handleSearchChange}
           />
         </div>
+        {/* Filter Buttons */}
         <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white">
-          {["All Projects", "New Projects", "Last Updated"].map((label) => (
-            <button
-              key={label}
-              className={`px-4 py-1 rounded-full transition-colors duration-300 ${
-                activeButton === label ? "bg-secondary text-white" : "bg-transparent text-textGray"
-              }`}
-              onClick={() => setActiveButton(label)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+  {["All Projects", "Open Projects", "Create New"].map((label) => (
+    <button
+      key={label}
+      className={`px-4 py-1 rounded-full transition-colors duration-300 ${
+        activeButton === label ? "bg-secondary text-white" : "bg-transparent text-textGray"
+      }`}
+      onClick={() => handleProjectTabClick(label)}
+    >
+      {label}
+    </button>
+  ))}
+</div>
+
       </div>
 
-      {/* Projects Table */}
-      <div className="overflow-x-auto bg-white p-4 rounded-md">
-        <table className="w-full min-w-[600px]">
-          <thead>
-            <tr className="text-left h-10 bg-primary-10 text-medium">
-              <td className="pl-2 max-w-52">
-                <span className="flex items-center">
-                  Project Name <IconDown />
-                </span>
-              </td>
-              <td>Linked User</td>
-              <td>Address</td>
-              <td>Date Posted</td>
-              <td>Cost</td>
-              <td>Due Date</td>
-              <td>Action</td>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.length > 0 ? (
-              projects.map((project) => (
-                <tr key={project._id} className="border-t-[1px] text-semiBold">
-                  <td className="pl-2 py-2 max-w-52">
-                    <span className="font-semibold">{project.name}</span>
-                    <br />
-                    {project.description && (
-                      <span>{project.description.substring(0, 30)}...</span>
-                    )}
-                  </td>
-                  <td>
-                    {project.linkedUsers ? (
-                      <>
-                        {project.linkedUsers?.image ? (
-                          <img
-                            className="rounded-full w-10 h-10 my-1"
-                            src={project.linkedUsers?.image}
-                            alt=""
-                          />
-                        ) : (
-                          <div className="rounded-full w-10 h-10 flex justify-center align-middle bg-bgGray">
-                            <h1 className="h-fit my-auto text-xl text-textBlack font-serif font-medium">
-                              {project.name.slice(0, 2)}
-                            </h1>
-                          </div>
-                        )}
-                        <p className="my-2">{project.linkedUsers?.name}</p>
-                      </>
-                    ) : (
-                      <p>Not Assigned</p>
-                    )}
-                  </td>
-                  <td>{project.location}</td>
-                  <td>{project.posting_date}</td>
-                  <td>${project.total}</td>
-                  <td>{project.due_date}</td>
-                  <td className="text-primary">
-                    <div className="flex justify-around">
-                      <Button>
-                        <Link to={`/project/${project._id}`}>View</Link>
-                      </Button>
-                      <div className="w-fit my-auto ">
-                        {project.status === "New Lead" || !project.status ? (
-                          <button className="flex">
-                            <IconPending
-                              className="text-secondary border-2 text-2xl rounded-full  p-1 border-secondary"
-                              onClick={() => handleMarkComplete(project._id)}
-                            />
-                          </button>
-                        ) : (
-                          <p className="text-success font-semibold text-center w-full capitalize">
-                            <IconComplete className="text-2xl" />
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="7" className="text-center py-4">
-                  No projects found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Always render ProjectTable (Both Desktop & Mobile) */}
+      <ProjectTable
+        projects={filteredProjects || []}
+        setProjects={setProjects}
+        userData={userData}
+        handleSort={handleSort}
+        sortColumn={sortColumn}
+        sortOrder={sortOrder}
+        handleFilterChange={handleFilterChange}
+        filters={filters}
+        isUserView={true} // 👈 Add this to inform table renderer
+      />
+
     </div>
   );
 };
 
-export default MyProjects;
+export default UserProjectTable;

@@ -49,7 +49,10 @@ import {
 import {
   IoCheckmarkDoneCircleOutline as IconComplete,
 } from "react-icons/io5";
-import { IoIosMenu as IconSidebarMenu } from "react-icons/io";
+import {
+  IoIosMenu as IconSidebarMenu,
+  IoMdSync as IconSync,
+} from "react-icons/io";
 
 // Heroicons
 import { HiDotsVertical as IconMenuDots } from "react-icons/hi";
@@ -130,6 +133,7 @@ export {
   // Status Indicators
   IconPending,
   IconComplete,
+  IconSync,
 
   // Utility
   getFileIcon,

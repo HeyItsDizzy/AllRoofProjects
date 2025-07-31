@@ -9,6 +9,8 @@ import Swal from '@/shared/swalConfig';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import AddressInput from "../Components/AddressInput";
 import { AuthContext } from "../auth/AuthProvider";
+import TermsModal from "../components/TermsModal";
+import PrivacyModal from "../components/PrivacyModal";
 
 const Register = () => {
   // State management for form validation and error handling
@@ -16,7 +18,9 @@ const Register = () => {
   const [resError, setResError] = useState({});
   const [isAgreed, setIsAgreed] = useState(false);
   const [address, setAddress] = useState({});
-  
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+
   // Navigation and authentication context
   const navigate = useNavigate();
   const { setUser } = useContext(AuthContext);
@@ -37,17 +41,19 @@ const Register = () => {
    * @returns {object} - Object containing validation status and formatted numbers
    */
   const validateAndFormatPhone = (rawPhone) => {
-    const phoneNumber = parsePhoneNumberFromString(rawPhone, 'AU');
+    const cleaned = rawPhone.replace(/[^\d+]/g, ''); // ← remove all but numbers and +
+    const phoneNumber = parsePhoneNumberFromString(cleaned, 'AU');
     if (!phoneNumber || !phoneNumber.isValid()) {
       return { isValid: false };
     }
-    
+
     return {
       isValid: true,
-      smsReadyPhone: phoneNumber.format("E.164"),      // For backend/API usage
-      displayPhone: phoneNumber.formatNational()       // For UI display
+      smsReadyPhone: phoneNumber.format("E.164"),    // For backend/API usage
+      displayPhone: phoneNumber.formatNational(),    // For UI display
     };
   };
+
 
   /**
    * Handles user authentication after successful registration
@@ -100,7 +106,6 @@ const Register = () => {
     const nameParts = fullName.split(" ");
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(" ") || "";
-    const company = form.company.value.trim();
     const email = form.email.value.trim();
     const rawPhone = form.phone.value.trim();
     const password = form.password.value;
@@ -130,7 +135,6 @@ const Register = () => {
       firstName,
       lastName,
       name: fullName,
-      company,
       email,
       phone: phoneValidation.smsReadyPhone,
       displayPhone: phoneValidation.displayPhone,
@@ -196,23 +200,13 @@ const Register = () => {
               />
             </div>
   
-            {/* Company Name Input */}
-            <div className="flex flex-col mb-4">
-              <label className="mb-2 text-semiBold">Company Name</label>
-              <Input
-                name="company"
-                required
-                placeholder="e.g. All Roof Take-offs"
-                className="w-full"
-                variant="filled"
-              />
-            </div>
   
             {/* Email Input */}
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-semiBold">Email</label>
               <Input
                 name="email"
+                autoComplete="email"
                 required
                 placeholder="Enter your email"
                 className="w-full"
@@ -225,6 +219,7 @@ const Register = () => {
               <label className="mb-2 text-semiBold">Phone</label>
               <Input
                 name="phone"
+                autoComplete="tel"
                 required
                 placeholder="Enter your phone"
                 className="w-full"
@@ -237,6 +232,7 @@ const Register = () => {
               <label className="mb-2 text-semiBold">Password</label>
               <Input.Password
                 name="password"
+                autoComplete="new-password"
                 required
                 placeholder="Enter your password"
                 className="w-full"
@@ -249,6 +245,7 @@ const Register = () => {
               <label className="mb-2 text-semiBold">Retype Password</label>
               <Input.Password
                 name="reTypePassword"
+                autoComplete="new-password"
                 required
                 placeholder="Re-enter your password"
                 onChange={() => setPassErr("")}
@@ -261,17 +258,22 @@ const Register = () => {
             {passErr && <p className="text-red-500">{passErr}</p>}
   
             {/* Terms and conditions agreement */}
-            <div>
+            <div className="flex flex-col gap-1 mt-4">
               <Checkbox onChange={handleAgreementChange}>
-                By clicking create account button, you agree to our{" "}
-                <span className="text-semiBold">
-                  <a href="#" aria-label="Terms and Conditions">Terms and Conditions</a>
-                </span>{" "}
-                and{" "}
-                <span className="text-semiBold">
-                  <a href="#" aria-label="Privacy Policy">Privacy Policy</a>
+                I agree to the{" "}
+                <span
+                  className="text-primary underline cursor-pointer"
+                  onClick={() => setIsTermsModalOpen(true)}
+                >
+                  Terms and Conditions
                 </span>
-                .
+                {" "}and{" "}
+                <span
+                  className="text-primary underline cursor-pointer"
+                  onClick={() => setIsPrivacyModalOpen(true)}
+                >
+                  Privacy Policy
+                </span>
               </Checkbox>
             </div>
   
@@ -293,6 +295,15 @@ const Register = () => {
           </p>
         </div>
       </div>
+      {/* 📄 Terms & Conditions Modal */}
+      <TermsModal
+        visible={isTermsModalOpen}
+        onClose={() => setIsTermsModalOpen(false)}
+      />
+      <PrivacyModal
+        visible={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+      />
     </div>
   );
 };

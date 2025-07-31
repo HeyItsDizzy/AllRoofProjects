@@ -4,12 +4,12 @@ import UserTable from "../pages/userTable";
 import NavBarPreview from "../pages/NavBarPreview"; 
 import Login from "../pages/login";
 import Register from "../pages/register";
-import AllUsersTable from "../pages/AllUsersTable";
+import AllClientsTable from "../pages/AllClientsTable";
 import AdminProjectTable from "../pages/AdminProjectTable";
 import AssignedProjects from "../pages/AssignedProjects";
 import AddNewProjects from "../pages/AddNewProjects";
 import ProjectsView from "../pages/ProjectsView";
-import ProjectsUser from "../pages/ProjectsUser";
+import MyProjects from "../pages/MyProjects";
 import UserTableDetails from "../Components/UserTableDetails";
 import AdminRoutes from "./AdminRoutes";
 import PrivateRoutes from "./PrivateRoutes";
@@ -20,6 +20,8 @@ import Profile from "../pages/Profile"; // ✅ Add at the top
 import ResetPassword from "../pages/ResetPassword";   // Placeholder page
 import IconGallery from "../pages/IconGallery";
 import JobBoard from "../pages/JobBoard";
+import CompanyChoice   from "../pages/CompanyChoice";
+import CompanyProfile  from "../pages/CompanyProfile";
 
 
 
@@ -49,7 +51,7 @@ export const router = createBrowserRouter([
         path: "/MyProjects",
         element: (
           <PrivateRoutes>
-            <ProjectsUser />
+            <MyProjects />
           </PrivateRoutes>
         ),
       },
@@ -65,7 +67,7 @@ export const router = createBrowserRouter([
         path: "/users",
         element: (
           <AdminRoutes>
-            <AllUsersTable />
+            <AllClientsTable />
           </AdminRoutes>
         ),
       },
@@ -117,6 +119,22 @@ export const router = createBrowserRouter([
           </PrivateRoutes>
         ),
       },
+      {
+        path: "/company-choice",
+        element: (
+          <PrivateRoutes>
+            <CompanyChoice />
+          </PrivateRoutes>
+        ),
+      },
+      {
+        path: "/company-profile",
+        element: (
+          <PrivateRoutes>
+            <CompanyProfile />
+          </PrivateRoutes>
+        ),
+      },      
       {
         path: "/job-board",
         element: (

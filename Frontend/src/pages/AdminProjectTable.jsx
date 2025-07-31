@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Button } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import { IconSearch, IconDown, IconPending, IconComplete } from "../shared/IconSet.jsx";
-import AssignUser from "../components/AssignUser";
+//import AssignUser from "../components/AssignUser";
+import AssignClient from "../components/AssignClient";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
 import { projectStatuses } from "../shared/projectStatuses";
@@ -10,12 +11,17 @@ import { projectStatuses } from "../shared/projectStatuses";
 const AdminProjectTable = () => {
   const [projects, setProjects] = useState([]); // Holds all projects
   const [users, setUsers] = useState([]); // Holds users for assignment
+  const [clients, setClients] = useState([]); // Holds clients for assignment
   const [userData, setUserData] = useState({}); // Holds user details (avatars & names)
   const [search, setSearch] = useState(""); // Search query
   const [activeButton, setActiveButton] = useState("All Projects"); // Filter state
   const navigate = useNavigate(); // ✅ Get navigate function
   const [isModalVisible, setIsModalVisible] = useState(false); // Modal visibility state
   const [selectedProject, setSelectedProject] = useState(null); // Selected project for modal
+
+  const [isClientModalVisible, setIsClientModalVisible] = useState(false); // ClientModal visibility state
+  const [selectedClientProject, setSelectedClientProject] = useState(null); // Selected Client Project for modal
+
   const axiosSecure = useAxiosSecure();
 
   // Sorting and filtering states
@@ -38,8 +44,21 @@ const AdminProjectTable = () => {
     fetchProjects();
   }, []);
   
+  // Fetch clients for assignment
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const res = await axiosSecure.get("/clients");
+        setClients(res.data || []);
+      } catch (err) {
+        console.error("Error fetching clients:", err);
+      }
+    };
+    fetchClients();
+  }, []);
 
-  // Fetch users
+
+  // Fetch users for assignment
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -140,6 +159,16 @@ const AdminProjectTable = () => {
     );
   };
 
+  // Callback to update project.linkedClients in state
+const updateProjectClients = (projectId, linkedClients) => {
+  setProjects(prev =>
+    prev.map(p =>
+      p._id === projectId ? { ...p, linkedClients } : p
+    )
+  );
+};
+
+
   // Sort projects based on a specific field
   const handleSort = (column) => {
     const newSortOrder = sortColumn === column && sortOrder === "asc" ? "desc" : "asc";
@@ -208,6 +237,17 @@ const AdminProjectTable = () => {
     setIsModalVisible(false);
     setSelectedProject(null);
   };
+
+  // Function to open Assign Client Modal
+const openAssignClientModal = (project) => {
+  setSelectedClientProject(project);
+  setIsClientModalVisible(true);
+};
+
+const closeAssignClientModal = () => {
+  setIsClientModalVisible(false);
+  setSelectedClientProject(null);
+};
 
   const isProjectOpen = (status) => {
     const openStatuses = [
@@ -283,29 +323,30 @@ const AdminProjectTable = () => {
     <div className="min-h-screen">
       {/* Search & Filter Section */}
       <div className="w-full mx-auto my-6 flex flex-col md:flex-row md:justify-between items-center gap-4">
-        <div className="relative">
+        <div className="relative flex-1 max-w-[450px] w-full">
           <IconSearch className="absolute top-[11px] left-2" />
           <input
             type="text"
             placeholder="Search projects by name, user, or address..."
-            className="pl-10 h-9 rounded-md placeholder:text-medium"
+            className="pl-10 h-9 rounded-md placeholder:text-medium w-full"
             onChange={handleSearchChange}
           />
         </div>
         {/* Filter Buttons */}
         <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white">
-          {["All Projects", "Open Projects", "Create New"].map((label) => (
-            <button
-              key={label}
-              className={`px-4 py-1 rounded-full transition-colors duration-300 ${
-                activeButton === label ? "bg-secondary text-white" : "bg-transparent text-textGray"
-              }`}
-              onClick={() => handleProjectTabClick(label)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+  {["All Projects", "Open Projects", "Create New"].map((label) => (
+    <button
+      key={label}
+      className={`px-4 py-1 rounded-full transition-colors duration-300 ${
+        activeButton === label ? "bg-secondary text-white" : "bg-transparent text-textGray"
+      }`}
+      onClick={() => handleProjectTabClick(label)}
+    >
+      {label}
+    </button>
+  ))}
+</div>
+
       </div>
 
 {/* ✅ Always render ProjectTable (Both Desktop & Mobile) */}
@@ -313,7 +354,9 @@ const AdminProjectTable = () => {
   projects={filteredProjects || []}
   setProjects={setProjects}
   userData={userData}
+  clients={clients}
   openAssignUser={openAssignUserModal}
+  openAssignClient={openAssignClientModal}
   handleSort={handleSort}
   sortColumn={sortColumn}
   sortOrder={sortOrder}
@@ -323,16 +366,16 @@ const AdminProjectTable = () => {
 />
 
 
-      {/* Assign User Modal */}
-      {isModalVisible && (
-        <AssignUser
-          users={users}
-          projectId={selectedProject?._id}
-          project={selectedProject}
-          closeModal={closeAssignUserModal}
-          updateProjectUsers={updateProjectUsers}
-        />
-      )}
+      {/* Assign Client Modal */}
+    {isClientModalVisible && (
+      <AssignClient
+        clients={clients}
+        projectId={selectedClientProject._id}
+        project={selectedClientProject}
+        closeModal={closeAssignClientModal}
+        updateProjectClients={updateProjectClients}
+      />
+    )}
     </div>
   );
 };

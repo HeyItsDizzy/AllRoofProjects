@@ -84,13 +84,6 @@ const handleUserSelection = (e) => {
 
   const url = "/projects/addProject";
 
-
-  useEffect(() => {
-    if (isAdmin) {
-      axiosSecure.get("projects/get-userData").then((res) => setUsers(res.data.data));
-    }
-  }, [axiosSecure, isAdmin]);
-
   // const debounceTimeoutRef = useRef(null);
 
   const generateProjectNumber = async (existingProjects) => {
@@ -112,13 +105,16 @@ const handleUserSelection = (e) => {
 
     const form = e.target;
     const name = form.name.value.trim() || "Untitled Project";
-    const due_date = form.due_date?.value || "";
+    const due_date_raw = form.due_date?.value || "";
+    const due_date     = due_date_raw
+      ? new Date(due_date_raw).toISOString().slice(0, 10)
+      : "";
     const description = form.description.value.trim() || "No description provided.";
     const subTotal = parseFloat(form.subTotal.value) || 0;
     const gst = parseFloat(form.gst.value) || 0;
     const total = subTotal + gst;
-    const today = new Date();
-    const posting_date = today.toLocaleDateString();
+    // Store as ISO-8601 so backend always sees the same format
+    const posting_date = new Date().toISOString().slice(0, 10);    // "2025-07-25"
 
     let existingProjects = [];
     try {
@@ -128,8 +124,10 @@ const handleUserSelection = (e) => {
     }
 
     const projectNumber = await generateProjectNumber(existingProjects);
-    const linkedUsers = isAdmin ? [] : [user._id];
 
+    // If Admin, send that selected client ID, otherwise link the current user
+    const linkedUsers   = isAdmin ? []       : [user._id];
+    const linkedClients = isAdmin ? [form.client.value] : [];
 
     const project = {
       name,
@@ -137,6 +135,7 @@ const handleUserSelection = (e) => {
       due_date,
       posting_date,
       linkedUsers,
+      linkedClients,
       description,
       subTotal,
       total,

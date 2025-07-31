@@ -29,6 +29,7 @@ import {
   IconSearch,
   IconBell,
   IconPending,
+  IconSync,
   IconComplete,
   getFileIcon,
 } from "../shared/IconSet.jsx";
@@ -77,6 +78,7 @@ const groupedIcons = {
   "✅ Status Indicators": {
     IconPending,
     IconComplete,
+    IconSync,
   },
 };
 

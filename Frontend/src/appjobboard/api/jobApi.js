@@ -1,5 +1,22 @@
 // jobApi.js
-const BASE_URL = '/projects'; // already prefixed with /api in your backend config
+const BASE_URL = '/projects'; // already prefixed with /api in backend config
+//import axios from "axios";
+
+
+ /*// Fetch projects
+export const fetchAllJobs = async () => {
+  try {
+    const res = await axios.get("/get-projects");
+    return Array.isArray(res.data) ? res.data : res.data.projects || [];
+  } catch (err) {
+    console.error("Failed to fetch jobs:", err);
+    return [];
+  }
+};
+
+*/ // possibly bad function and need to be deleted
+
+
 
 /**
  * Save a new job to backend API
@@ -29,5 +46,21 @@ export async function updateJob(jobId, updates, axiosSecure) {
   } catch (err) {
     console.error('Error updating job:', err);
     throw err;
+  }
+}
+
+export async function saveJobBoardData(projectId, updates) {
+  try {
+    const response = await fetch(`/api/project/update-jobboard/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
+  } catch (err) {
+    console.error("❌ Failed to save job board data:", err.message);
   }
 }

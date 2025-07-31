@@ -3,21 +3,25 @@ import { useNavigate } from "react-router-dom";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
-import { projectStatuses as statuses } from "../shared/projectStatuses";
+import { projectStatuses, estimateStatuses  } from "../shared/projectStatuses";
 import Avatar from "../shared/Avatar";
+
+const statuses = [...projectStatuses, ...estimateStatuses];
 
 const ProjectTable = ({
   projects = [],
   setProjects,
   userData = {},
-  openAssignUser = () => {},
+  clients = [],
+  //openAssignUser = () => {},
+  openAssignClient = () => {},
   handleSort = () => {},
   sortColumn,
   sortOrder,
   handleFilterChange = () => {},
   filters = {},
   handleStatusChange = () => {},
-  isUserView = false, // 👈 make sure this is here!
+  isUserView = false,
 }) => {
 
   const navigate = useNavigate();
@@ -74,10 +78,6 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
 }
 
 
-
-
-
-
   // ProjectTable.jsx Return Block
   return (
     <div className="overflow-x-auto bg-white p-4 rounded-md">
@@ -92,7 +92,7 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
 </th>
 
         {!isUserView && (
-  <th className="w-[150px]">Linked User</th>
+  <th className="w-[150px]">Linked Client</th>
 )}
 
         <th className="w-[250px] cursor-pointer" onClick={() => handleSort("name")}>
@@ -129,7 +129,20 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
    <tbody>
   {projectsToDisplay.length > 0 ? (
     projectsToDisplay.map((project) => {
-          const currentStatus = statuses?.find((s) => s.label === project?.status) || { label: "New Lead", color: "bg-gray-300" };
+const isProjectStatus = projectStatuses.find((s) => s.label === project?.status);
+const isEstimateStatus = estimateStatuses.find((s) => s.label === project?.status);
+
+const displayLabel = isEstimateStatus && !isProjectStatus
+  ? `ART: ${project.status}`
+  : project.status;
+
+const displayColor = (isProjectStatus || isEstimateStatus)?.color ?? "bg-gray-300 text-black";
+
+// Lock if estimateStatus is set and it's not "Estimate Completed"
+const isClientLocked = !isProjectStatus && project.status !== "Estimate Completed";
+
+
+
 
           return (
             <tr 
@@ -142,51 +155,51 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
 
               {/* ✅ Linked Users (Uniform Button Styling) */}
               {!isUserView && (
-  <td onClick={(e) => e.stopPropagation()}>
-{Array.isArray(project.linkedUsers) && project.linkedUsers.length > 0 ? (
-  <div className="flex flex-wrap gap-2">
-    {project.linkedUsers.map((userId, index) => {
-      const key = userId || `placeholder-${index}`;
+              <td onClick={(e) => e.stopPropagation()}>
+            {Array.isArray(project.linkedClients) && project.linkedClients.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {project.linkedClients.map((clientId) => {
+                // find the client object from the passed-in list
+                const client = clients.find((c) => c._id === clientId);
 
-      if (!userId || userId === "null" || !userData[userId]) {
-        return (
-          <span key={key} className="text-sm text-gray-500">
-            Loading...
-          </span>
-        );
-      }
+                // still loading (or wrong ID)? show placeholder
+                if (!client) {
+                  return (
+                    <span key={clientId} className="text-sm text-gray-500">
+                      Loading...
+                    </span>
+                  );
+                }
 
-      const user = userData[userId];
+    // otherwise render the real client
+    return (
+      <button
+        key={clientId}
+        className="flex items-center gap-2 border rounded-md px-3 h-8 bg-gray-100 hover:bg-gray-200 transition text-sm font-medium shadow"
+        onClick={(e) => {
+          e.stopPropagation();
+          openAssignClient(project);
+        }}
+      >
+        <Avatar
+          name={client.company || client.name}
+          avatarUrl={client.avatar}
+          size="sm"
+        />
+        <span className="text-sm text-gray-700 truncate overflow-hidden w-[90px]">
+          {client.company || client.name}
+        </span>
+      </button>
+    );
+  })}
+</div>
 
-      return (
-        <button
-          key={key}
-          className="flex items-center gap-2 border rounded-md px-3 h-8 bg-gray-100 hover:bg-gray-200 transition text-sm font-medium shadow"
-          onClick={(e) => {
-            e.stopPropagation();
-            openAssignUser(project);
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <Avatar
-              name={user.company || user.name}
-              avatarUrl={user.avatar}
-              size="sm"
-            />
-            <span className="text-sm text-gray-700 truncate overflow-hidden w-[90px]">
-              {user.company || user.name}
-            </span>
-          </div>
-        </button>
-      );
-    })}
-  </div>
 ) : (
   <button
     className="bg-green-500 text-white px-3 py-2 h-8 rounded-md text-sm font-medium shadow hover:bg-green-600 transition flex items-center justify-center"
     onClick={(e) => {
       e.stopPropagation();
-      openAssignUser(project);
+      openAssignClient(project);
     }}
   >
     Assign
@@ -218,15 +231,27 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
 
               {/* ✅ Status Dropdown */}
               <td onClick={(e) => e.stopPropagation()}>
-                <select
-                  className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium ${currentStatus?.color || "bg-gray-300"}`}
-                  value={project.status || "New Lead"}
-                  onChange={(e) => handleStatusChange(project._id, e.target.value)}
-                >
-                  {statuses.map((status) => (
-                    <option key={status.label} value={status.label}>{status.label}</option>
-                  ))}
-                </select>
+<select
+  value={project.status}
+  onChange={(e) => handleStatusChange(project._id, e.target.value)}
+  className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium ${displayColor}`}
+>
+  {isClientLocked ? (
+    <>
+      <option value={project.status} disabled>{displayLabel}</option>
+      <option value="Cancelled">Cancel Estimate</option>
+    </>
+  ) : (
+    <>
+      {projectStatuses.map((status) => (
+        <option key={status.label} value={status.label}>
+          {status.label}
+        </option>
+      ))}
+    </>
+  )}
+</select>
+
               </td>
 
               {/* ✅ Date Posted */}
@@ -249,7 +274,15 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
 <div className="md:hidden space-y-4 px-2">
   {projectsToDisplay.length > 0 ? (
     projectsToDisplay.map((project) => {
-      const currentStatus = statuses?.find((s) => s.label === project?.status) || { label: "New Lead", color: "bg-gray-300" };
+      const currentStatus = statuses?.find((s) => s.label === project?.status);
+
+const displayColor = currentStatus
+  ? currentStatus.color
+  : "bg-gray-300 text-black";
+
+const isClientLocked =
+  !currentStatus && !["Estimate Completed"].includes(project.status);
+
 
       return (
         <div 
@@ -276,16 +309,26 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
 
           {/* ✅ Status Dropdown */}
           <div className="mt-3">
-            <select
-              value={project.status || "New Lead"}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => handleStatusChange(project._id, e.target.value)}
-              className={`border rounded px-3 py-2 w-full text-sm font-medium ${currentStatus?.color || "bg-gray-300"}`}
-            >
-              {statuses.map((status) => (
-                <option key={status.label} value={status.label}>{status.label}</option>
-              ))}
-            </select>
+<select
+  value={project.status}
+  onChange={(e) => handleStatusChange(project._id, e.target.value)}
+  className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium ${displayColor}`}
+>
+  {projectStatuses.map((status) => (
+    <option key={status.label} value={status.label} disabled={isClientLocked}>
+      {status.label}
+    </option>
+  ))}
+
+  {/* Show estimator-only status visually but locked */}
+  {isClientLocked && (
+    <>
+      <option value={project.status} disabled>{displayLabel}</option>
+      <option value="Cancelled">Cancel</option>
+    </>
+  )}
+</select>
+
           </div>
 
           {/* ✅ View Project Button & Assigned Users */}
@@ -299,55 +342,43 @@ function numericProjectNumberSort(a, b, sortOrder = "desc") {
             </button>
 
             {/* ✅ Assigned Users (Prevent Overflow) */}
-            {!isUserView && (
-              <div className="w-2/3 flex flex-wrap gap-2 justify-end">
-  {Array.isArray(project.linkedUsers) && project.linkedUsers.length > 0 ? (
-    project.linkedUsers.map((userId, index) => {
-      const key = userId || `placeholder-${index}`;
-
-      if (!userId || userId === "null" || !userData[userId]) {
+{!isUserView && (
+  <div className="w-2/3 flex flex-wrap gap-2 justify-end">
+    {Array.isArray(project.linkedClients) && project.linkedClients.length > 0 ? (
+      project.linkedClients.map((clientId) => {
+        const client = clients.find((c) => c._id === clientId) || {};
         return (
-          <span key={key} className="text-sm text-gray-500">Loading...</span>
-        );
-      }
-
-      const user = userData[userId];
-
-      return (
-        <button
-          key={key}
-          className="flex items-center gap-2 border rounded-md px-3 h-8 bg-gray-100 hover:bg-gray-200 transition max-w-[150px] truncate overflow-hidden"
-          onClick={(e) => {
-            e.stopPropagation();
-            openAssignUser(project);
-          }}
-        >
-          <div className="flex items-center gap-2">
+          <button
+            key={clientId}
+            className="flex items-center gap-2 border rounded-md px-3 h-8 bg-gray-100 hover:bg-gray-200 transition max-w-[150px] truncate overflow-hidden"
+            onClick={(e) => {
+              e.stopPropagation();
+              openAssignClient(project);
+            }}
+          >
             <Avatar
-              name={user.company || user.name}
-              avatarUrl={user.avatar}
+              name={client.company || client.name}
+              avatarUrl={client.avatar}
               size="sm"
             />
             <span className="text-sm text-gray-700 truncate overflow-hidden w-[90px]">
-              {user.company || user.name}
+              {client.company || client.name}
             </span>
-          </div>
-        </button>
-      );
-    })
-  ) : (
-    <button
-      className="bg-green-500 text-white px-4 py-2 h-8 rounded-md text-sm font-semibold shadow hover:bg-green-600 transition flex items-center justify-center"
-      onClick={(e) => {
-        e.stopPropagation();
-        openAssignUser(project);
-      }}
-    >
-      Assign User
-    </button>
-  )}
-</div>
-
+          </button>
+        );
+      })
+    ) : (
+      <button
+        className="bg-green-500 text-white px-4 py-2 h-8 rounded-md text-sm font-semibold shadow hover:bg-green-600 transition flex items-center justify-center"
+        onClick={(e) => {
+          e.stopPropagation();
+          openAssignClient(project);
+        }}
+      >
+        Assign Client
+      </button>
+    )}
+  </div>
 )}
 
           </div>
