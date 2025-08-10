@@ -1,4 +1,3 @@
-// JobTable.jsx
 import React, { useMemo, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import {
   useReactTable,
@@ -13,11 +12,12 @@ import useAxiosSecure from '@/hooks/AxiosSecure/useAxiosSecure';
 import { AuthContext } from '@/auth/AuthProvider';
 import { useTablePreferences } from '@/appjobboard/hooks/useTablePreferences';
 import { jobBoardColumns } from '@/appjobboard/config/JobBoardConfig';
+import { useAutoSave } from '@/appjobboard/hooks/useAutoSave';
 import { Button } from 'antd';
 import Avatar from '@/shared/Avatar';   // adjust path to your avatar component
-import { useInlineEdits } from '@/appjobboard/hooks/useInlineEdits';
 import { saveJobBoardData } from '@/appjobboard/api/jobApi';
 import { basePlanTypes } from '@/shared/planTypes';
+import { calculateAUD } from '@/shared/jobPricingUtils';
 
 
 export default function JobTable({
@@ -33,43 +33,63 @@ export default function JobTable({
   // Local data state for inline edits and live updates
   const [data, setData] = useState(jobs);
   const { user } = useContext(AuthContext);
-  // pull in our edit hook
-  const { pendingEdits, updateLocal, flushEdits } = useInlineEdits(setData, async (rowId, edits) => {
-    const fullRow = data.find(r => r._id === rowId);
-    if (!fullRow) return;
+  const axiosSecure = useAxiosSecure();
 
-    const planMeta = basePlanTypes.find(p => p.label === fullRow.PlanType);
-    const uom = planMeta?.uom ?? '';
-    const price = calculateAUD(fullRow, config.planTypes);
-    const qty = parseFloat(fullRow.Qty || 0);
-    const total = price && qty ? price * qty : 0;
+  // ── 2) Auto-save functionality ──────────────────────────────────────────
+  const {
+    queueChange,
+    saveProject,
+    saveAll,
+    hasPendingChanges,
+    isAutoSaving,
+    pendingProjectsCount,
+    pendingProjects
+  } = useAutoSave(async (projectId, changes) => {
+    // This function handles the actual backend save
+    try {
+      const fullRow = data.find(r => r._id === projectId);
+      if (!fullRow) return;
 
-    await saveJobBoardData(rowId, {
-      PlanType: fullRow.PlanType,
-      Qty: qty,
-      PriceEach: price,
-      Total: total,
-      uom,
-    });
+      // Merge changes with current row data
+      const updatedRow = { ...fullRow, ...changes };
 
-    // Optional: update sync indicator here if you want
+      // For ALL changes, use the saveJobBoardData function
+      // which should handle both job board specific fields and general project fields
+      await saveJobBoardData(projectId, changes);
+
+      console.log(`✅ Auto-saved project ${projectId}:`, changes);
+    } catch (error) {
+      console.error(`❌ Failed to save project ${projectId}:`, error);
+      throw error; // Re-throw to let useAutoSave handle the error
+    }
   });
 
-  const [syncStatus, setSyncStatus] = useState({});
+  // ── 3) Update row function for immediate UI updates ─────────────────────
+  const updateRow = useCallback((projectId, field, value) => {
+    // Update local state immediately for responsive UI
+    setData(prevData => 
+      prevData.map(row => 
+        row._id === projectId 
+          ? { ...row, [field]: value }
+          : row
+      )
+    );
 
+    // Queue the change for auto-save
+    queueChange(projectId, field, value);
+  }, [queueChange]);
 
-  // ── Sync local data when parent jobs prop changes ─────────────────────────
+  // ── 4) Sync local data when parent jobs prop changes ───────────────────
   useEffect(() => {
     setData(jobs);
   }, [jobs]);
 
-  // ── 2) column sizing hook (cache + server) ───────────────────────────────
+  // ── 5) column sizing hook (cache + server) ───────────────────────────────
   const [prefs, { setColumnSizing, setSorting, setColumnFilters }, prefsLoaded] = useTablePreferences('jobBoard');
   const { columnSizing, sorting, columnFilters } = prefs;
 
-  // ── 3) editable helpers ──────────────────────────────────────────────────
-  // Editable cell: local state + commit on blur + auto-flush
-  // 3b) Editable cell: keeps its own local state and only commits on blur
+  // ── 6) editable helpers ──────────────────────────────────────────────────
+  // Simple editable cell that updates immediately
   const editable = (key) => ({ row, getValue }) => {
     const rowId = row.original._id;
     const initial = getValue() ?? '';
@@ -79,58 +99,36 @@ export default function JobTable({
       setValue(getValue() ?? '');
     }, [getValue]);
 
-    const onBlur = async () => {
-      if (value !== initial) {
-        updateLocal(rowId, key, value, setData);
-        await flushEdits(rowId);
-
-        // Custom logic to persist job board fields
-        const updatedRow = {
-          ...row.original,
-          [key]: value,
-        };
-
-        // Calculate backend values
-        const price = calculateAUD(updatedRow, config.planTypes);
-        const qty = parseFloat(updatedRow.Qty || 0);
-        const total = price && qty ? price * qty : 0;
-
-        await saveJobBoardData(rowId, {
-          PlanType: updatedRow.PlanType,
-          Qty: qty,
-          PriceEach: price,
-          Total: total,
-        });
-      }
+    const handleChange = (e) => {
+      const newValue = e.target.value;
+      setValue(newValue);
+      updateRow(rowId, key, newValue);
     };
 
     return (
       <input
-        className="border px-2 w-full"
+        className="border px-2 py-1 w-full text-sm"
         value={value}
-        onChange={e => setValue(e.target.value)}
-        onBlur={onBlur}
+        onChange={handleChange}
       />
     );
   };
 
-
-
-  // ── 4) column definitions ────────────────────────────────────────────────
+  // ── 7) column definitions ────────────────────────────────────────────────
   const columns = React.useMemo(
     () =>
       jobBoardColumns(
-        updateLocal,
+        updateRow,
         editable,
         exchangeRate,
         config,
         clients,
         openAssignClient
       ),
-    [updateLocal, editable, exchangeRate, config, clients, openAssignClient]
+    [updateRow, editable, exchangeRate, config, clients, openAssignClient]
   );
 
-  // ── 5) table instance ────────────────────────────────────────────────────
+  // ── 8) table instance ────────────────────────────────────────────────────
   const table = useReactTable({
     data,
     columns,
@@ -162,7 +160,7 @@ export default function JobTable({
     debugTable:              false,
   });
 
-  // ── 6) only after ALL hooks, guard rendering ─────────────────────────────
+  // ── 9) only after ALL hooks, guard rendering ─────────────────────────────
   if (!prefsLoaded) {
     return (
       <div className="p-4 text-center">
@@ -171,10 +169,10 @@ export default function JobTable({
     );
   }
 
-  // ── 7) // JobTable.jsx Return Block ──────────────────────────
+  // ── 10) // JobTable.jsx Return Block ──────────────────────────
   return (
     <div className="relative w-full h-[70vh] border rounded-lg flex flex-col">
-      <div className="p-2 bg-none border-b flex space-x-2">
+      <div className="p-2 bg-none border-b flex space-x-2 items-center">
         <button
           onClick={() => table.setColumnFilters([])}
           className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
@@ -188,14 +186,28 @@ export default function JobTable({
           Reset Sorting
         </button>
         <button
-          onClick={() => {
-            Object.keys(pendingEdits).forEach(id => flushEdits(id));
-          }}
-          disabled={!Object.keys(pendingEdits).length}
-          className="px-4 py-2 bg-green-600 text-white rounded"
+          onClick={saveAll}
+          disabled={pendingProjectsCount === 0 || isAutoSaving}
+          className={`px-4 py-2 rounded font-medium ${
+            pendingProjectsCount > 0 
+              ? 'bg-green-600 hover:bg-green-700 text-white' 
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
         >
-          Save All Changes
+          {isAutoSaving ? 'Saving...' : `Save All Changes${pendingProjectsCount > 0 ? ` (${pendingProjectsCount})` : ''}`}
         </button>
+        {pendingProjectsCount > 0 && (
+          <div className="flex items-center space-x-2 text-sm text-orange-600">
+            <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
+            <span>{pendingProjectsCount} project{pendingProjectsCount > 1 ? 's' : ''} with unsaved changes</span>
+          </div>
+        )}
+        {isAutoSaving && (
+          <div className="flex items-center space-x-2 text-sm text-blue-600">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            <span>Auto-saving...</span>
+          </div>
+        )}
       </div>
       <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-green-600 scrollbar-track-gray-100">
         <table className="min-w-[3500px] border-collapse border border-gray-300 text-sm">
@@ -233,24 +245,32 @@ export default function JobTable({
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map(row => (
-              <tr key={row.id}>
-                {row.getVisibleCells().map((cell, colIdx) => (
-                  <td
-                    key={cell.id}
-                    className={`border border-gray-300 px-3 h-5 bg-white whitespace-nowrap overflow-hidden text-ellipsis${
-                      colIdx === 0 ? 'sticky left-0 z-10' : ''
-                    }`}
-                    style={colIdx === 0 ? { backgroundColor: 'white' } : {}}
-                  >
-                    {flexRender(
-                      cell.column.columnDef.cell,
-                      cell.getContext()
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {table.getRowModel().rows.map(row => {
+              const projectId = row.original._id;
+              const hasChanges = hasPendingChanges(projectId);
+              
+              return (
+                <tr key={row.id} className={hasChanges ? 'bg-yellow-50' : ''}>
+                  {row.getVisibleCells().map((cell, colIdx) => (
+                    <td
+                      key={cell.id}
+                      className={`border border-gray-300 px-3 h-5 whitespace-nowrap overflow-hidden text-ellipsis relative ${
+                        colIdx === 0 ? 'sticky left-0 z-10' : ''
+                      } ${hasChanges ? 'bg-yellow-50' : 'bg-white'}`}
+                      style={colIdx === 0 ? { backgroundColor: hasChanges ? '#fefce8' : 'white' } : {}}
+                    >
+                      {hasChanges && colIdx === 0 && (
+                        <div className="absolute left-1 top-1 w-2 h-2 bg-orange-500 rounded-full"></div>
+                      )}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

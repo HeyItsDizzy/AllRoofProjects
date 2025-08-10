@@ -1,6 +1,5 @@
 // FolderContents.jsx
-import React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { IconEdit, IconFolder, IconFile, IconDownload } from "@/shared/IconSet.jsx";
 import { Button, Input } from "antd";
 import Swal from '@/shared/swalConfig';
@@ -19,10 +18,11 @@ import {
   getFolderMetaAtPath,
 } from "@/FileManager/utils/FMFunctions";
 import { useDropHandler } from "@/FileManager/hooks/useDropHandler";
+import { AuthContext } from "@/auth/AuthProvider";
 
 
 import debounce from "lodash.debounce";
-const debouncedLog = debounce((msg) => console.log(msg), 300);
+const debouncedLog = debounce((...args) => {console.log(...args);}, 300);
 
 
 
@@ -42,23 +42,23 @@ const FolderContents = ({
   ghostFilesByPath,
   setGhostFilesByPath,
   }) => {
-
+  
+  // inside the component body, before your ACL block:
+const { user } = useContext(AuthContext);
+const role = user?.role;
 const currentFolderMeta = getFolderMetaAtPath(folderTree, selectedPath);
 
 
 const currentFolderLabel =
   currentFolderMeta?.label ||
   (selectedPath === "." ? "Project Root" : selectedPath.split("/").pop());
-
-
   
-  
-  const contents = Object.fromEntries(
-  Object.entries(subfolders || {}).filter(([k]) => !k.startsWith("__"))
-  );
+  // ─── Build subfolder contents for display ──────────────────────────
+  // Use the subfolders prop that's passed in from FileDirectoryPanel
+  const contents = subfolders || {};
 
   useEffect(() => {
-  console.log("📡 FolderContents received files:", files);
+  //console.log("📡 FolderContents received files:", files);
 }, [files]);
 
 
@@ -84,19 +84,19 @@ const liveFiles = files
   });
 
 
-
-
   if (!folderTree?.["."]) {
     console.warn("📛 FolderContents: Missing root folderTree['.']");
     return null;
   }
 
+const visibleFiles = liveFiles.filter((fileName) => !fileName.startsWith("."));
+
   return (
     <div className="folder-content-area h-full flex flex-col">
-      {/* Header (auto height) */}
-  <div className="flex justify-between items-center mb-2">
+      {/* Header (auto height) - Hidden on mobile, shown on desktop */}
+  <div className="hidden sm:flex justify-between items-center mb-2">
     <h4 className="folder-content-title">
-      Contents of <strong>{currentFolderLabel}</strong>
+      Contents of <strong>{currentFolderLabel}</strong> (View: {role})
     </h4>
 
   <button
@@ -110,27 +110,32 @@ const liveFiles = files
   </button>
 </div>
   
-      {/* Subfolder list (takes ~25% height) */}
-      
+      {/* Subfolder list (only show when subfolders exist) */}
       {contents && Object.keys(contents).length > 0 && (
         <div className="folder-sublist-wrapper">
+          <div className="mb-2">
+            <h5 className="text-xs font-semibold text-gray-600 mb-1">Subfolders:</h5>
+          </div>
           <ul className="space-y-1 flex flex-col gap-0 min-h-[60px] max-h-[140px] overflow-y-auto pr-1 mb-2 border-b border-gray-200">
-          {sortFolderKeys(Object.entries(contents)).map(([key, sf]) => (
-  <li
-    key={key}
-    onClick={() => setSelectedPath(`${selectedPath}/${key}`)}
-    className={`flex items-center gap-2 px-1 py-0 rounded-md text-sm cursor-pointer transition-colors duration-150
-      ${`${selectedPath}/${key}` === selectedPath
-        ? "bg-blue-100 border border-blue-300 shadow"
-        : "hover:bg-blue-50 hover:border hover:border-blue-400 hover:shadow-sm"}`}
-  >
-    <IconFolder className="text-gray-500 inline-block align-middle mr-2" />
-    <span className="truncate">{key}</span>
-  </li>
-))}
-
-</ul>
-
+          {sortFolderKeys(Object.entries(contents)).map(([key, sf]) => {
+            return (
+              <li
+                key={key}
+                onClick={() => {
+                  const newPath = selectedPath === "." ? key : `${selectedPath}/${key}`;
+                  setSelectedPath(newPath);
+                }}
+                className={`flex items-center gap-2 px-2 py-1 rounded-md text-sm cursor-pointer transition-colors duration-150 border
+                  ${selectedPath.endsWith(`/${key}`) || (selectedPath === "." && key === selectedPath)
+                    ? "bg-blue-100 border-blue-300 shadow"
+                    : "border-transparent hover:bg-blue-50 hover:border-blue-400 hover:shadow-sm"}`}
+              >
+                <IconFolder className="text-blue-500 inline-block align-middle" size={16} />
+                <span className="truncate font-medium text-gray-700">{key}</span>
+              </li>
+            );
+          })}
+          </ul>
         </div>
       )}
   
@@ -155,7 +160,7 @@ const liveFiles = files
   >
     <div className="flex-1 overflow-y-auto pr-1">
       <ul className="folder-file-list space-y-2 text-sm text-gray-800">
-        {liveFiles.map((name, i) => {
+        {visibleFiles.map((name, i) => {
           const displayName = typeof name === "string" ? name : name?.fileName || `File ${i + 1}`;
           return (
             <SortableFile
@@ -182,7 +187,7 @@ const liveFiles = files
               axiosSecure,
               projectId,
               filePath: fullPath, // <<<<< ALWAYS FULL RELATIVE PATH!
-              existingFiles: liveFiles,n
+              existingFiles: liveFiles,
             }).then((res) => {
             if (!res) return;
 

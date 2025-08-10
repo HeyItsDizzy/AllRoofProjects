@@ -8,7 +8,7 @@ import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
 import { projectStatuses } from "../shared/projectStatuses";
 
-const AdminProjectTable = () => {
+const AllProjects = () => {
   const [projects, setProjects] = useState([]); // Holds all projects
   const [users, setUsers] = useState([]); // Holds users for assignment
   const [clients, setClients] = useState([]); // Holds clients for assignment
@@ -109,46 +109,53 @@ const AdminProjectTable = () => {
   }, [projects]);
   
 
-  // Filter projects based on active button
-  useEffect(() => {
-    filterProjects(activeButton); // Apply filtering when projects update
-  }, [projects, activeButton]);
+  // Helper function to safely get location string
+  const getLocationString = (project) => {
+    if (typeof project.location === "string") {
+      return project.location;
+    }
+    return project.location?.full_address || "";
+  };
 
-  // Filter projects based on search query
+  // Filter projects based on search query and active filters
   useEffect(() => {
     let filtered = [...projects];
 
-    // ✅ Apply Tab Filters (All Projects / Open Projects)
+    // Apply Tab Filters (All Projects / Open Projects)
     if (activeButton === "Open Projects") {
       filtered = filtered.filter((project) => isProjectOpen(project.status));
     }
 
-    // ✅ Apply Column Filters (Ignore "All")
+    // Apply Column Filters (Ignore "All")
     Object.keys(filters).forEach((column) => {
       if (filters[column] && filters[column].length > 0) {
-        if (!filters[column].includes("All")) { // ✅ Ensure "All" does not filter anything
+        if (!filters[column].includes("All")) {
           filtered = filtered.filter((project) => filters[column].includes(project[column]));
         }
       }
     });
 
-    // ✅ Apply Search Filter
+    // Apply Search Filter
     if (search.trim()) {
       const lowerSearch = search.toLowerCase();
-      filtered = filtered.filter((project) =>
-        (project.name && project.name.toLowerCase().includes(lowerSearch)) ||
-        (project.location && project.location.toLowerCase().includes(lowerSearch)) ||
-        (Array.isArray(project.linkedUsers) &&
-          project.linkedUsers.some((userId) => {
-            const user = userData[userId];
-            return user && user.name.toLowerCase().includes(lowerSearch);
-          })) ||
-        (project.status && project.status.toLowerCase().includes(lowerSearch))
-      );
+      filtered = filtered.filter((project) => {
+        const locationString = getLocationString(project);
+        return (
+          (project.name && project.name.toLowerCase().includes(lowerSearch)) ||
+          (locationString && locationString.toLowerCase().includes(lowerSearch)) ||
+          (project.projectNumber && project.projectNumber.toLowerCase().includes(lowerSearch)) ||
+          (Array.isArray(project.linkedUsers) &&
+            project.linkedUsers.some((userId) => {
+              const user = userData[userId];
+              return user && user.name && user.name.toLowerCase().includes(lowerSearch);
+            })) ||
+          (project.status && project.status.toLowerCase().includes(lowerSearch))
+        );
+      });
     }
 
     setFilteredProjects(filtered);
-  }, [projects, activeButton, filters, search]); // ✅ Ensures filters update correctly
+  }, [projects, activeButton, filters, search, userData]); // Added userData dependency
 
   // Callback function to update project users
   const updateProjectUsers = (projectId, linkedUsers) => {
@@ -261,64 +268,68 @@ const closeAssignClientModal = () => {
     return openStatuses.includes(status);
   };
 
-  // Handle main filtering of projects including search
+  // Handle main filtering of projects including search (legacy function - keeping for compatibility)
   const filterProjects = (label, searchTerm = "") => {
-    let filtered = [...projects]; // ✅ Start with all projects
+    let filtered = [...projects];
 
-    // ✅ Apply Tab Filters (All Projects / Open Projects)
+    // Apply Tab Filters (All Projects / Open Projects)
     if (label === "Open Projects") {
       filtered = filtered.filter((project) => isProjectOpen(project.status));
     }
 
-    // ✅ Ensure searchTerm is always a string to prevent trim() errors
+    // Ensure searchTerm is always a string to prevent trim() errors
     if (typeof searchTerm !== "string") {
       searchTerm = "";
     }
 
-    // ✅ Apply Search Filter
+    // Apply Search Filter
     if (searchTerm.trim()) {
       const lowerSearch = searchTerm.toLowerCase();
-      filtered = filtered.filter((project) =>
-        (project.name && project.name.toLowerCase().includes(lowerSearch)) ||
-        (project.location && project.location.toLowerCase().includes(lowerSearch)) ||
-        (Array.isArray(project.linkedUsers) &&
-          project.linkedUsers.some((userId) => {
-            const user = userData[userId];
-            return user && user.name.toLowerCase().includes(lowerSearch);
-          })) ||
-        (project.status && project.status.toLowerCase().includes(lowerSearch))
-      );
+      filtered = filtered.filter((project) => {
+        const locationString = getLocationString(project);
+        return (
+          (project.name && project.name.toLowerCase().includes(lowerSearch)) ||
+          (locationString && locationString.toLowerCase().includes(lowerSearch)) ||
+          (project.projectNumber && project.projectNumber.toLowerCase().includes(lowerSearch)) ||
+          (Array.isArray(project.linkedUsers) &&
+            project.linkedUsers.some((userId) => {
+              const user = userData[userId];
+              return user && user.name && user.name.toLowerCase().includes(lowerSearch);
+            })) ||
+          (project.status && project.status.toLowerCase().includes(lowerSearch))
+        );
+      });
     }
 
-    setFilteredProjects(filtered); // ✅ Update UI
+    setFilteredProjects(filtered);
   };
 
   const handleSearchChange = (e) => {
-    const newSearch = e.target.value || ""; // ✅ Ensure it's always a string
+    const newSearch = e.target.value || "";
     setSearch(newSearch);
-    filterProjects(activeButton, newSearch);
+    // The useEffect will handle the actual filtering
   };
 
   const handleProjectTabClick = (label) => {
+    if (label === "Create New") {
+      navigate("/addNewProject");
+      return;
+    }
+
     if (activeButton === label) {
-      // ✅ If clicking the same active button, clear all filters
+      // If clicking the same active button, clear all filters
       setFilters({});
       setSearch("");
       setSortColumn(null);
       setSortOrder(null);
-      filterProjects("All Projects", ""); // ✅ Reset to show all projects
+      setActiveButton("All Projects");
     } else {
-      // ✅ Otherwise, switch tabs normally and retain filters
+      // Otherwise, switch tabs normally
       setActiveButton(label);
-      filterProjects(label, search || ""); // ✅ Keep the search input if switching tabs
-    }
-
-    if (label === "Create New") {
-      navigate("/addNewProject"); // ✅ Redirect to project creation
     }
   };
 
-  // AdminProjectTable.jsx Return
+  // AllProjects.jsx Return
   return (
     <div className="min-h-screen">
       {/* Search & Filter Section */}
@@ -380,4 +391,4 @@ const closeAssignClientModal = () => {
   );
 };
 
-export default AdminProjectTable;
+export default AllProjects;

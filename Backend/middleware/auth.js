@@ -1,45 +1,50 @@
 const jwt = require("jsonwebtoken");
 
-const DEBUG_TOKEN = "debugtoken"; // Set a permanent debug token
-
 // Middleware to authenticate a user
 const authenticateToken = () => {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
 
-    console.log("🛠️ Received Token:", token);  // Log the received token for debugging
-
     if (!token) {
-      console.log("🚨 No token found in the request header.");
       return res.status(401).json({ message: "Access token is missing or invalid" });
     }
 
-    // ✅ Allow requests using the debug token (set admin by default)
-    if (token === DEBUG_TOKEN) {
-      req.user = { _id: "DebugTokenID", role: "Admin" }; // Default to Admin role for testing
-      console.log("🛠️ DEBUG MODE: Using fixed debug token with Admin role.");
-      return next();  // Proceed to the next middleware, which includes authenticateAdmin
-    }
-
-    console.log("🛠️ Verifying token...");
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
       if (err) {
-        console.log("🚨 Token verification failed:", err);
         return res.status(403).json({ message: "Token is invalid or expired" });
       }
 
+      // Check if user needs forced refresh
+      try {
+        const User = require("../config/User");
+        const currentUser = await User.findById(user.userId || user.id || user._id);
+        
+        if (currentUser?.forceRefreshAfter) {
+          const tokenIssuedAt = new Date(user.iat * 1000); // JWT iat is in seconds
+          
+          if (tokenIssuedAt < currentUser.forceRefreshAfter) {
+            return res.status(401).json({ 
+              message: "Session expired due to role change. Please refresh and login again.",
+              requiresRefresh: true 
+            });
+          }
+          
+          // Clear the refresh flag if token is newer
+          await User.findByIdAndUpdate(user.userId || user.id || user._id, {
+            $unset: { forceRefreshAfter: "" }
+          });
+        }
+      } catch (refreshErr) {
+        console.error("Error checking force refresh:", refreshErr);
+        // Don't block the request for refresh check errors
+      }
+
       req.user = user;
-      console.log("🛠️ Token verified successfully, user:", user);
-
-      // Add this to check the role here:
-      console.log("🛠️ Role after decoding:", req.user?.role);  // Add this log to see if the role is being passed
-
-      next();  // Proceed to the next middleware, which includes authenticateAdmin
+      next();
     });
   };
 };
-
 
 // Middleware to check if the user is an admin
 const authenticateAdmin = () => {
@@ -53,4 +58,64 @@ const authenticateAdmin = () => {
   };
 };
 
-module.exports = { authenticateToken, authenticateAdmin };
+/**
+ * Middleware to check if user is either a global Admin OR a company admin
+ */
+const authenticateCompanyAdmin = () => {
+  return async (req, res, next) => {
+    const User = require("../config/User");
+    
+    // Allow global admins
+    if (req.user?.role === "Admin") {
+      console.log("🛠️ Global Admin access granted.");
+      return next();
+    }
+    
+    // Check if user is a company admin
+    try {
+      const user = await User.findById(req.user.userId || req.user.id || req.user._id);
+      if (user && user.companyAdmin === true) {
+        console.log("🛠️ Company Admin access granted.");
+        return next();
+      }
+      
+      console.log("🚨 User is neither global admin nor company admin.");
+      return res.status(403).json({ 
+        success: false, 
+        message: "Admin access required - must be global admin or company admin" 
+      });
+      
+    } catch (err) {
+      console.error("❌ Error checking company admin status:", err);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Error verifying admin status" 
+      });
+    }
+  };
+};
+
+/**
+ * Middleware factory: only allow users whose `req.user.role`
+ * is one of the listed roles.
+ */
+const authorizeRole = (...allowedRoles) => {
+  return (req, res, next) => {
+    const role = req.user?.role;
+    if (!role || !allowedRoles.includes(role)) {
+      console.log(`🚨 Role "${role}" not permitted; needs one of [${allowedRoles.join(", ")}]`);
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden – insufficient privileges.",
+      });
+    }
+    next();
+  };
+};
+
+module.exports = {
+  authenticateToken,
+  authenticateAdmin,
+  authenticateCompanyAdmin,
+  authorizeRole,
+};

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import {
   DndContext,
   closestCenter,
@@ -11,6 +11,11 @@ import { sortFolderKeys, normalizePath, isVisibleFolderKey, } from "@/FileManage
 import renderTree from "@/FileManager/utils/renderTree";
 import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
+import { AuthContext } from "@/auth/AuthProvider";
+
+import debounce from "lodash.debounce";
+const debouncedLog = debounce((...args) => {console.log(...args);}, 300);
+
 
 /**
  * FolderSidebar
@@ -26,7 +31,6 @@ const FolderSidebar = ({
   addTempUIFolder,
   removeTempFolder,
   createFolder,
-  userRole,
   folderListRef,
   loadingFolders,
   onMoveFolder = () => {},
@@ -84,7 +88,28 @@ const FolderSidebar = ({
     onMoveFolder(active.id, over.id);
   };
 
-const scrollContainerRef = useRef();
+  const scrollContainerRef = useRef();
+
+  // inside the component body, before your ACL block:
+  const { user } = useContext(AuthContext);
+  const role = user?.role;
+
+
+  // ─── ACL via meta.structure & meta.allowedRoles ──────────────────────────
+  // Only keep folders listed in meta.structure and allowed for this role
+  const visibleRootFolders = (meta.structure || []).filter((name) =>
+    (meta.allowedRoles[name] || []).includes(role)
+  );
+
+  // Rebuild a tiny tree containing only those folders
+  const filteredTree = {
+    ".": visibleRootFolders.reduce((acc, name) => {
+      if (folderTree["."]?.[name]) acc[name] = folderTree["."][name];
+      return acc;
+    }, {}),
+  };
+
+  debouncedLog("🔒 FolderSidebar role:", role);
 
   return (
     <div className="flex flex-col h-full">
@@ -119,7 +144,7 @@ const scrollContainerRef = useRef();
       title: "Name Your New Folder",
       input: "text",
       inputPlaceholder: "Enter folder name",
-      showconfirmButton: true,
+      showConfirmButton: true,
       showCancelButton: true,
     });
 
@@ -181,14 +206,14 @@ const scrollContainerRef = useRef();
 
 
             {renderTree(
-              { ".": folderTree["."] },
+              filteredTree,  // now driven by meta.Structure & allowedRoles
               expandedFolders,
               selectedPath,
               setSelectedPath,
               toggleExpand,
               0,
               folderRefs,
-              userRole,
+              role,
               meta,
               ".",            // parentPath
               editable,       

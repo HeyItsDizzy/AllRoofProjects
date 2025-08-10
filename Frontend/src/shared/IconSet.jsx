@@ -12,6 +12,12 @@ import {
   MdIncompleteCircle as IconPending,
   MdUploadFile as IconUploadFile,
   MdRemoveRedEye as IconView,
+  MdBlock as IconBlock,
+  MdCheckCircle as IconUnblock,
+  MdPersonAdd as IconInvite,
+  MdRefresh as IconRefresh,
+  MdKeyboardArrowUp as IconPromote,
+  MdKeyboardArrowDown as IconDemote,
 } from "react-icons/md";
 
 // Font Awesome v5
@@ -134,6 +140,14 @@ export {
   IconPending,
   IconComplete,
   IconSync,
+
+  // User Management
+  IconBlock,
+  IconUnblock,
+  IconInvite,
+  IconRefresh,
+  IconPromote,
+  IconDemote,
 
   // Utility
   getFileIcon,

@@ -51,9 +51,18 @@ export async function updateJob(jobId, updates, axiosSecure) {
 
 export async function saveJobBoardData(projectId, updates) {
   try {
-    const response = await fetch(`/api/project/update-jobboard/${projectId}`, {
+    // Get the auth token from localStorage (same as axiosSecure)
+    const token = localStorage.getItem("authToken");
+    
+    // Use the environment variable for the API base URL
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+    
+    const response = await fetch(`${apiBaseUrl}/projects/update-jobboard/${projectId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}` // Add authentication header
+      },
       body: JSON.stringify(updates),
     });
 
@@ -62,5 +71,6 @@ export async function saveJobBoardData(projectId, updates) {
     return data;
   } catch (err) {
     console.error("❌ Failed to save job board data:", err.message);
+    throw err; // Re-throw to let auto-save handle errors properly
   }
 }

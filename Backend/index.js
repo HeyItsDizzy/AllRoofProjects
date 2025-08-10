@@ -24,8 +24,12 @@ connectMongoose();
 const generalRoutes = require("./routes/generalRoutes");
 const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
+const clientRoutes = require('./routes/clientRoutes');
+const permissionRoutes = require('./routes/permissionRoutes');
 const errorHandler = require("./routes/errorHandler");
-const fileRoutes = require("./features/fileManager/routes/fileRoutes"); //temp direct path until FMindex is ready
+const fileRoutes = require("./features/fileManager/routes/fileRoutes");
+
+
 
 // Middlewares
 //app.use(cors());  // Allow cross-origin requests
@@ -108,7 +112,11 @@ app.use((req, res, next) => {
 app.use("/api", generalRoutes);           // Now: /api/login, /api/register, etc.
 app.use("/api/users", userRoutes);        // Now: /api/users, /api/users/get-users, etc.
 app.use("/api/projects", projectRoutes);  // Now: /api/projects
+app.use('/api/clients', clientRoutes);   // Now: /api/clients
+app.use('/api/permissions', permissionRoutes); // Now: /api/permissions
 app.use("/api/files", fileRoutes);        // Now: /api/files
+
+
 
 
 // Error handling middleware

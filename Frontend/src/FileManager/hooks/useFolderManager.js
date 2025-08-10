@@ -187,6 +187,32 @@ const createFolder = useCallback(
 
       showMessage("success", "📂 Folder created successfully");
 
+      // ─── AUTO‐UPDATE .meta.json ACL & STRUCTURE ────────────────────────
+      if (meta) {
+        // 1) Determine creator ACL: always Admin + creator’s role
+        const newAllowed = ["Admin"];
+        if (userRole === "User")      newAllowed.push("User");
+        else if (userRole === "Estimator") newAllowed.push("Estimator");
+        else if (userRole === "Admin")     newAllowed.push("User", "Estimator");
+
+        // 2) Build updated meta object
+        const updatedMeta = {
+          ...meta,
+          structure: [...(meta.structure || []), folderNameToUse],
+          allowedRoles: {
+            ...meta.allowedRoles,
+            [folderNameToUse]: newAllowed,
+          },
+        };
+
+        // 3) Persist it
+        await axiosSecure.put(`/files/${projectId}/meta`, updatedMeta);
+
+        // 4) Refresh local state
+        setMeta(updatedMeta);
+      }
+
+
       // ✅ Let the disk watcher / syncFromDisk handle the UI update
       setNewFolderName("");
       setSelectedPath(fullPath);

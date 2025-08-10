@@ -7,7 +7,6 @@ import { Link, useNavigate } from "react-router-dom";
 import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic";
 import Swal from '@/shared/swalConfig';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
-import AddressInput from "../Components/AddressInput";
 import { AuthContext } from "../auth/AuthProvider";
 import TermsModal from "../components/TermsModal";
 import PrivacyModal from "../components/PrivacyModal";

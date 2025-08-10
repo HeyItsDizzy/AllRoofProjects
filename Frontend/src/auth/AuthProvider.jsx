@@ -26,7 +26,30 @@ const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const authInformation = { user, loading, isAuthReady, logout, setUser };
+  const refreshUser = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+
+    const res = await fetch("https://projects.allrooftakeoffs.com.au/api/users/me", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const updatedUser = await res.json();
+      if (updatedUser.success && updatedUser.data) {
+          setUser(updatedUser.data);
+          localStorage.setItem("authUser", JSON.stringify(updatedUser.data));
+        }
+      } catch (err) {
+        console.error("❌ Failed to refresh user:", err);
+      }
+    };
+
+
+  const authInformation = { user, loading, isAuthReady, logout, setUser, refreshUser };
+
 
   return (
     <AuthContext.Provider value={authInformation}>

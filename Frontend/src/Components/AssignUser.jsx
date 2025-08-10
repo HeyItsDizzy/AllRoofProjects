@@ -24,16 +24,17 @@ const AssignUser = ({
 
   // Debounce search + sort
   useEffect(() => {
-    const sorted = [...users].sort((a, b) =>
-      (a.name || "").localeCompare(b.name || "")
-    );
+    const sorted = [...users].sort((a, b) => {
+      const nameA = a.name || (a.firstName && a.lastName ? `${a.firstName} ${a.lastName}` : '') || a.firstName || a.lastName || "";
+      const nameB = b.name || (b.firstName && b.lastName ? `${b.firstName} ${b.lastName}` : '') || b.firstName || b.lastName || "";
+      return nameA.localeCompare(nameB);
+    });
     setFiltered(
       searchTerm
-        ? sorted.filter(u =>
-            (u.name || u.company || "")
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase())
-          )
+        ? sorted.filter(u => {
+            const searchText = (u.name || u.firstName || u.lastName || u.email || "").toLowerCase();
+            return searchText.includes(searchTerm.toLowerCase());
+          })
         : sorted
     );
   }, [users, searchTerm]);
@@ -107,7 +108,13 @@ const AssignUser = ({
         >
           {linkedUsers.map(uid => {
             const u = users.find(x => x._id === uid) || {};
-            const label = u.company || u.name || "";
+            const label = u.name || 
+                         (u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : '') ||
+                         u.firstName || 
+                         u.lastName || 
+                         u.email || 
+                         u._id || 
+                         "";
             return (
               <div key={uid} className="flex items-center gap-2">
                 <Avatar name={label} avatarUrl={u.avatar} size="md" />
@@ -143,7 +150,14 @@ const AssignUser = ({
         />
         <div className="max-h-[400px] overflow-y-auto">
           {filteredUsers.map(user => {
-            const label = user.company || user.name || "";
+            // Construct name from firstName + lastName, fallback to other fields
+            const displayName = user.name || 
+                               (user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : '') ||
+                               user.firstName || 
+                               user.lastName || 
+                               user.email || 
+                               user._id || 
+                               "";
             const isLinked = linkedUsers.includes(user._id);
             return (
               <div
@@ -155,8 +169,8 @@ const AssignUser = ({
                   disabled={loading}
                   className="flex items-center gap-2 px-3 py-1 border rounded-md w-full text-left"
                 >
-                  <Avatar name={label} avatarUrl={user.avatar} size="sm" />
-                  <span className="truncate">{label}</span>
+                  <Avatar name={displayName} avatarUrl={user.avatar} size="sm" />
+                  <span className="truncate">{displayName}</span>
                 </button>
                 {isLinked && (
                   <Button

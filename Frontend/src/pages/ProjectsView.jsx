@@ -2,7 +2,7 @@
 /* PRODUCTION READY*/
 import { Button } from "antd";
 import { useEffect, useRef, useState, useContext, useCallback } from "react";
-import { IconBackArrow, IconDownload, IconFolder } from "../shared/IconSet.jsx";
+import { IconBackArrow, IconDownload, IconFolder, IconDelete } from "../shared/IconSet.jsx";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
 import AddressInput from "../Components/AddressInput";
@@ -40,20 +40,23 @@ const ProjectsView = () => {
   const [sharedGhosts, setSharedGhosts] = useState({});
   
   // UI state management
-  const [userCache, setUserCache] = useState({});
   const [folderPanelRefreshKey, setFolderPanelRefreshKey] = useState(0);
   const [modalSelectedPath, setModalSelectedPath] = useState(".");
   const [lockedHeight, setLockedHeight] = useState(null);
+  const [isJobScopeExpanded, setIsJobScopeExpanded] = useState(false);
   
   // Refs for DOM manipulation
   const folderPanelRef = useRef();
   const componentRef = useRef();
   
   // Hooks and context
-  const { projectId, id } = useParams();
+  const { alias } = useParams(); // The URL parameter (could be alias or legacy ID)
   const axiosSecure = useAxiosSecure();
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  // Use alias from URL params (it could be either a secure alias or legacy projectId)
+  const projectIdentifier = alias;
   
   // Computed values
   const userRole = user?.role || DEFAULT_USER_ROLE;
@@ -72,7 +75,7 @@ const ProjectsView = () => {
     selectedPath,
     setSelectedPath,
     setRefreshFlag,
-  } = useFolderManager(id, user?.role || "user");
+  } = useFolderManager(project?._id, user?.role || "user");
 
   /**
    * Validates project data before operations
@@ -137,16 +140,55 @@ const ProjectsView = () => {
   }, []);
 
   /**
-   * Fetches project data from the server
+   * Redirects to secure hybrid alias URL if currently using legacy project ID
+   * @param {Object} projectData - The loaded project data
+   */
+  const redirectToSecureUrl = useCallback(async (projectData) => {
+    try {
+      // Check if current URL parameter is a legacy ObjectId (24 hex chars) or old random alias (32 hex chars without &)
+      const isLegacyObjectId = /^[a-f0-9]{24}$/.test(projectIdentifier);
+      const isLegacyRandomAlias = /^[a-f0-9]{32}$/.test(projectIdentifier);
+      
+      if (isLegacyObjectId || isLegacyRandomAlias) {
+        // Get or create hybrid alias for this project
+        const response = await axiosSecure.get(`/projects/get-alias/${projectData._id}`);
+        const hybridAlias = response.data.data.alias;
+        
+        // Redirect to secure hybrid alias URL
+        navigate(`/project/${hybridAlias}`, { replace: true });
+        console.log(`🔒 Redirected to secure hybrid alias: ${hybridAlias}`);
+      }
+    } catch (error) {
+      // Non-critical error - continue loading with legacy URL
+      console.warn("⚠️ Failed to redirect to secure URL:", error.message);
+    }
+  }, [projectIdentifier, axiosSecure, navigate]);
+
+  /**
+   * Fetches project data from the server using hybrid alias, legacy alias, or legacy ID
    */
   const fetchProjectData = useCallback(async () => {
-    if (!id) {
-      handleError("Invalid Request", "Project ID is missing", new Error("Project ID undefined"));
+    if (!projectIdentifier) {
+      handleError("Invalid Request", "Project identifier is missing", new Error("Project identifier undefined"));
       return;
     }
 
     try {
-      const response = await axiosSecure.get(`/projects/get-project/${id}`);
+      let response;
+      
+      // Check identifier type and route accordingly
+      const isHybridAlias = projectIdentifier.includes('&'); // e.g., "AR2024-001&d0b76d33892783569144ead863d774b3"
+      const isLegacyRandomAlias = /^[a-f0-9]{32}$/.test(projectIdentifier); // 32 char hex
+      const isLegacyObjectId = /^[a-f0-9]{24}$/.test(projectIdentifier); // 24 char hex
+      
+      if (isHybridAlias || isLegacyRandomAlias || isLegacyObjectId) {
+        // Use alias resolution endpoint for all secure formats
+        response = await axiosSecure.get(`/projects/resolve-alias/${projectIdentifier}`);
+      } else {
+        // Fallback for any other format - treat as direct project fetch
+        response = await axiosSecure.get(`/projects/get-project/${projectIdentifier}`);
+      }
+      
       const fetchedProject = response.data.data;
 
       // Auto-link current user if they're a regular user
@@ -156,28 +198,25 @@ const ProjectsView = () => {
 
       setProject(fetchedProject);
       setOriginalProject(fetchedProject);
-    } catch (error) {
-      handleError("Failed to Load Project", "Unable to fetch project data", error);
-    }
-  }, [axiosSecure, id, user?.id, userRole, handleError]);
 
-  /**
-   * Fetches user data and builds user cache
-   */
-  const fetchUsersData = useCallback(async () => {
-    try {
-      const response = await axiosSecure.get("/users/get-users");
-      if (response.data.success) {
-        const usersMap = response.data.data.reduce((acc, user) => {
-          acc[user._id] = user;
-          return acc;
-        }, {});
-        setUserCache(usersMap);
-      }
+      // Redirect to secure alias URL if currently using legacy project ID
+      await redirectToSecureUrl(fetchedProject);
+
+      // Note: Client functionality is disabled for future implementation
+      // When re-enabled, this will contain client's client information, not our own client data
+      
     } catch (error) {
-      handleError("Failed to Load Users", "Unable to fetch user information", error);
+      if (error.response?.status === 404) {
+        handleError("Project Not Found", "The project you're looking for doesn't exist or has been deleted", error);
+        navigate("/projects");
+      } else if (error.response?.status === 403) {
+        handleError("Access Denied", "You don't have permission to view this project", error);
+        navigate("/forbidden");
+      } else {
+        handleError("Failed to Load Project", "Unable to fetch project data", error);
+      }
     }
-  }, [axiosSecure, handleError]);
+  }, [axiosSecure, projectIdentifier, user?.id, userRole, handleError, navigate, redirectToSecureUrl]);
 
   /**
    * Handles project update with validation and error handling
@@ -206,7 +245,7 @@ const ProjectsView = () => {
         return;
       }
 
-      const response = await axiosSecure.patch(`/projects/update/${id}`, updatedProject);
+      const response = await axiosSecure.patch(`/projects/update/${project._id}`, updatedProject);
 
       if (response?.data?.success) {
         handleSuccess("Project Updated", "Project updated successfully!", () => {
@@ -222,7 +261,7 @@ const ProjectsView = () => {
     } catch (error) {
       handleError("Update Failed", "Failed to update project. Please try again.", error);
     }
-  }, [project, originalProject, axiosSecure, id, validateProjectData, normalizeLocation, handleSuccess, handleError]);
+  }, [project, originalProject, axiosSecure, validateProjectData, normalizeLocation, handleSuccess, handleError]);
 
   /**
    * Handles folder rename operation on disk
@@ -230,26 +269,90 @@ const ProjectsView = () => {
   const handleFolderRename = useCallback(async () => {
     try {
       const newFolderName = `${project.projectNumber} - ${project.name}`;
-      await axiosSecure.put(`/files/${id}/folders/${id}`, {
+      await axiosSecure.put(`/files/${project._id}/folders/${project._id}`, {
         newName: newFolderName,
       });
     } catch (error) {
       // Non-critical error - don't show to user but log for debugging
       console.warn("⚠️ Disk folder rename failed:", error?.response?.data || error.message);
     }
-  }, [project, axiosSecure, id]);
+  }, [project, axiosSecure]);
+
+  /**
+   * Handles project deletion with confirmation and cleanup
+   */
+  const handleDeleteProject = useCallback(async () => {
+    if (!validateProjectData(project)) {
+      handleError("Delete Failed", "Project data is missing", new Error("Invalid project data"));
+      return;
+    }
+
+    // Show confirmation dialog with enhanced warning
+    const confirmResult = await Swal.fire({
+      icon: "warning",
+      title: "Delete Project?",
+      html: `
+        <div class="text-left">
+          <p><strong>Project:</strong> ${project.name || 'Unknown'}</p>
+          <p><strong>Project #:</strong> ${project.projectNumber || 'N/A'}</p>
+          <br>
+          <p class="text-red-600 font-semibold">⚠️ This action cannot be undone!</p>
+          <p>This will permanently delete:</p>
+          <ul class="list-disc list-inside mt-2 text-sm">
+            <li>All project data and information</li>
+            <li>All associated files and folders</li>
+            <li>All project history and metadata</li>
+          </ul>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete Forever",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      focusCancel: true,
+    });
+
+    if (!confirmResult.isConfirmed) {
+      return;
+    }
+
+    try {
+      const response = await axiosSecure.delete(`/projects/delete/${project._id}`);
+
+      if (response?.data?.success) {
+        // Show enhanced success notification for project deletion
+        Swal.fire({
+          icon: "success",
+          title: "Project Deleted Successfully",
+          text: `Project "${project.name}" and all associated files have been permanently deleted.`,
+          timer: 3000,
+          showConfirmButton: true,
+          confirmButtonText: "OK",
+          timerProgressBar: true,
+        }).then(() => {
+          // Navigate back to projects list
+          navigate("/projects");
+        });
+      } else {
+        throw new Error("Delete failed");
+      }
+    } catch (error) {
+      handleError("Delete Failed", "Failed to delete project. Please try again.", error);
+    }
+  }, [project, axiosSecure, validateProjectData, handleError, navigate]);
 
   /**
    * Implements long polling for disk change detection
    */
   const setupLongPolling = useCallback(() => {
-    if (!ENABLE_WATCHERS || !id) return;
+    if (!ENABLE_WATCHERS || !project?._id) return;
 
     let isCancelled = false;
 
     const longPollForDiskChanges = async () => {
       try {
-        const response = await axiosSecure.get(`/files/${id}/watch-disk`);
+        const response = await axiosSecure.get(`/files/${project._id}/watch-disk`);
         if (isCancelled) return;
 
         if (response?.data?.changed) {
@@ -270,7 +373,7 @@ const ProjectsView = () => {
     return () => {
       isCancelled = true;
     };
-  }, [ENABLE_WATCHERS, id, axiosSecure, fetchFolders]);
+  }, [ENABLE_WATCHERS, project?._id, axiosSecure, fetchFolders]);
 
   /**
    * Handles modal close with animation and cleanup
@@ -295,7 +398,7 @@ const ProjectsView = () => {
    * @param {string} type - Input type
    * @param {*} value - Current value
    * @param {Function} onChange - Change handler
-   * @param {string} displayValue - Display value for read-only mode
+   * @param {JSX.Element} displayValue - Display value for read-only mode
    * @returns {JSX.Element} - Form field component
    */
   const renderFormField = useCallback((field, type, value, onChange, displayValue) => {
@@ -303,9 +406,10 @@ const ProjectsView = () => {
       if (type === "textarea") {
         return (
           <textarea
-            className="w-full border rounded-md p-2"
+            className="w-full border rounded-md p-2 min-h-[120px] resize-vertical"
             value={value || ""}
             onChange={onChange}
+            placeholder={`Enter ${field}...`}
           />
         );
       }
@@ -321,12 +425,27 @@ const ProjectsView = () => {
         );
       }
       
+      if (type === "number") {
+        return (
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            className="w-full border rounded-md p-2"
+            value={value || ""}
+            onChange={onChange}
+            placeholder="0.00"
+          />
+        );
+      }
+      
       return (
         <input
           type={type}
           className="w-full border rounded-md p-2"
           value={value || ""}
           onChange={onChange}
+          placeholder={`Enter ${field}...`}
         />
       );
     }
@@ -353,11 +472,6 @@ const ProjectsView = () => {
     fetchProjectData();
   }, [fetchProjectData]);
 
-  // Effect: Fetch users data
-  useEffect(() => {
-    fetchUsersData();
-  }, [fetchUsersData]);
-
   // Effect: Setup long polling for file changes
   useEffect(() => {
     return setupLongPolling();
@@ -378,6 +492,16 @@ const ProjectsView = () => {
         <div className="flex gap-2">
           {isEditing ? (
             <>
+              {/* Delete Button - Only visible to Admins */}
+              {userRole === "Admin" && (
+                <button
+                  className="px-3 py-2 rounded-md border-2 border-red-500 bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center justify-center"
+                  onClick={handleDeleteProject}
+                  title="Delete Project"
+                >
+                  <IconDelete className="text-lg" />
+                </button>
+              )}
               <button
                 className="px-4 py-2 rounded-md border-2 border-gray-400 text-gray-700"
                 onClick={() => setIsEditing(false)}
@@ -472,49 +596,6 @@ const ProjectsView = () => {
           </div>
         </div>
 
-        {/* Job Details Section */}
-        <div className="bg-white p-4 rounded-md mb-4 shadow-sm">
-          <h4 className="text-lg font-semibold mb-2">Job Scope/Details</h4>
-          {renderFormField(
-            "description",
-            "textarea",
-            project?.description,
-            (e) => setProject({ ...project, description: e.target.value }),
-            <div
-              className="prose prose-sm max-w-none text-gray-800 bg-gray-50 border border-gray-200 p-4 rounded-md"
-              dangerouslySetInnerHTML={{
-                __html: (project?.description || "").replace(/\n/g, "<br />"),
-              }}
-            />
-          )}
-        </div>
-
-        {/* Estimate Notes Section */}
-        <div className="bg-white p-4 rounded-md shadow-sm">
-          <h4 className="text-lg font-semibold mb-2">Estimate Notes</h4>
-          {["notes", "assumptions", "exclusions"].map((section) => (
-            <div key={section} className="mb-4">
-              <label className="text-sm font-medium block mb-1 capitalize">{section}:</label>
-              {renderFormField(
-                section,
-                "textarea",
-                project?.estimateNotes?.[section],
-                (e) =>
-                  setProject({
-                    ...project,
-                    estimateNotes: {
-                      ...project.estimateNotes,
-                      [section]: e.target.value,
-                    },
-                  }),
-                <p className="p-2 border rounded-md bg-gray-100">
-                  {project?.estimateNotes?.[section] || `No ${section} specified`}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-
         {/* File Management Section */}
         <div
           ref={folderPanelRef}
@@ -548,14 +629,14 @@ const ProjectsView = () => {
 
           {/* Folder Panel Wrapper */}
           <FolderPanelWrapper
-            projectId={id}
+            projectId={project?._id}
             userRole={user?.role || "User"}
             refreshKey={folderPanelRefreshKey}
           >
             {(folderManager) => (
               <FileDirectoryPanel
                 {...folderManager}
-                projectId={id}
+                projectId={project?._id}
                 folderList={folderManager.folderList}
                 uploadEnabled={!showFolderModal}
                 files={sharedFiles}
@@ -568,46 +649,140 @@ const ProjectsView = () => {
           </FolderPanelWrapper>
         </div>
 
+        {/* Job Details Section */}
+        <div className="bg-white p-4 rounded-md mb-4 shadow-sm mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-lg font-semibold">Job Scope/Details</h4>
+            <button
+              onClick={() => setIsJobScopeExpanded(!isJobScopeExpanded)}
+              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-800"
+              title={isJobScopeExpanded ? "Collapse" : "Expand"}
+            >
+              <span className="text-md font-medium">
+                {isJobScopeExpanded ? "Collapse" : "Expand"}
+              </span>
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${
+                  isJobScopeExpanded ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="transition-all duration-300 ease-in-out">
+            {renderFormField(
+              "description",
+              "textarea",
+              project?.description,
+              (e) => setProject({ ...project, description: e.target.value }),
+              <div
+                className={`prose prose-sm max-w-none text-gray-800 bg-gray-50 border border-gray-200 p-4 rounded-md overflow-y-auto transition-all duration-300 ease-in-out ${
+                  isJobScopeExpanded ? "max-h-[900px]" : "max-h-[300px]"
+                }`}
+                dangerouslySetInnerHTML={{
+                  __html: (project?.description || "").replace(/\n/g, "<br />"),
+                }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Estimate Notes Section */}
+        <div className="bg-white p-4 rounded-md shadow-sm">
+          <h4 className="text-lg font-semibold mb-2">Estimate Notes</h4>
+          {["notes", "assumptions", "exclusions"].map((section) => (
+            <div key={section} className="mb-4">
+              <label className="text-sm font-medium block mb-1 capitalize">{section}:</label>
+              {renderFormField(
+                section,
+                "textarea",
+                project?.estimateNotes?.[section],
+                (e) =>
+                  setProject({
+                    ...project,
+                    estimateNotes: {
+                      ...project.estimateNotes,
+                      [section]: e.target.value,
+                    },
+                  }),
+                <p className="p-2 border rounded-md bg-gray-100">
+                  {project?.estimateNotes?.[section] || `No ${section} specified`}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+
         {/* Quote Breakdown Section */}
         <div className="w-full bg-white p-4 rounded-md shadow-sm mt-4">
-          <h3 className="font-semibold text-lg">Project Quote Breakdown</h3>
+          <h3 className="font-semibold text-lg mb-4">Project Quote Breakdown</h3>
           
           {/* Sub Total */}
-          <div className="flex justify-between">
-            <p className="text-gray-800">Sub Total</p>
-            {renderFormField(
-              "subTotal",
-              "number",
-              project?.subTotal || 0,
-              (e) => setProject({ ...project, subTotal: parseFloat(e.target.value) || 0 }),
-              <p className="text-gray-800">{project?.subTotal}</p>
-            )}
+          <div className="flex justify-between items-center py-2">
+            <p className="text-gray-800 font-medium">Sub Total</p>
+            <div className="text-right">
+              {renderFormField(
+                "subTotal",
+                "number",
+                project?.subTotal || 0,
+                (e) => {
+                  const newSubTotal = parseFloat(e.target.value) || 0;
+                  const gst = project?.gst || 0;
+                  setProject({ 
+                    ...project, 
+                    subTotal: newSubTotal,
+                    total: newSubTotal + gst
+                  });
+                },
+                <p className="text-gray-800">${project?.subTotal?.toFixed(2) || '0.00'}</p>
+              )}
+            </div>
           </div>
           
           {/* GST */}
-          <div className="flex justify-between">
-            <p className="text-gray-800">GST</p>
-            {renderFormField(
-              "gst",
-              "number",
-              project?.gst || 0,
-              (e) => setProject({ ...project, gst: parseFloat(e.target.value) || 0 }),
-              <p className="text-gray-800">{project?.gst}</p>
-            )}
+          <div className="flex justify-between items-center py-2">
+            <p className="text-gray-800 font-medium">GST</p>
+            <div className="text-right">
+              {renderFormField(
+                "gst",
+                "number",
+                project?.gst || 0,
+                (e) => {
+                  const newGst = parseFloat(e.target.value) || 0;
+                  const subTotal = project?.subTotal || 0;
+                  setProject({ 
+                    ...project, 
+                    gst: newGst,
+                    total: subTotal + newGst
+                  });
+                },
+                <p className="text-gray-800">${project?.gst?.toFixed(2) || '0.00'}</p>
+              )}
+            </div>
           </div>
           
           {/* Total */}
-          <div className="h-[2px] bg-black my-1"></div>
-          <div className="flex justify-between font-semibold text-textBlack">
-            <h2 className="text-lg">Total</h2>
-            <p className="text-gray-800">{project?.total}</p>
+          <div className="h-[2px] bg-gray-300 my-3"></div>
+          <div className="flex justify-between items-center font-semibold text-lg">
+            <h2 className="text-gray-900">Total</h2>
+            <p className="text-gray-900">${((project?.subTotal || 0) + (project?.gst || 0)).toFixed(2)}</p>
           </div>
         </div>
 
         {/* File Drop Modal */}
         {showFolderModal && (
           <FileDropModal
-            projectId={id}
+            projectId={project?._id}
             projectAlias={projectAlias}
             selectedPath={modalSelectedPath}
             setSelectedPath={setModalSelectedPath}
@@ -618,40 +793,10 @@ const ProjectsView = () => {
             userRole={user?.role || "user"}
             onClose={handleModalClose}
             onUpload={({ files, folderPath }) => {
-              // Handle file upload
+              console.log('Files uploaded:', files, 'to path:', folderPath);
             }}
           />
         )}
-
-        {/* Footer - Created For Section */}
-        <div className="bg-white p-4 mt-4 rounded-md shadow-sm">
-          <h4 className="text-lg font-semibold mb-2">Created for:</h4>
-          {project?.linkedUsers?.length > 0 ? (
-            project.linkedUsers.map((userId) => {
-              const linkedUser = userCache[userId];
-              return linkedUser ? (
-                <div key={`linked-user-${userId ?? crypto.randomUUID()}`}>
-                  <h3 className="text-xl font-medium text-gray-800">
-                    {linkedUser.name || "Unknown Name"}
-                  </h3>
-                  <p className="text-gray-600">{linkedUser.email || "No email"}</p>
-                  <p className="text-gray-600">{linkedUser.phone || "No phone"}</p>
-                  <p className="text-gray-600">
-                    {typeof linkedUser.address === "object"
-                      ? `${linkedUser.address.full_address?.split(",")[0] || "No Address"}, ${linkedUser.address.city || ""}, ${linkedUser.address.zip || ""}`
-                      : linkedUser.address || "No address"}
-                  </p>
-                </div>
-              ) : (
-                <p key={`loading-${crypto.randomUUID()}`} className="text-gray-500">
-                  Loading user information...
-                </p>
-              );
-            })
-          ) : (
-            <p className="text-gray-500">No users assigned</p>
-          )}
-        </div>
       </div>
     </div>
   );

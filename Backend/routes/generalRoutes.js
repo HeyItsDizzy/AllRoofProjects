@@ -1,34 +1,44 @@
+// routes/generalRoutes.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 const router = express.Router();
-//const userCollection = require("../db").userCollection;
 const { userCollection } = require("../db");
 
-// Default route to verify the API is running
-router.get("/", (req, res) => {
-  console.log("Default route hit"); // Log when the default route is accessed
-  res.status(200).send("Welcome to the API!"); // Send a success message to the client
-});
-
-// Test route to check if the server is functioning
-router.get("/test", (req, res) => {
-  console.log("Test route hit"); // Log when the test route is accessed
-  res.send("Server is working!"); // Send a success message indicating the server is operational
-});
-
-// Database test route to verify the connection to MongoDB
-router.get("/db-test", async (req, res) => {
-  try {
-    console.log("DB Test route hit"); // Log when the database test route is accessed
-    const result = await client.db("admin").command({ ping: 1 }); // Ping the database to check the connection
-    res.send("Database is connected and responding!"); // Send a success message if the database responds
-  } catch (err) {
-    console.error("DB Test failed:", err.message); // Log the error if the database connection fails
-    res.status(500).send("Database connection failed!"); // Send an error response to the client
+// ── Email transporter setup (SMTP for sending) ───────────────────────────
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,      // smtp.hostinger.com
+  port: Number(process.env.SMTP_PORT), // 465
+  secure: true,                     // use TLS
+  auth: {
+    user: process.env.SMTP_USER,    // rusty_ai@allrooftakeoffs.com
+    pass: process.env.SMTP_PASS     // Pass from ENV
   }
 });
-// Database test route to verify the connection to User Collection specifically
+
+// ── Default & Test Routes ─────────────────────────────────────────────────
+router.get("/", (req, res) => {
+  console.log("Default route hit");
+  res.status(200).send("Welcome to the API!");
+});
+
+router.get("/test", (req, res) => {
+  console.log("Test route hit");
+  res.send("Server is working!");
+});
+
+router.get("/db-test", async (req, res) => {
+  try {
+    console.log("DB Test route hit");
+    const result = await client.db("admin").command({ ping: 1 });
+    res.send("Database is connected and responding!");
+  } catch (err) {
+    console.error("DB Test failed:", err.message);
+    res.status(500).send("Database connection failed!");
+  }
+});
+
 router.get("/test-user-collection", async (req, res) => {
   try {
     const collection = await userCollection();
@@ -39,14 +49,12 @@ router.get("/test-user-collection", async (req, res) => {
   }
 });
 
-
-// Register a new user
+// ── Register ─────────────────────────────────────────────────────────────
 router.post("/register", async (req, res) => {
   const {
     firstName,
     lastName,
     name,
-    company,
     email,
     phone,
     displayPhone,
@@ -54,11 +62,12 @@ router.post("/register", async (req, res) => {
   } = req.body;
 
   try {
-    if (!firstName || !lastName || !email || !phone || !password || !company) {
-      throw new Error("All fields (full name, email, phone, company, and password) are required.");
+    if (!firstName || !lastName || !email || !phone || !password ) {
+      throw new Error("All fields (firstName, lastName, email, phone, password) are required.");
     }
 
-    const isEmailExist = await (await userCollection()).findOne({ email });
+    const collection = await userCollection();
+    const isEmailExist = await collection.findOne({ email });
     if (isEmailExist) {
       throw new Error("This email is already in use.");
     }
@@ -71,9 +80,8 @@ router.post("/register", async (req, res) => {
       firstName,
       lastName,
       email,
-      phone,            // ✅ ClickSend/E.164 format
-      displayPhone,     // ✅ Local format for UI
-      company,
+      phone,
+      displayPhone,
       password: hashedPassword,
       role: "User",
       isBlock: false,
@@ -81,9 +89,11 @@ router.post("/register", async (req, res) => {
       linkedProjects: [],
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`,
       phoneVerified: false,
+      resetCode: null,
+      resetCodeExpiry: null
     };
 
-    const result = await (await userCollection()).insertOne(newUser);
+    const result = await collection.insertOne(newUser);
 
     res.json({
       success: true,
@@ -96,15 +106,12 @@ router.post("/register", async (req, res) => {
   }
 });
 
-
-
-// Login to an existing user
+// ── Login ────────────────────────────────────────────────────────────────
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   console.log("Login route hit with data:", req.body);
 
   try {
-    // Call the userCollection function to get the collection
     const collection = await userCollection();
     const user = await collection.findOne({ email });
     console.log("Fetched user:", user);
@@ -113,8 +120,11 @@ router.post("/login", async (req, res) => {
       throw new Error("Invalid email or password.");
     }
 
+    // Remove password from user object before sending to client
+    const { password: _, ...userWithoutPassword } = user;
+
     const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role},
+      { userId: user._id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_SECRET_EXPIRES_IN }
     );
@@ -122,7 +132,7 @@ router.post("/login", async (req, res) => {
     res.json({
       success: true,
       message: "Login successful.",
-      data: { user, token },
+      data: { user: userWithoutPassword, token },
     });
   } catch (err) {
     console.error("Error in login route:", err.message);
@@ -130,33 +140,102 @@ router.post("/login", async (req, res) => {
   }
 });
 
-
-router.post("/reset-password", async (req, res) => {
-  const { token, newPassword } = req.body;
-
+// ── Forgot Password: generate & email 6-digit code ───────────────────────
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
   try {
-    if (!token || !newPassword) {
-      throw new Error("Token and new password are required.");
+    const collection = await userCollection();
+    const user = await collection.findOne({ email });
+    if (!user) {
+      // Always return success to avoid enumeration
+      return res.json({ success: true });
     }
 
-    // Placeholder - Verify token and user
-    // In the future, decode the token with JWT and check if it's valid
-    const decoded = await verifyToken(token); // This would be your JWT function
+    // Generate 6-digit code & expiry (10 mins)
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    if (!decoded) {
-      throw new Error("Invalid or expired token.");
+    await collection.updateOne(
+      { email },
+      { $set: { resetCode, resetCodeExpiry } }
+    );
+
+    // Send reset code email
+    await transporter.sendMail({
+      from: `"AllRoof Takeoffs" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "Your Password Reset Code",
+      html: `
+        <p>You requested a password reset. Your 6-digit code is:</p>
+        <h2>${resetCode}</h2>
+        <p>This code expires in 10 minutes.</p>
+      `
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error in forgot-password route:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── Verify Reset Code ────────────────────────────────────────────────────
+router.post("/verify-reset-code", async (req, res) => {
+  const { email, code } = req.body;
+  try {
+    const collection = await userCollection();
+    const user = await collection.findOne({
+      email,
+      resetCode: code,
+      resetCodeExpiry: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid or expired code." });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error in verify-reset-code route:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── Reset Password (using code) ─────────────────────────────────────────
+router.post("/reset-password", async (req, res) => {
+  const { email, code, newPassword } = req.body;
+
+  try {
+    if (!email || !code || !newPassword) {
+      throw new Error("Email, code, and newPassword are required.");
+    }
+
+    const collection = await userCollection();
+    const user = await collection.findOne({
+      email,
+      resetCode: code,
+      resetCodeExpiry: { $gt: new Date() }
+    });
+
+    if (!user) {
+      throw new Error("Invalid or expired code.");
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, Number(process.env.BCRYPT_SALT_ROUND));
-
-    // Update the password in the database
-    await userCollection().updateOne({ _id: decoded.userId }, { $set: { password: hashedPassword } });
+    await collection.updateOne(
+      { email },
+      {
+        $set: { password: hashedPassword, resetCode: null, resetCodeExpiry: null }
+      }
+    );
 
     res.json({ success: true, message: "Password updated successfully!" });
   } catch (err) {
-    console.error("Error in reset password route:", err.message);
+    console.error("Error in reset-password route:", err.message);
     res.status(400).json({ success: false, message: err.message });
   }
 });
 
-module.exports = router; // Export the router so it can be used in the main application
+module.exports = router;

@@ -35,9 +35,9 @@ const Login = () => {
         setUser(user);
         console.log("User successfully logged in:", user);
 
-        // ── Redirect non-admins without company info ────────────────────────
-        if (user.role !== "Admin" && (!user.company || !user.companyId)) {
-          console.log("No company linked → redirecting to /company-choice");
+        // ── Redirect non-admins without any linkedClients ─────────────────
+        if (user.role !== "Admin" && (!user.linkedClients || user.linkedClients.length === 0)) {
+          console.log("No linkedClients found → redirecting to /company-choice");
           return navigate("/company-choice");
         }
         // ────────────────────────────────────────────────────────────────────
@@ -66,9 +66,9 @@ const Login = () => {
       <div className="bg-white p-20 rounded-xl shadow-lg w-full max-w-md mx-auto">
         <div className="py-4 flex flex-col justify-center mx-auto w-full">
           <div className="w-full text-center">
-            <img src={logo} className="w-32 mx-auto" alt="Logo" />
+            <img src={logo} className="w-48 mx-auto" alt="Logo" />
             <div className="my-4">
-              <h2 className="text-smallBold text-textBlack">Welcome Back!</h2>
+              <h2 className="text-smallBold text-textBlack">Welcome!</h2>
               <p className="text-textGray text-semiBold">
                 Enter your email and password to login.
               </p>

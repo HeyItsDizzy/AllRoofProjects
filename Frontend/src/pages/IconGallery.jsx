@@ -31,6 +31,12 @@ import {
   IconPending,
   IconSync,
   IconComplete,
+  IconBlock,
+  IconUnblock,
+  IconInvite,
+  IconRefresh,
+  IconPromote,
+  IconDemote,
   getFileIcon,
 } from "../shared/IconSet.jsx";
 
@@ -79,6 +85,14 @@ const groupedIcons = {
     IconPending,
     IconComplete,
     IconSync,
+  },
+  "👥 User Management": {
+    IconBlock,
+    IconUnblock,
+    IconInvite,
+    IconRefresh,
+    IconPromote,
+    IconDemote,
   },
 };
 

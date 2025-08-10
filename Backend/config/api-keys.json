@@ -1,0 +1,9 @@
+{
+  "rusty": {
+    "key": "rusty_api_key_2025_secure_automation_v1",
+    "description": "API key for Rusty email automation bot",
+    "permissions": ["create_project"],
+    "created": "2025-08-05",
+    "active": true
+  }
+}

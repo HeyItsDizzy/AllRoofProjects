@@ -9,13 +9,14 @@ const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL || "";
  * @param {Object} props - Component props
  * @param {string} props.name - User's full name for generating initials and alt text
  * @param {string} props.avatarUrl - URL or path to the avatar image
- * @param {string} props.size - Size variant (sm, md, lg, xl, xxl)
+ * @param {string} props.size - Size variant (sm, md, lg, xl, xxl, responsive)
  * @returns {JSX.Element} Avatar component with image or initials fallback
  */
 const Avatar = ({ name = "", avatarUrl = "", size = "md" }) => {
   /**
    * Tailwind CSS classes for different avatar sizes
    * Each size includes width, height, and font size
+   * 'responsive' size fills the parent container
    */
   const sizeClasses = {
     sm: "w-6 h-6 text-xs",
@@ -23,6 +24,7 @@ const Avatar = ({ name = "", avatarUrl = "", size = "md" }) => {
     lg: "w-16 h-16 text-lg",
     xl: "w-32 h-32 text-xl",
     xxl: "w-64 h-64 text-2xl",
+    responsive: "w-full h-full text-xl",
   };
 
   /**
@@ -76,19 +78,21 @@ const Avatar = ({ name = "", avatarUrl = "", size = "md" }) => {
   // Render image avatar if URL is provided
   if (avatarUrl) {
     return (
-      <img
-        src={imageSrc}
-        alt={`${name}'s avatar` || "User avatar"}
-        className={`${baseClasses} object-cover`}
-        onError={handleImageError}
-      />
+      <div className={`${baseClasses} overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0`}>
+        <img
+          src={imageSrc}
+          alt={`${name}'s avatar` || "User avatar"}
+          className="w-full h-full object-cover"
+          onError={handleImageError}
+        />
+      </div>
     );
   }
 
   // Render initials fallback when no image URL is provided
   return (
     <div
-      className={`${baseClasses} bg-secondary text-white flex items-center justify-center font-medium`}
+      className={`${baseClasses} bg-secondary text-white flex items-center justify-center font-medium flex-shrink-0`}
       role="img"
       aria-label={`${name}'s initials` || "User initials"}
     >

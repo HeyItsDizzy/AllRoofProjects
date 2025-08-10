@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const { ObjectId } = require("mongodb");
+const { authenticateToken } = require("../../../middleware/auth");
 const archiver = require("archiver");
 const mime = require("mime"); // if not already included
 const { projectsCollection } = require("../../../db");
@@ -63,6 +64,33 @@ router.get("/:projectId/meta", async (req, res) => {
   } catch (err) {
     console.error("🔥 Error loading meta.json:", err);
     return res.status(500).json({ error: "Failed to load meta", details: err.message });
+  }
+});
+
+// Update meta.json for a project
+router.put("/:projectId/meta", authenticateToken(), async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const updatedMeta = req.body;
+
+    // 1) Lookup the project so we know its disk path
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    // 2) Build the path to .meta.json
+    const projectPath = await getProjectUploadPath(project);
+    const metaPath = path.join(projectPath, ".meta.json");
+
+    // 3) Write the new JSON
+    fs.writeFileSync(metaPath, JSON.stringify(updatedMeta, null, 2), "utf-8");
+
+    return res.status(200).json({ success: true, message: "Meta updated" });
+  } catch (err) {
+    console.error("🔥 Error writing meta.json:", err);
+    return res.status(500).json({ error: "Failed to write meta", details: err.message });
   }
 });
 
@@ -227,7 +255,7 @@ router.post("/:projectId/unwatch", (req, res) => {
 
 
 router.post("/:projectId/folders", createFolder);
-router.delete("/:projectId/folders/:folderId", deleteFolder);
+router.delete("/:projectId/folders/:path(*)", authenticateToken(), deleteFolder);
 router.put("/:projectId/folders/:folderId", renameFolder);
 router.get("/:projectId/folders", getFolders);
 router.get("/:projectId/folder-tree", getFolderTree);
@@ -307,6 +335,72 @@ router.get("/:projectId/download/*/:fileName", async (req, res) => {
   } catch (err) {
     console.error("❌ File download error:", err);
     res.status(500).json({ error: "Failed to download file", details: err.message });
+  }
+});
+
+// ✅ Route to Delete Entire Project Root Directory
+router.delete("/:projectId/project-root", authenticateToken, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const region = req.query.region || "AU";
+
+    // Validate project exists in database
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    console.log(`🗑️ Deleting entire project root for: ${project.name} (${project.projectNumber})`);
+
+    // Get the project root path
+    const projectRootPath = getProjectDiskPath(project, "", region);
+    
+    if (!fs.existsSync(projectRootPath)) {
+      console.log(`⚠️ Project root folder not found on disk: ${projectRootPath}`);
+      return res.status(404).json({ 
+        error: "Project folder not found on disk",
+        path: projectRootPath 
+      });
+    }
+
+    // Stop watching the project before deletion
+    if (isWatching(projectId)) {
+      try {
+        stopWatchingProject(projectId);
+        console.log(`✅ Stopped watching project ${projectId} before deletion`);
+      } catch (watchError) {
+        console.warn("⚠️ Failed to stop watcher:", watchError.message);
+      }
+    }
+
+    // Delete the entire project directory
+    fs.rmSync(projectRootPath, { recursive: true, force: true });
+    console.log(`✅ Project root directory deleted: ${projectRootPath}`);
+
+    // Clean up any folder flags
+    if (folderUpdateFlags[projectId]) {
+      delete folderUpdateFlags[projectId];
+    }
+
+    res.json({
+      success: true,
+      message: "Project root directory deleted successfully",
+      data: {
+        projectId,
+        projectName: project.name,
+        projectNumber: project.projectNumber,
+        deletedPath: projectRootPath
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error deleting project root:", error);
+    res.status(500).json({
+      error: "Failed to delete project root directory",
+      details: error.message
+    });
   }
 });
 

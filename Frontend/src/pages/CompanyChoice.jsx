@@ -1,66 +1,88 @@
-import React, { useContext } from 'react';
+// src/pages/CompanyChoice.jsx
+import React, { useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axiosSecure from '../hooks/AxiosSecure/useAxiosSecure';
+import useAxiosSecure from '../hooks/AxiosSecure/useAxiosSecure';
 import Swal from '@/shared/swalConfig';
 import { AuthContext } from '../auth/AuthProvider';
 
 export default function CompanyChoice() {
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
+  const axiosSecure = useAxiosSecure(); // <- call the hook properly
 
-  const handleConnectToCompany = async () => {
-const { value: code } = await Swal.fire({
-  title: 'Link to Existing Company',
-  input: 'text',
-  inputLabel: 'Enter your 10-character linking code',
-  inputPlaceholder: 'A1B2C3D4E5',
-  inputAttributes: {
-    maxlength: 10,
-    autocapitalize: 'characters',
-    autocorrect: 'off',
-    style: 'text-align: center'
-  },
-  showCancelButton: true,
-  confirmButtonText: 'Link Company',
-  preConfirm: async (inputCode) => {
-    if (!inputCode) {
-      return Promise.reject(new Error('Please enter a linking code.'));
+  // Redirect users who already have a linkedClient
+  useEffect(() => {
+    if (user && user.linkedClients && user.linkedClients.length > 0) {
+      console.log("User already has linkedClients, redirecting to MyProjects");
+      navigate('/MyProjects');
     }
+  }, [user, navigate]);
 
-    try {
-      const endpoint =
-        user.role === 'Admin'
-          ? '/users/link-company-admin'
-          : '/users/link-company-user';
 
-      const res = await axiosSecure.post(endpoint, {
-        code: inputCode.trim().toUpperCase()
-      });
 
-      if (!res.data.success) {
-        throw new Error(res.data.message || 'Linking failed');
+const handleConnectToCompany = async () => {
+  const { value: code } = await Swal.fire({
+    title: 'Link to Existing Company',
+    showLoaderOnConfirm: true,
+    input: 'text',
+    inputLabel: 'Enter your 10-character linking code',
+    inputPlaceholder: 'A1B2C3D4E5',
+    inputAttributes: {
+      maxlength: 10,
+      autocapitalize: 'characters',
+      autocorrect: 'off',
+      style: 'text-align: center'
+    },
+    showCancelButton: true,
+    confirmButtonText: 'Link Company',
+    preConfirm: async (inputCode) => {
+      const trimmed = inputCode?.trim().toUpperCase();
+      if (!trimmed) {
+        return Promise.reject(new Error('Please enter a linking code.'));
       }
 
-      return inputCode.trim().toUpperCase();
-    } catch (err) {
-      return Promise.reject(
-        new Error(err.response?.data?.message || err.message)
-      );
-    }
-  }
+      try {
+        // first try the standard‐user endpoint
+        let res;
+        try {
+          res = await axiosSecure.post("/users/link-company-user", { code: trimmed });
+        } catch (err) {
+          // if it's not a valid user‐link code, try the admin endpoint
+          if (err.response?.data?.message === "Invalid user linking code.") {
+            res = await axiosSecure.post("/users/link-company-admin", { code: trimmed });
+          } else {
+            throw err;
+          }
+        }
 
+        if (!res.data.success) {
+          throw new Error(res.data.message || "Linking failed");
+        }
+
+        // return the company name for your final welcome message
+        return res.data.clientName;
+      } catch (err) {
+        return Promise.reject(
+          new Error(err.response?.data?.message || err.message)
+        );
+      }
+    }
+  });
+
+  if (code) {
+    await refreshUser();
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Welcome!',
+      text: `Your code “${code}” has linked you to your company.`,
+      confirmButtonText: 'Go to Dashboard'
     });
 
-    if (code) {
-      await Swal.fire({
-        icon: 'success',
-        title: 'Linked!',
-        text: `You’re now connected to your company (code: ${code}).`,
-        confirmButtonText: 'Go to Dashboard'
-      });
-      navigate('/dashboard');
-    }
-  };
+    navigate('/MyProjects');
+  }
+};
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">

@@ -5,7 +5,8 @@ const { getProjectUploadPath } = require("./pathUtils");
 const FOLDER_ACCESS_RULES = {
   BOQ: ["Admin", "User"],
   Admin: ["Admin"],
-  Estimator: ["Estimator"]
+  Estimator: ["Admin", "Estimator"],
+  Scope: ["Admin", "User", "Estimator"]
 };
 
 const createInitialProjectFolders = (project, region = "AU") => {

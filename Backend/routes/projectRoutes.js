@@ -1,16 +1,113 @@
 const express = require("express");
 const router = express.Router();
-const { projectsCollection, userCollection } = require("../db");
-const { authenticateToken, authenticateAdmin } = require("../middleware/auth");
+const { projectsCollection, userCollection, clientCollection } = require("../db");
+const { authenticateToken, authenticateAdmin, authorizeRole } = require("../middleware/auth");
 const { ObjectId } = require("mongodb");
 const { tryRenameProjectFolder } = require("../features/fileManager/services/tryRenameProjectFolder");
 const { createInitialProjectFolders } = require("../features/fileManager/controllers/folderController"); // ✅ NEW
+const fs = require("fs");
+const path = require("path");
+const { getProjectDiskPath } = require("../features/fileManager/services/pathUtils");
+
+// Load API keys for service authentication
+let apiKeys = {};
+try {
+  const apiKeysPath = path.join(__dirname, "../config/api-keys.json");
+  apiKeys = JSON.parse(fs.readFileSync(apiKeysPath, "utf-8"));
+} catch (err) {
+  console.warn("⚠️ Could not load API keys:", err.message);
+}
 
 
 console.log("✅ projectRoutes.js is being loaded...");
 
+// ✅ Route to Assign Client to a Project (Admin only)
+router.patch(
+  "/assignClient/:projectId",
+  authenticateToken(),
+  authorizeRole("Admin"),
+  async (req, res) => {
+    try {
+      const { clientId, multiAssign = false } = req.body;
+      const projectId = req.params.projectId;
 
-// ✅ Route to Assign User to a Project
+      if (!clientId || !projectId) {
+        return res.status(400).json({ success: false, message: "Client ID and Project ID are required." });
+      }
+
+      if (!ObjectId.isValid(clientId) || !ObjectId.isValid(projectId)) {
+        return res.status(400).json({ success: false, message: "Invalid Client ID or Project ID." });
+      }
+
+      console.log(`🔍 Looking up client: ${clientId}`);
+      const clientCollectionRef  = await clientCollection();
+      const projectCollectionRef = await projectsCollection();
+
+      const client = await clientCollectionRef.findOne({ _id: new ObjectId(clientId) });
+      if (!client) {
+        console.log(`❌ Client not found: ${clientId}`);
+        return res.status(404).json({ success: false, message: "Client not found." });
+      }
+
+      console.log(`🔍 Looking up project: ${projectId}`);
+      const project = await projectCollectionRef.findOne({ _id: new ObjectId(projectId) });
+      if (!project) {
+        console.log(`❌ Project not found: ${projectId}`);
+        return res.status(404).json({ success: false, message: "Project not found." });
+      }
+
+      // Ensure linkedClients is an array
+      if (!Array.isArray(project.linkedClients)) {
+        project.linkedClients = [];
+      }
+
+      let updateProject;
+      if (multiAssign) {
+        if (!project.linkedClients.includes(clientId)) {
+          updateProject = await projectCollectionRef.updateOne(
+            { _id: new ObjectId(projectId) },
+            { $addToSet: { linkedClients: clientId } }
+          );
+        }
+      } else {
+        updateProject = await projectCollectionRef.updateOne(
+          { _id: new ObjectId(projectId) },
+          { $set: { linkedClients: [clientId] } }
+        );
+      }
+
+      // Optionally keep track on the client side too
+      if (!Array.isArray(client.linkedProjects)) {
+        client.linkedProjects = [];
+      }
+
+      let updateClient;
+      if (!client.linkedProjects.includes(projectId)) {
+        updateClient = await clientCollectionRef.updateOne(
+          { _id: new ObjectId(clientId) },
+          { $addToSet: { linkedProjects: projectId } }
+        );
+      }
+
+      // Check update success
+      if (
+        (updateProject?.modifiedCount === 0 && multiAssign) ||
+        (updateClient?.modifiedCount === 0)
+      ) {
+        return res.status(500).json({ success: false, message: "Failed to update client or project." });
+      }
+
+      console.log(`✅ Client ${client.name} assigned to project ${projectId} successfully.`);
+      res.json({ success: true, message: `Client ${client.name} assigned to project successfully.` });
+
+    } catch (error) {
+      console.error("❌ Error updating project assignment:", error);
+      res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+    }
+  }
+);
+
+// ✅ Route to Assign User to a Project - Change this to Assign User to a Client
 router.patch("/assignUser/:projectId", authenticateToken(), async (req, res) => {
   try {
     const { userId, multiAssign = false } = req.body;
@@ -118,6 +215,35 @@ router.patch("/update-status/:projectId", authenticateToken(), async (req, res) 
   }
 });
 
+// ✅ Route to update JobBoard-specific project fields
+router.patch("/update-jobboard/:projectId", authenticateToken(), async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const jobData = req.body;
+
+    if (!ObjectId.isValid(projectId)) {
+      return res.status(400).json({ success: false, message: "Invalid Project ID." });
+    }
+
+    const collection = await projectsCollection();
+
+    const result = await collection.updateOne(
+      { _id: new ObjectId(projectId) },
+      { $set: { jobBoardData: jobData } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ success: false, message: "Project not found or no changes made." });
+    }
+
+    res.json({ success: true, message: "Job Board data updated successfully." });
+  } catch (error) {
+    console.error("❌ Error updating Job Board data:", error);
+    res.status(500).json({ success: false, message: "Failed to update Job Board fields.", error: error.message });
+  }
+});
+
+
 // ✅ Route to update specific project fields
 router.patch("/update/:id", authenticateToken(), async (req, res) => {
   try {
@@ -178,9 +304,177 @@ router.patch("/update/:id", authenticateToken(), async (req, res) => {
   }
 });
 
+// ✅ Route to Delete a Project (Admin only)
+router.delete("/delete/:id", authenticateToken(), authenticateAdmin(), async (req, res) => {
+  try {
+    const projectId = req.params.id;
+
+    if (!ObjectId.isValid(projectId)) {
+      return res.status(400).json({ success: false, message: "Invalid Project ID." });
+    }
+
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+
+    console.log(`🗑️ Deleting project: ${project.name} (${project.projectNumber})`);
+
+    // 1. Delete project files from disk using direct service call
+    try {
+      const projectRootPath = getProjectDiskPath(project, "", "AU");
+      
+      if (fs.existsSync(projectRootPath)) {
+        // Stop watching the project before deletion (if file manager is available)
+        try {
+          const { stopWatchingProject, isWatching } = require("../features/fileManager/services/diskWatcher");
+          if (isWatching(projectId)) {
+            stopWatchingProject(projectId);
+            console.log(`✅ Stopped watching project ${projectId} before deletion`);
+          }
+        } catch (watchError) {
+          console.warn("⚠️ File watcher service unavailable:", watchError.message);
+        }
+
+        // Delete the entire project directory
+        fs.rmSync(projectRootPath, { recursive: true, force: true });
+        console.log(`✅ Project files deleted from disk: ${projectRootPath}`);
+      } else {
+        console.log(`⚠️ Project folder not found on disk: ${projectRootPath}`);
+      }
+    } catch (fileError) {
+      console.warn("⚠️ File deletion failed:", fileError.message);
+      // Continue with database cleanup even if file deletion fails
+    }
+
+    // 2. Remove project references from linked users (Database cleanup)
+    if (project.linkedUsers && Array.isArray(project.linkedUsers) && project.linkedUsers.length > 0) {
+      try {
+        const userCollectionRef = await userCollection();
+        const validUserIds = project.linkedUsers
+          .filter(userId => userId && ObjectId.isValid(userId))
+          .map(userId => new ObjectId(userId));
+        
+        if (validUserIds.length > 0) {
+          await userCollectionRef.updateMany(
+            { _id: { $in: validUserIds } },
+            { $pull: { linkedProjects: projectId } }
+          );
+          console.log(`✅ Removed project reference from ${validUserIds.length} users`);
+        }
+      } catch (userError) {
+        console.error("⚠️ Error removing project from users:", userError.message);
+      }
+    }
+
+    // 3. Remove project references from linked clients (Database cleanup)
+    if (project.linkedClients && Array.isArray(project.linkedClients) && project.linkedClients.length > 0) {
+      try {
+        const clientCollectionRef = await clientCollection();
+        const validClientIds = project.linkedClients
+          .filter(clientId => clientId && ObjectId.isValid(clientId))
+          .map(clientId => new ObjectId(clientId));
+        
+        if (validClientIds.length > 0) {
+          await clientCollectionRef.updateMany(
+            { _id: { $in: validClientIds } },
+            { $pull: { linkedProjects: projectId } }
+          );
+          console.log(`✅ Removed project reference from ${validClientIds.length} clients`);
+        }
+      } catch (clientError) {
+        console.error("⚠️ Error removing project from clients:", clientError.message);
+      }
+    }
+
+    // 4. Delete the project from database
+    const result = await collection.deleteOne({ _id: new ObjectId(projectId) });
+
+    if (result.deletedCount === 0) {
+      return res.status(500).json({ success: false, message: "Failed to delete project from database." });
+    }
+
+    console.log(`✅ Project deleted successfully: ${project.name}`);
+
+    return res.json({
+      success: true,
+      message: "Project and all associated files deleted successfully.",
+      data: { deletedProject: project.name, projectNumber: project.projectNumber }
+    });
+
+  } catch (error) {
+    console.error("❌ Error deleting project:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to delete project.", 
+      error: error.message 
+    });
+  }
+});
+
 router.get("/test", (req, res) => {
   res.json({ success: true, message: "Test route is working!" });
 });
+
+// ✅ Route to Unassign Client from a Project (Admin only)
+router.patch(
+  "/unassignClient/:projectId",
+  authenticateToken(),
+  authorizeRole("Admin"),
+  async (req, res) => {
+    try {
+      const { clientId } = req.body;
+      const projectId    = req.params.projectId;
+
+      if (!clientId || !projectId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Client ID and Project ID are required." });
+      }
+
+      // Ensure valid ObjectId format
+      if (!ObjectId.isValid(clientId) || !ObjectId.isValid(projectId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid Client ID or Project ID." });
+      }
+
+      // Retrieve collections
+      const clientCollectionRef  = await clientCollection();
+      const projectCollectionRef = await projectsCollection();
+
+      // Remove clientId from project's linkedClients array
+      const projectUpdate = await projectCollectionRef.updateOne(
+        { _id: new ObjectId(projectId) },
+        { $pull: { linkedClients: clientId.toString() } }
+      );
+
+      // Remove projectId from client's linkedProjects array
+      const clientUpdate = await clientCollectionRef.updateOne(
+        { _id: new ObjectId(clientId) },
+        { $pull: { linkedProjects: projectId.toString() } }
+      );
+
+      // Check if either update succeeded
+      if (projectUpdate.modifiedCount > 0 || clientUpdate.modifiedCount > 0) {
+        return res
+          .status(200)
+          .json({ success: true, message: "Client unassigned from project successfully." });
+      }
+
+      return res
+        .status(404)
+        .json({ success: false, message: "Client or Project not found, or no changes made." });
+    } catch (error) {
+      console.error("❌ Error unassigning client from project:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Internal Server Error", error: error.message });
+    }
+  }
+);
 
 // ✅ Route to Unassign User from a Project
 router.patch("/unassignUser/:projectId", authenticateToken(), async (req, res) => {
@@ -227,45 +521,72 @@ const generateProjectNumber = async (collection) => {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const baseNumber = `${year}-${month}`;
 
-  // ✅ Ensure we're using the correct collection reference
-  const count = await collection.countDocuments({
-    projectNumber: { $regex: `^${baseNumber}` }, // ✅ Matches projects with the same year-month
-  });
+  // 1) Load all existing projectNumbers for this month
+  const docs = await collection
+    .find({ projectNumber: { $regex: `^${baseNumber}` } })
+    .project({ projectNumber: 1, _id: 0 })
+    .toArray();
 
-  return `${baseNumber}${String(count + 1).padStart(3, "0")}`;
+  // 2) Parse out the numeric suffixes
+  const usedNumbers = docs
+    .map(d => parseInt(d.projectNumber.slice(baseNumber.length), 10))
+    .filter(n => !isNaN(n));
+
+  // 3) Find the first missing integer starting from 1
+  let nextNum = 1;
+  while (usedNumbers.includes(nextNum)) {
+    nextNum++;
+  }
+
+  // 4) Zero-pad to three digits and return
+  const suffix = String(nextNum).padStart(3, "0");
+  return `${baseNumber}${suffix}`;
 };
 
-// Route to add a project
-router.post("/addProject", async (req, res) => {
+// Route to add a project (and link clients)
+router.post("/addProject", authenticateToken(), async (req, res) => {
   try {
     console.log("📩 Received Project Data:", req.body);
 
     const collection = await projectsCollection();
     const projectNumber = await generateProjectNumber(collection);
 
+    // 1) Read linkedClients from the request
+    const linkedClients = req.body.linkedClients || [];
+    const linkedUsers   = req.body.linkedUsers   || [];
+
     const newProject = {
       name: req.body.name,
       location: req.body.location,
       due_date: req.body.due_date,
       posting_date: req.body.posting_date,
-      linkedUsers: req.body.linkedUsers || [],
+      linkedClients,           // ← include this
+      linkedUsers,
       description: req.body.description,
       subTotal: req.body.subTotal || 0,
-      total: req.body.total || 0,
-      gst: req.body.gst || 0,
-      status: req.body.status || "New Lead",
-      projectNumber: projectNumber,
+      total:   req.body.total    || 0,
+      gst:     req.body.gst      || 0,
+      status:  req.body.status   || "New Lead",
+      projectNumber,
     };
 
+    // 2) Insert the project
     const result = await collection.insertOne(newProject);
+    if (!result.insertedId) throw new Error("Failed to add project.");
 
-    if (!result.insertedId) {
-      throw new Error("Failed to add project.");
+    const createdId = result.insertedId;
+    const fullProject = { ...newProject, _id: createdId };
+
+    // 3) Update each client to push this project into their linkedProjects
+    if (linkedClients.length) {
+      const clientColl = await clientCollection();
+      await clientColl.updateMany(
+        { _id: { $in: linkedClients.map((id) => new ObjectId(id)) } },
+        { $push: { linkedProjects: createdId } }
+      );
     }
 
-    // ✅ Auto-create folder structure after project creation
-    const fullProject = { ...newProject, _id: result.insertedId };
-
+    // 4) Create folder structure (unchanged)
     try {
       await createInitialProjectFolders(fullProject);
       console.log("📁 Root folder and role-protected subfolders created.");
@@ -276,9 +597,8 @@ router.post("/addProject", async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Project added successfully",
-      data: { _id: result.insertedId, ...newProject }
+      data: { _id: createdId, ...newProject },
     });
-
   } catch (error) {
     console.error("❌ Error adding project:", error);
     return res.status(500).json({
@@ -332,7 +652,6 @@ router.get("/get-projects", authenticateToken(), authenticateAdmin(), async (req
     });
   }
 });
-
 
 // Route to get projects (User)
 router.get("/get-user-projects", authenticateToken(), async (req, res) => {
@@ -437,30 +756,174 @@ router.get("/get-project/:id", authenticateToken(), async (req, res) => {
   }
 });
 
-// Route to retrieve projects by user ID
-router.get("/get-projects/:id", authenticateToken(), async (req, res) => {
-  const userId = req.params.id;
+// ===== PROJECT ALIAS SECURITY ROUTES =====
 
+/**
+ * Generate a hybrid alias for a project
+ * Format: projectNumber&obscureKey (e.g., "AR2024-001&d0b76d33892783569144ead863d774b3")
+ */
+router.post("/generate-alias/:id", authenticateToken(), async (req, res) => {
   try {
-    const collection = await projectsCollection();
-    const projects = await collection.find({ userId: new ObjectId(userId) }).toArray();
-    if (!projects.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No projects found for this user",
-      });
+    const projectId = req.params.id;
+    
+    if (!ObjectId.isValid(projectId)) {
+      return res.status(400).json({ success: false, message: "Invalid Project ID." });
     }
 
-    return res.json({
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+
+    // Generate hybrid alias: projectNumberART&obscureKey
+    const crypto = require('crypto');
+    const obscureKey = crypto.randomBytes(16).toString('hex'); // 32 character hex string
+    const projectNumber = project.projectNumber || `PROJ-${projectId.slice(-6)}`;
+    const hybridAlias = `${projectNumber}ART&${obscureKey}`;
+
+    // Update project with alias
+    await collection.updateOne(
+      { _id: new ObjectId(projectId) },
+      { $set: { alias: hybridAlias, aliasCreatedAt: new Date() } }
+    );
+
+    console.log(`🔒 Generated hybrid alias "${hybridAlias}" for project ${projectId}`);
+
+    res.json({
       success: true,
-      message: "Projects retrieved successfully",
-      data: projects,
+      message: "Hybrid alias generated successfully",
+      data: { alias: hybridAlias }
     });
-  } catch (err) {
+
+  } catch (error) {
+    console.error("❌ Error generating alias:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve projects",
-      error: err.message,
+      message: "Failed to generate alias",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Resolve a hybrid alias to get project data
+ * Supports multiple formats:
+ * - Hybrid: "projectNumber&obscureKey" (e.g., "AR2024-001&d0b76d33892783569144ead863d774b3")
+ * - Legacy random: "d0b76d33892783569144ead863d774b3" (32 char hex)
+ * - Legacy ObjectId: "507f1f77bcf86cd799439011" (24 char hex)
+ */
+router.get("/resolve-alias/:alias", authenticateToken(), async (req, res) => {
+  try {
+    const alias = req.params.alias;
+    
+    // Validate alias format
+    const isHybridAlias = alias.includes('&');
+    const isLegacyRandomAlias = /^[a-f0-9]{32}$/.test(alias);
+    const isLegacyObjectId = /^[a-f0-9]{24}$/.test(alias);
+    
+    if (!isHybridAlias && !isLegacyRandomAlias && !isLegacyObjectId) {
+      return res.status(400).json({ success: false, message: "Invalid alias format." });
+    }
+
+    const collection = await projectsCollection();
+    let project;
+
+    if (isHybridAlias) {
+      // Handle hybrid alias: projectNumber&obscureKey
+      project = await collection.findOne({ alias: alias });
+    } else if (isLegacyRandomAlias) {
+      // Handle legacy random alias (32 char hex)
+      project = await collection.findOne({ alias: alias });
+    } else if (isLegacyObjectId) {
+      // Handle legacy ObjectId (24 char hex)
+      project = await collection.findOne({ _id: new ObjectId(alias) });
+    }
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+
+    // Check user permissions
+    const user = req.user;
+    const userRole = user?.role || "User";
+    const isUserLinked = project?.linkedUsers?.includes(user?.userId || user?._id);
+
+    // Admin can access any project, Users can only access linked projects
+    if (userRole !== "Admin" && !isUserLinked) {
+      return res.status(403).json({ success: false, message: "Access denied." });
+    }
+
+    console.log(`🔓 Resolved alias "${alias}" to project ${project._id}`);
+
+    res.json({
+      success: true,
+      message: "Project retrieved successfully",
+      data: project
+    });
+
+  } catch (error) {
+    console.error("❌ Error resolving alias:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to resolve alias",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get or create hybrid alias for a project
+ * Returns existing alias if available, creates new hybrid one if needed
+ * Format: projectNumber&obscureKey
+ */
+router.get("/get-alias/:id", authenticateToken(), async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    
+    if (!ObjectId.isValid(projectId)) {
+      return res.status(400).json({ success: false, message: "Invalid Project ID." });
+    }
+
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+
+    let alias = project.alias;
+
+    // If no alias exists, or it's a legacy format, create new hybrid alias
+    const isHybridAlias = alias && alias.includes('&');
+    
+    if (!alias || !isHybridAlias) {
+      const crypto = require('crypto');
+      const obscureKey = crypto.randomBytes(16).toString('hex');
+      const projectNumber = project.projectNumber || `PROJ-${projectId.slice(-6)}`;
+      alias = `${projectNumber}ART&${obscureKey}`;
+
+      await collection.updateOne(
+        { _id: new ObjectId(projectId) },
+        { $set: { alias: alias, aliasCreatedAt: new Date() } }
+      );
+
+      console.log(`🔒 Created new hybrid alias "${alias}" for project ${projectId}`);
+    }
+
+    res.json({
+      success: true,
+      message: "Hybrid alias retrieved successfully",
+      data: { alias: alias, projectId: projectId }
+    });
+
+  } catch (error) {
+    console.error("❌ Error getting alias:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get alias",
+      error: error.message
     });
   }
 });

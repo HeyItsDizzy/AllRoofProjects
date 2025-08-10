@@ -60,5 +60,20 @@ const projectsCollection = async () => {
   }
 };
 
+const clientCollection = async () => {
+  try {
+    const database = await connectDB();
+    console.log("Accessing Clients collection");
+    //return database.collection('Clients');
+    return database.collection('clients');
+  } catch (err) {
+    console.error('Error accessing Clients collection:', err.message);
+    throw err;
+  }
+};
 
-module.exports = { userCollection, projectsCollection };
+module.exports = {
+  userCollection,
+  projectsCollection,
+  clientCollection,    // ← export it here
+};

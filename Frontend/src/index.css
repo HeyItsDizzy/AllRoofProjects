@@ -1,3 +1,96 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Mobile orientation and zoom improvements */
+@layer base {
+  html {
+    /* Prevent zoom on input focus on iOS */
+    font-size: 16px;
+    /* Improve text rendering and prevent auto-zoom */
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Prevent zoom */
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+  }
+
+  body {
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
+    /* Improve touch scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent zoom on double tap */
+    touch-action: manipulation;
+  }
+
+  /* Improve mobile interactions */
+  * {
+    /* Better touch targets and prevent zoom on tap */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Input elements - prevent zoom on focus */
+  input, textarea, select {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
+  /* Orientation change handling - PREVENT AUTO ZOOM */
+  @media screen and (orientation: landscape) {
+    html, body {
+      /* Lock zoom level during orientation change */
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      /* Ensure proper layout on landscape */
+      min-height: 100vh;
+      max-height: 100vh;
+    }
+  }
+
+  @media screen and (orientation: portrait) {
+    html, body {
+      /* Lock zoom level during orientation change */
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      min-height: 100vh;
+    }
+  }
+
+  /* Fix iOS safari viewport issues */
+  @supports (-webkit-touch-callout: none) {
+    html {
+      /* iOS Safari specific - prevent zoom */
+      -webkit-text-size-adjust: 100% !important;
+    }
+    
+    body {
+      /* iOS Safari specific fixes */
+      position: relative;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Prevent zoom on form elements */
+  @media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    textarea,
+    select {
+      font-size: 16px !important;
+      transform: scale(1);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+  }
+}

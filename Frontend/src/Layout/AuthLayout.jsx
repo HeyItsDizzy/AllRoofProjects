@@ -1,10 +1,13 @@
+// src/Layout/AuthLayout.jsx
 import { Outlet } from "react-router-dom";
+import useRouteTitle from "@/hooks/useRouteTitle";
 
 const AuthLayout = () => {
+  useRouteTitle(); // so login/register also update the tab title
+
   return (
     <div className="h-screen bg-gray-100 flex justify-center items-center">
       <div className="max-w-sm w-full bg-white p-8 rounded-lg shadow-lg">
-        {/* This is where the Login or Register page content will be rendered */}
         <Outlet />
       </div>
     </div>

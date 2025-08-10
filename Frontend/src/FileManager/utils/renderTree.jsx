@@ -54,7 +54,7 @@ export default function renderTree(
       if (key === "__meta") return null;
 
       const __meta = value?.__meta || {};
-      const folderLabel = __meta.label || key;
+      const folderLabel = __meta.label || (key === "." ? "Project Root" : key);
       const folderName = key;
 
       const currentPath = parentPath === "." ? folderName : `${parentPath}/${folderName}`;

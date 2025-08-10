@@ -1,0 +1,1 @@
+1. when company promotes or demotes a linked user that person should either have their token refreshed with the new data or face a forced log out and log in again

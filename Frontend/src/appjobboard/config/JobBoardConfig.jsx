@@ -99,7 +99,30 @@ export const jobBoardColumns = (
   {
     accessorKey: 'posting_date',
     header: props => <FilterSortHeader {...props} label="Date Received" />,
-    cell: info => formatLocalDate(info.getValue()),
+    cell: ({ row, getValue }) => {
+      const rowId = row.original._id;
+      const dateValue = getValue();
+      const [value, setValue] = useState(dateValue ? new Date(dateValue).toISOString().split('T')[0] : '');
+      
+      useEffect(() => {
+        setValue(dateValue ? new Date(dateValue).toISOString().split('T')[0] : '');
+      }, [dateValue]);
+
+      const handleChange = (e) => {
+        const newDate = e.target.value;
+        setValue(newDate);
+        updateRow(rowId, 'posting_date', newDate ? new Date(newDate).toISOString() : null);
+      };
+
+      return (
+        <input
+          type="date"
+          value={value}
+          onChange={handleChange}
+          className="border px-2 py-1 w-full text-sm"
+        />
+      );
+    },
     filterFn: 'arrIncludes',
     enableSorting: true,
     enableColumnFilter: true,
@@ -107,7 +130,30 @@ export const jobBoardColumns = (
   {
     accessorKey: 'due_date',
     header: props => <FilterSortHeader {...props} label="Date Due" />,
-    cell: info => formatLocalDate(info.getValue()),
+    cell: ({ row, getValue }) => {
+      const rowId = row.original._id;
+      const dateValue = getValue();
+      const [value, setValue] = useState(dateValue ? new Date(dateValue).toISOString().split('T')[0] : '');
+      
+      useEffect(() => {
+        setValue(dateValue ? new Date(dateValue).toISOString().split('T')[0] : '');
+      }, [dateValue]);
+
+      const handleChange = (e) => {
+        const newDate = e.target.value;
+        setValue(newDate);
+        updateRow(rowId, 'due_date', newDate ? new Date(newDate).toISOString() : null);
+      };
+
+      return (
+        <input
+          type="date"
+          value={value}
+          onChange={handleChange}
+          className="border px-2 py-1 w-full text-sm"
+        />
+      );
+    },
     filterFn: 'arrIncludes',
     enableSorting: true,
     enableColumnFilter: true,
@@ -115,7 +161,30 @@ export const jobBoardColumns = (
   {
     accessorKey: 'DateCompleted',
     header: props => <FilterSortHeader {...props} label="Date Completed" />,
-    cell: info => { const raw = info.getValue(); return raw ? formatLocalDate(raw) : "";},
+    cell: ({ row, getValue }) => {
+      const rowId = row.original._id;
+      const dateValue = getValue();
+      const [value, setValue] = useState(dateValue ? new Date(dateValue).toISOString().split('T')[0] : '');
+      
+      useEffect(() => {
+        setValue(dateValue ? new Date(dateValue).toISOString().split('T')[0] : '');
+      }, [dateValue]);
+
+      const handleChange = (e) => {
+        const newDate = e.target.value;
+        setValue(newDate);
+        updateRow(rowId, 'DateCompleted', newDate ? new Date(newDate).toISOString() : null);
+      };
+
+      return (
+        <input
+          type="date"
+          value={value}
+          onChange={handleChange}
+          className="border px-2 py-1 w-full text-sm"
+        />
+      );
+    },
     filterFn: 'arrIncludes',
     enableSorting: true,
     enableColumnFilter: true,
@@ -200,18 +269,16 @@ export const jobBoardColumns = (
     const [value, setValue] = useState(getValue() ?? '');
     useEffect(() => { setValue(getValue() ?? '') }, [getValue]);
 
-    const onBlur = () => {
-      if (value !== getValue()) {
-        updateLocal(rowId, 'PlanType', value);
-        flushEdits(rowId);
-      }
+    const handleChange = (e) => {
+      const newValue = e.target.value;
+      setValue(newValue);
+      updateRow(rowId, 'PlanType', newValue);
     };
 
     return (
       <select
         value={value}
-        onChange={e => setValue(e.target.value)}
-        onBlur={onBlur}
+        onChange={handleChange}
         className="border rounded px-2 py-1 w-full text-sm"
       >
         <option value="">— Select —</option>
@@ -241,8 +308,7 @@ export const jobBoardColumns = (
         value={qty}
         onChange={e => {
           const parsed = parseInt(e.target.value) || 0;
-          updateLocal(rowId, 'Qty', parsed);
-          flushEdits(rowId);
+          updateRow(rowId, 'Qty', parsed);
         }}
         className="border px-2 py-1 w-full text-sm"
       />

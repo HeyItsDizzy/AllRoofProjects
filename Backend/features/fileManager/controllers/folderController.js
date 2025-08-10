@@ -7,50 +7,12 @@ const { getProjectUploadPath } = require("../services/pathUtils");
 const { buildFolderTreeFromDisk } = require("../services/syncService");
 
 
+const { createInitialProjectFolders, FOLDER_ACCESS_RULES } = require("../services/folderScaffolder");
+
 //const { initMeta } = require("../services/metaUtils");
 
-// 🔒 Global root folders and access rules
-const FOLDER_ACCESS_RULES = {
-  BOQ: ["Admin", "User"],
-  Admin: ["Admin"],
-  Estimator: ["Estimator"]
-};
-
+// 🔒 Use rules from folderScaffolder
 const RootFolders = Object.keys(FOLDER_ACCESS_RULES);
-
-const createInitialProjectFolders = (project, region = "AU") => {
-  const rootPath = getProjectUploadPath(project, region);
-  const subfolders = RootFolders;
-
-  if (!fs.existsSync(rootPath)) {
-    fs.mkdirSync(rootPath, { recursive: true });
-    console.log("📁 Created root project folder:", rootPath);
-  }
-
-  const rootMeta = {
-    projectId: project._id.toString(),
-    projectNumber: project.projectNumber,
-    projectName: project.name,
-    region,
-    createdAt: new Date().toISOString(),
-    allowedRoles: FOLDER_ACCESS_RULES,
-    structure: subfolders
-  };
-
-  const rootMetaPath = path.join(rootPath, ".meta.json");
-  fs.writeFileSync(rootMetaPath, JSON.stringify(rootMeta, null, 2));
-  console.log(`📝 Root .meta.json written: ${rootMetaPath}`);
-
-  for (const folder of subfolders) {
-    const fullPath = path.join(rootPath, folder);
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true });
-      console.log(`📂 Created subfolder: ${fullPath}`);
-    }
-  }
-
-  return true;
-};
 
 const createFolder = async (req, res) => {
   try {
@@ -93,29 +55,37 @@ const deleteFolder = async (req, res) => {
   try {
     console.log("📥 Incoming folder delete request");
 
-    const { projectId, folderId } = req.params;
+    // 1) Pull in the wildcard path (captures nested folders)
+    const { projectId, path: rawPath } = req.params;
+    // 2) Decode "%2F" back into "/" for nested paths
+    const folderId = decodeURIComponent(rawPath);
 
+    // 3) Prevent removing any of your protected root folders
     if (RootFolders.includes(folderId)) {
       return res.status(403).json({ error: "Cannot delete root folders." });
     }
 
+    // 4) Fetch the project to compute its upload path
     const collection = await projectsCollection();
     const project = await collection.findOne({ _id: new ObjectId(projectId) });
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
 
-    if (!project) return res.status(404).json({ error: "Project not found" });
-
+    // 5) Build the absolute folder path and delete it
     const basePath = await getProjectUploadPath(project);
     const folderPath = path.join(basePath, folderId);
-
     fs.rmdirSync(folderPath, { recursive: true });
     console.log(`✅ Folder deleted from disk: ${folderPath}`);
 
+    // 6) Success response
     return res.status(200).json({ message: "Folder deleted successfully" });
   } catch (err) {
     console.error("🔥 Error in deleteFolder:", err);
     return res.status(500).json({ error: "Server error", details: err.message });
   }
 };
+
 
 const renameFolder = async (req, res) => {
   try {

@@ -64,11 +64,15 @@ const upload = multer({
 });
 
 //
-// 🖼 Avatar Upload (unchanged)
+// 🖼 Avatar Upload (updated for new folder structure)
 //
 const avatarStorage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/avatars/");
+    const uploadDir = "uploads/avatars/user/";
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     cb(null, `${req.user.userId}.jpg`);

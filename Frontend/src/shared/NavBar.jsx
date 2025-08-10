@@ -45,6 +45,11 @@ const NavBar = () => {
       path: "/users",
       show: isAdmin || isEstimator,
     },
+    {
+      name: "User Management",
+      path: "/user-management",
+      show: isAdmin,
+    },
   ];
 
 
@@ -52,7 +57,7 @@ const NavBar = () => {
     <li key={link.name}>
       <Link
         to={link.path}
-        className={`$ {
+        className={`${
           location.pathname.startsWith(link.path)
             ? "underline font-bold text-textBlack"
             : ""
@@ -64,9 +69,9 @@ const NavBar = () => {
   );
 
   return (
-    <div className="w-full top-0 left-0 right-0 bg-gray-100 px-0">
+    <div className="w-full bg-gray-100">
       {/* Large and medium devices */}
-      <nav className="hidden md:flex lg:flex justify-between py-2 bg-gray-100 w-[100%] mx-auto px-6 rounded-lg mt-3">
+      <nav className="hidden md:flex lg:flex justify-between py-2 bg-gray-100 w-full mx-auto px-6">
         <div>
           <a href="https://www.allrooftakeoffs.com" target="_blank" rel="noopener noreferrer">
             <img src={logo} alt="Logo" className="w-36" />
@@ -99,10 +104,16 @@ const NavBar = () => {
       </nav>
 
       {/* Small devices */}
-      <nav className="flex justify-between items-center p-2 md:hidden lg:hidden bg-gray-100 w-full px-4">
-        <div>
-          <IoIosMenu onClick={showDrawer} className="text-2xl" />
-          <Drawer title="Menu" placement="right" width={300} onClose={onClose} open={open}>
+      <nav className="flex justify-between items-center p-2 md:hidden lg:hidden bg-gray-100 w-full px-2 sm:px-4 min-h-[60px]">
+        <div className="flex-shrink-0">
+          <IoIosMenu onClick={showDrawer} className="text-2xl cursor-pointer" />
+          <Drawer 
+            title="Menu" 
+            placement="right" 
+            width={typeof window !== 'undefined' ? Math.min(300, window.innerWidth * 0.8) : 300}
+            onClose={onClose} 
+            open={open}
+          >
             <div className="h-fit text-center gap-6 text-textGray">
               <ul className="text-semiBold space-y-4">
                 {navLinks.filter((link) => link.show).map((link) => renderLink(link))}
@@ -111,17 +122,19 @@ const NavBar = () => {
           </Drawer>
         </div>
 
-        <div>
+        <div className="flex-shrink-0 flex justify-center flex-1 max-w-[120px] sm:max-w-[140px]">
           <a href="https://www.allrooftakeoffs.com" target="_blank" rel="noopener noreferrer">
-            <img src={logo} alt="Logo" className="w-32" />
+            <img src={logo} alt="Logo" className="w-24 sm:w-32 h-auto object-contain" />
           </a>
         </div>
 
-        <div className="flex gap-3 h-fit items-center">
-          <button>
-            <CiBellOn className="w-10 h-10 p-2 border-2 border-gray-400 rounded-full" />
+        <div className="flex gap-2 sm:gap-3 h-fit items-center flex-shrink-0">
+          <button className="flex-shrink-0">
+            <CiBellOn className="w-8 h-8 sm:w-10 sm:h-10 p-1.5 sm:p-2 border-2 border-gray-400 rounded-full" />
           </button>
-          <ProfileDrawer />
+          <div className="flex-shrink-0">
+            <ProfileDrawer />
+          </div>
         </div>
       </nav>
     </div>

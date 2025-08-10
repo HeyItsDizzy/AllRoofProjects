@@ -17,7 +17,6 @@ const UploadButton = ({
   positionClass = "",
 }) => {
 const currentLabel = selectedPath === "." ? "Project Root" : selectedPath?.split("/").pop();
-console.log("1.[UPBUTTON] selectedPath from const currentLabel:", selectedPath);
 
 const { uploadFiles } = useUploadManager({
   projectId,
@@ -29,8 +28,6 @@ const { uploadFiles } = useUploadManager({
   ghostFilesByPath,
   liveFiles,
 });
-
-console.log("2.[UPBUTTON] selectedPath from const{uploadFiles}:", selectedPath);
 
 
   return (

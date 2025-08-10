@@ -16,7 +16,9 @@ const ProfileDrawer = () => {
     navigate(path);
   };
 
-  const showDrawer = () => setOpen(true);
+  const showDrawer = () => {
+    setOpen(true);
+  };
   const onClose = () => setOpen(false);
   const navigate = useNavigate();
   const handleLogOut = () => {
@@ -29,13 +31,13 @@ const ProfileDrawer = () => {
       <div onClick={showDrawer} className="flex items-center gap-1 cursor-pointer">
         <Avatar
           key={user?.avatar} // 🔥 force re-render when avatar changes
-          name={user?.company || user?.name}
+          name={user?.name}
           avatarUrl={user?.avatar}
           size="md"
         />
 
         <div className="hidden md:block lg:block">
-          <h3 className="font-bold">{user?.company || user?.name}</h3>
+          <h3 className="font-bold">{user?.name || user?.name}</h3>
           <p className="text-textGray">{user?.email}</p>
         </div>
         <IconMenuDots />
@@ -70,14 +72,14 @@ const ProfileDrawer = () => {
           <div className="flex justify-center mt-4">
             <Avatar
               key={user?.avatar} // 🔥 force re-render when avatar changes
-              name={user?.company || user?.name}
+              name={user?.name || user?.name}
               avatarUrl={user?.avatar}
               size="xl"
             />
           </div>
 
           <h1 className="text-xl font-semibold mt-4 text-textBlack">
-            {user?.company || user?.name}
+            {user?.name || user?.name}
           </h1>
           <p className="text-textGray text-sm mt-1">{user?.email}</p>
 
@@ -106,29 +108,46 @@ const ProfileDrawer = () => {
               onClick={() => handleNavClick("/profile")}
               className="block w-full text-left hover:underline text-primary font-medium"
             >
-              👤 Profile
+              {user?.companyAdmin ? "👤 My Profile / User Profiles" : "👤 My Profile"}
             </button>
           </li>
+
+          {user?.companyAdmin && (
+            <li>
+              <button
+                onClick={() => handleNavClick("/company-profile")}
+                className="block w-full text-left hover:underline text-primary font-medium"
+              >
+                🏢 Company Profile
+              </button>
+            </li>
+          )}
+
           <li>
             <button
-              onClick={() => handleNavClick("/templates")}
-              className="block w-full text-left hover:underline text-primary font-medium"
+              disabled
+              title="Coming soon"
+              className="block w-full text-left text-gray-400 font-medium cursor-not-allowed"
             >
               🧩 Templates
             </button>
           </li>
+
           <li>
             <button
-              onClick={() => handleNavClick("/settings")}
-              className="block w-full text-left hover:underline text-primary font-medium"
+              disabled
+              title="Coming soon"
+              className="block w-full text-left text-gray-400 font-medium cursor-not-allowed"
             >
               ⚙️ Settings
             </button>
           </li>
+
           <li>
             <button
-              onClick={() => handleNavClick("/help")}
-              className="block w-full text-left hover:underline text-primary font-medium"
+              disabled
+              title="Coming soon"
+              className="block w-full text-left text-gray-400 font-medium cursor-not-allowed"
             >
               🆘 Support / Help
             </button>

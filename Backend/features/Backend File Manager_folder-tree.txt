@@ -1,5 +1,0 @@
-  fileManager
-    controllers
-    models
-    routes
-    services

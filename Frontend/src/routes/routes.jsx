@@ -1,36 +1,42 @@
 import { createBrowserRouter } from "react-router-dom";
-import RootRedirect from "../pages/RootRedirect"; 
-import UserTable from "../pages/userTable";
-import NavBarPreview from "../pages/NavBarPreview"; 
-import Login from "../pages/login";
-import Register from "../pages/register";
-import AllClientsTable from "../pages/AllClientsTable";
-import AdminProjectTable from "../pages/AdminProjectTable";
-import AssignedProjects from "../pages/AssignedProjects";
-import AddNewProjects from "../pages/AddNewProjects";
-import ProjectsView from "../pages/ProjectsView";
-import MyProjects from "../pages/MyProjects";
-import UserTableDetails from "../Components/UserTableDetails";
+// ─── Layouts & Route Guards ─────────────────────────────────────────────────
+import User from "../Layout/User";
 import AdminRoutes from "./AdminRoutes";
 import PrivateRoutes from "./PrivateRoutes";
-import User from "../Layout/user";
-import Forbidden from "../pages/403Forbidden"; 
-import NotFound from "../pages/404NotFound"; // ✅ Import the 404 Page
-import Profile from "../pages/Profile"; // ✅ Add at the top
-import ResetPassword from "../pages/ResetPassword";   // Placeholder page
+// ─── Authentication & Public Pages ────────────────────────────────────────────
+import Login from "../pages/Login";
+import Register from "../pages/Register";
+import ResetPassword from "../pages/ResetPassword";
+import NotFound from "../pages/404NotFound";
+import Forbidden from "../pages/403Forbidden";
+// ─── Onboarding & Utilities ────────────────────────────────────────────────────
+import RootRedirect from "../pages/RootRedirect";
+import NavBarPreview from "../pages/NavBarPreview";
 import IconGallery from "../pages/IconGallery";
+// ─── User-Scoped Pages ─────────────────────────────────────────────────────────
+import MyProjects from "../pages/MyProjects";
+import Profile from "../pages/Profile";
+import CompanyChoice from "../pages/CompanyChoice";
+import CompanyProfile from "../pages/CompanyProfile";
 import JobBoard from "../pages/JobBoard";
-import CompanyChoice   from "../pages/CompanyChoice";
-import CompanyProfile  from "../pages/CompanyProfile";
-
-
-
+// ─── Admin-Scoped Pages ────────────────────────────────────────────────────────
+import AllClientsTable from "../pages/AllClientsTable";
+import AllProjects       from "../pages/AllProjects";
+import AddNewProjects    from "../pages/AddNewProjects";
+import AssignedProjects  from "../pages/AssignedProjects";
+import ProjectsView      from "../pages/ProjectsView";
+import UserManagement    from "../pages/UserManagement";
+// ─── (Legacy / Unused) ─────────────────────────────────────────────────────────
+// import UserTable from "../pages/UserTable";
+// import UserTableDetails from "../components/UserTableDetails";
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <User />, 
+    element: <User />,
+    handle: { title: "Home" },
     children: [
+      // ─── Onboarding & Utilities ────────────────────────────────────────────────
       {
         path: "/",
         element: (
@@ -38,22 +44,7 @@ export const router = createBrowserRouter([
             <RootRedirect />
           </PrivateRoutes>
         ),
-      },
-      {
-        path: "/forbidden",
-        element: (
-          <PrivateRoutes>
-            <Forbidden />
-          </PrivateRoutes>
-        ),
-      },
-      {
-        path: "/MyProjects",
-        element: (
-          <PrivateRoutes>
-            <MyProjects />
-          </PrivateRoutes>
-        ),
+        handle: { title: "Redirect" },
       },
       {
         path: "/icons",
@@ -62,54 +53,29 @@ export const router = createBrowserRouter([
             <IconGallery />
           </PrivateRoutes>
         ),
+        handle: { title: "Icon Gallery" },
       },
+
+      // ─── Authentication & Access Control ───────────────────────────────────────
       {
-        path: "/users",
-        element: (
-          <AdminRoutes>
-            <AllClientsTable />
-          </AdminRoutes>
-        ),
-      },
-      {
-        path: "/projects",
-        element: (
-          <AdminRoutes>
-            <AdminProjectTable />
-          </AdminRoutes>
-        ),
-      },
-      {
-        path: "/addNewProject",
+        path: "/forbidden",
         element: (
           <PrivateRoutes>
-            <AddNewProjects />
+            <Forbidden />
           </PrivateRoutes>
         ),
+        handle: { title: "Forbidden" },
       },
+
+      // ─── User-Scoped Pages ─────────────────────────────────────────────────────
       {
-        path: "/project/:id",
+        path: "/MyProjects",
         element: (
           <PrivateRoutes>
-            <ProjectsView />
+            <MyProjects />
           </PrivateRoutes>
         ),
-      },
-      {
-        path: "/userProjects/:id",
-        element: (
-          <PrivateRoutes>
-            <UserTableDetails />
-          </PrivateRoutes>
-        ),
-      },
-      {
-        path: "/assignedProjects/:id",
-        element: (
-          <AdminRoutes>
-            <AssignedProjects />
-          </AdminRoutes>
-        ),
+        handle: { title: "My Projects" },
       },
       {
         path: "/profile",
@@ -118,6 +84,7 @@ export const router = createBrowserRouter([
             <Profile />
           </PrivateRoutes>
         ),
+        handle: { title: "Profile" },
       },
       {
         path: "/company-choice",
@@ -126,6 +93,7 @@ export const router = createBrowserRouter([
             <CompanyChoice />
           </PrivateRoutes>
         ),
+        handle: { title: "Choose Company" },
       },
       {
         path: "/company-profile",
@@ -134,7 +102,8 @@ export const router = createBrowserRouter([
             <CompanyProfile />
           </PrivateRoutes>
         ),
-      },      
+        handle: { title: "Company Profile" },
+      },
       {
         path: "/job-board",
         element: (
@@ -142,28 +111,106 @@ export const router = createBrowserRouter([
             <JobBoard />
           </PrivateRoutes>
         ),
+        handle: { title: "Job Board" },
       },
+
+      // ─── Admin-Scoped Pages ────────────────────────────────────────────────────
+      {
+        path: "/users",
+        element: (
+          <AdminRoutes>
+            <AllClientsTable />
+          </AdminRoutes>
+        ),
+        handle: { title: "All Clients" },
+      },
+      {
+        path: "/user-management",
+        element: (
+          <AdminRoutes>
+            <UserManagement />
+          </AdminRoutes>
+        ),
+        handle: { title: "User Management" },
+      },
+      {
+        path: "/projects",
+        element: (
+          <AdminRoutes>
+            <AllProjects />
+          </AdminRoutes>
+        ),
+        handle: { title: "Admin Projects" },
+      },
+      {
+        path: "/addNewProject",
+        element: (
+          <PrivateRoutes>
+            <AddNewProjects />
+          </PrivateRoutes>
+        ),
+        handle: { title: "Add New Project" },
+      },
+      {
+        path: "/assignedProjects/:id",
+        element: (
+          <AdminRoutes>
+            <AssignedProjects />
+          </AdminRoutes>
+        ),
+        handle: { title: "Assigned Projects" },
+      },
+      {
+        path: "/project/:alias",
+        element: (
+          <PrivateRoutes>
+            <ProjectsView />
+          </PrivateRoutes>
+        ),
+        handle: { title: "Project Details" },
+      },
+
+      // ─── (Legacy / Unused) ─────────────────────────────────────────────────────
+      {/*
+        path: "/userProjects/:id",
+        element: (
+          <PrivateRoutes>
+            <UserTableDetails />
+          </PrivateRoutes>
+        ),
+        handle: { title: "User Projects" },
+      */},
     ],
   },
+
+  // ─── Public Routes (Outside User Layout) ──────────────────────────────────────
   {
     path: "/navbar-preview",  
     element: <NavBarPreview />,
+    handle: { title: "NavBar Preview" },
   },
+
+  // ─── Authentication & Public Pages ────────────────────────────────────────────
   {
     path: "/register",
     element: <Register />,
+    handle: { title: "Register" },
   },
   {
     path: "/login",
     element: <Login />,
+    handle: { title: "Login" },
   },
   {
     path: "/reset-password/:token",
     element: <ResetPassword />,
+    handle: { title: "Reset Password" },
   },
-  
+
+  // ─── Error Pages ───────────────────────────────────────────────────────────────
   {
-    path: "*", // ✅ This catches any unmatched routes (404)
+    path: "*",
     element: <NotFound />,
+    handle: { title: "404 Not Found" },
   },
 ]);

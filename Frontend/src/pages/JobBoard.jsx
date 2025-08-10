@@ -52,7 +52,7 @@ const JobBoard = () => {
       .catch(err => console.error("Failed to fetch clients:", err));
   }, [axiosSecure]);
 
-// Fetch jobs and derive months (same as AdminProjectTable)
+// Fetch jobs and derive months (same as AllProjects)
 useEffect(() => {
   const fetchJobs = async () => {
     setLoadingJobs(true);

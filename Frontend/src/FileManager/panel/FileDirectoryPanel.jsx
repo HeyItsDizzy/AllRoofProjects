@@ -1,11 +1,11 @@
-// FileDirectoryPanel.jsx
-import { useState, useRef, useEffect } from "react";
+// src/FileManager/panel/FileDirectoryPanel.jsx
+import { useState, useRef, useEffect , useContext} from "react";
 import Swal from '@/shared/swalConfig';
 import FolderSidebar from "./FolderSidebar";
 import FolderContents from "./FolderContents";
-import { getSubfoldersAtPath, isVisibleFolderKey, renameFolderPath, getLiveFileNames } from "../utils/FMFunctions";
+import { getSubfoldersAtPath, isVisibleFolderKey, renameFolderPath, getLiveFileNames, downloadToZIP } from "../utils/FMFunctions";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";           
-import { IconDelete, IconSidebarMenu  } from "@/shared/IconSet.jsx"; 
+import { IconDelete, IconSidebarMenu, IconDownload  } from "@/shared/IconSet.jsx"; 
 import UploadButton from "@/FileManager/components/UploadButton";
 
 const FileDirectoryPanel = ({
@@ -46,30 +46,44 @@ const FileDirectoryPanel = ({
  const [uiDiskFilesByPath, setUiDiskFilesByPath] = useState({});
 
 
+  // ─── Build contents based on meta.structure & allowedRoles ─────────────
   const rawSubfolders = getSubfoldersAtPath(folderTree, normalizedSelectedPath) || {};
-  const diskFiles = rawSubfolders?.__files || [];
+  const allKeys = Object.keys(rawSubfolders).filter((k) => k !== "__meta" && k !== "__files");
 
-    const liveFiles = getLiveFileNames({
-    selectedPath: normalizedSelectedPath,
-    ghostFilesByPath,
-    diskFileNames: diskFiles,
+  // For root level, only show folders that are in meta.structure AND allowed for this role
+  // For non-root levels, show all folders except those starting with "."
+  const allowedFolders = allKeys.filter((name) => {
+    // Always hide dot folders
+    if (name.startsWith(".")) return false;
+    
+    // For root level (selectedPath === "."), use strict ACL
+    if (normalizedSelectedPath === ".") {
+      if (!meta.structure.includes(name)) return false;
+      return (meta.allowedRoles[name] || []).includes(userRole);
+    }
+    
+    // For non-root levels, show all folders (user-created folders should be visible)
+    return true;
   });
 
+  // Rehydrate currentSubfolders as an object for FolderContents
   const currentSubfolders = Object.fromEntries(
-    Object.entries(rawSubfolders).filter(([key]) => key !== "__meta")
+    allowedFolders.map((name) => [name, rawSubfolders[name]])
   );
 
-console.log("🗂️ [FDPANEL] selectedPath:", normalizedSelectedPath);
+
+/*console.log("🗂️ [FDPANEL] selectedPath:", normalizedSelectedPath);
 console.log("🗂️ [FDPANEL] folderNode/rawSubfolders:", rawSubfolders);
 console.log("🗂️ [FDPANEL] diskFiles:", diskFiles);
 console.log("🗂️ [FDPANEL] setUiDiskFilesByPath:", uiDiskFilesByPath);
 console.log("🗂️ [FDPANEL] ghostFilesByPath:", ghostFilesByPath[normalizedSelectedPath]);
-console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);
+console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
 
   const handleRename = async (path) => {
     const oldName = path.split("/").pop();
     const parentPath = path.split("/").slice(0, -1).join("/") || ".";
-    const protectedRootFolders = ["Admin", "BOQ", "Estimator"];
+    // root-level folders that no non-Admin may delete:
+    const protectedRootFolders = ["Admin", "BOQ", "Estimator", "Scope"];
     const isRootLevel = parentPath === ".";
 
     if (path === "." || (isRootLevel && protectedRootFolders.includes(oldName))) {
@@ -105,14 +119,21 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);
   const handleDelete = async (path) => {
     const folderName = path.split("/").pop();
     const parentPath = path.split("/").slice(0, -1).join("/") || ".";
-    const protectedRootFolders = ["Admin", "BOQ", "Estimator"];
     const isRootLevel = parentPath === ".";
 
-    if (path === "." || (isRootLevel && protectedRootFolders.includes(folderName))) {
+   // Only these core root folders are ever non-deletable:
+   const protectedRoots = ["BOQ", "Admin", "Estimator", "Scope"];
+
+    // 2) Block deleting the root itself, or any root folder this role lacks access to
+   if (
+     path === "." ||
+     (isRootLevel && protectedRoots.includes(folderName) && userRole !== "Admin")
+   ) {
       await Swal.fire("Restricted", `Cannot delete ${folderName}`, "warning");
       return;
     }
 
+    // 3) Confirm deletion
     const confirm = await Swal.fire({
       icon: "warning",
       title: `Delete "${folderName}"?`,
@@ -120,11 +141,13 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);
       showCancelButton: true,
       confirmButtonText: "Yes, delete",
     });
-
     if (!confirm.isConfirmed) return;
 
+    // 4) Perform delete
     try {
-      await axiosSecure.delete(`/files/${projectId}/folders/${encodeURIComponent(path)}`);
+      await axiosSecure.delete(
+        `/files/${projectId}/folders/${encodeURIComponent(path)}`
+      );
       removeTempFolder(folderName, parentPath);
       Swal.fire("Deleted", `"${folderName}" has been removed.`, "success");
     } catch (err) {
@@ -132,6 +155,7 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);
       Swal.fire("Error", "Failed to delete folder", "error");
     }
   };
+
 
 useEffect(() => {
   const rawSubfolders = getSubfoldersAtPath(folderTree, normalizedSelectedPath) || {};
@@ -160,159 +184,164 @@ useEffect(() => {
   if (loadingFolders) return <div className="p-4 text-gray-500 text-sm italic">📂 Loading folder structure...</div>;
   if (!folderTree?.["."] || Object.keys(folderTree["."]).filter(k => k !== "__meta").length === 0)
     return <div className="p-4 text-sm text-center text-gray-500">🚫 No folders or files to display.</div>;
-// 👇 INSERT THIS BLOCK IMMEDIATELY AFTER THE LOADING CHECKS
 
-
-
-return (
-  <div className="flex flex-col min-h-[400px] border rounded-md overflow-hidden bg-white relative">
-
-    {/* Mobile-only top bar with menu button and download button */}
-    <div className="flex items-center gap-3 px-3 py-2 border-b bg-white sm:hidden">
-      <button
-        aria-label="Open Folders"
-        onClick={() => setIsDrawerOpen(true)}
-        className="p-1"
-      >
-        <IconSidebarMenu className="text-3xl" />
-      </button>
-      <span className="font-semibold text-lg truncate flex-1">
-        {normalizedSelectedPath === '.' ? 'Project Root' : normalizedSelectedPath}
-      </span>
-      {/* Download ZIP Button */}
-      {folderContents?.[normalizedSelectedPath]?.__files?.length > 0 && (
+  return (
+    <div className="flex flex-col min-h-[400px] border rounded-md overflow-hidden bg-white relative">
+      {/* Mobile-only top bar with menu button and current folder */}
+      <div className="flex items-center gap-3 px-3 py-2 border-b bg-white sm:hidden">
         <button
-          title={`Download ${normalizedSelectedPath} as ZIP`}
-          aria-label={`Download ${normalizedSelectedPath} as ZIP`}
-          className="border border-green-500 text-green-600 px-3 py-1 rounded-md cursor-pointer flex items-center text-sm h-[32px] hover:bg-green-200 transition"
-          onClick={() => {
-            // TODO: Replace with your download handler function
-            // Example: handleDownloadZip(normalizedSelectedPath)
-          }}
+          aria-label={isDrawerOpen ? "Close Folders Menu" : "Open Folders Menu"}
+          onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+          className="p-2 rounded-md hover:bg-gray-100 transition-colors"
         >
-          {/* Use your own SVG or icon component */}
-          <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" className="text-green-500 mr-1" height="22" width="22" xmlns="http://www.w3.org/2000/svg"><path fill="none" d="M0 0h24v24H0z"></path><path d="M18 15v3H6v-3H4v3c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-3h-2zm-1-4-1.41-1.41L13 12.17V4h-2v8.17L8.41 9.59 7 11l5 5 5-5z"></path></svg>
-          {normalizedSelectedPath.split('/').pop()}
+          <IconSidebarMenu className="text-xl text-gray-700" />
         </button>
-      )}
-    </div>
+        <div className="flex-1 min-w-0">
+          <span className="font-semibold text-sm text-gray-800 truncate block">
+            📁 {normalizedSelectedPath === '.' ? 'Project Root' : normalizedSelectedPath.split('/').pop()}
+          </span>
+          <span className="text-xs text-gray-500">
+            Tap menu to navigate folders
+          </span>
+        </div>
+        {/* Download ZIP Button */}
+        <button
+          title={`Download ${normalizedSelectedPath === '.' ? 'Project Root' : normalizedSelectedPath.split('/').pop()} as ZIP`}
+          aria-label="Download as ZIP"
+          className="border border-green-500 text-green-600 px-2 py-1 rounded-md text-xs hover:bg-green-50 transition-colors flex items-center gap-1"
+          onClick={() => downloadToZIP({ axiosSecure, selectedPath: normalizedSelectedPath, projectId })}
+        >
+          <IconDownload size={16} className="text-green-500" />
+          ZIP
+        </button>
+      </div>
 
-    <div className="relative flex flex-1 overflow-hidden">
-      {/* Sidebar Desktop */}
-      <div className="hidden sm:flex w-1/3 bg-gray-50 border-r flex-col justify-between">
-        <div className="p-4 overflow-y-auto">
-          <FolderSidebar
-            folderTree={folderTree}
-            folders={folderList}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Sidebar Desktop */}
+        <div className="hidden sm:flex w-1/3 bg-gray-50 border-r flex-col justify-between">
+          <div className="p-4 overflow-y-auto">
+           <FolderSidebar
+             folderTree={folderTree}
+             meta={meta}
+             userRole={userRole}
+             selectedPath={normalizedSelectedPath}
+             setSelectedPath={setSelectedPath}
+             addTempUIFolder={addTempUIFolder}
+             removeTempFolder={removeTempFolder}
+             createFolder={createFolder}
+             editable={editable}
+             handleRename={handleRename}
+             handleDelete={handleDelete}
+             setNewFolderName={setNewFolderName}
+             newFolderName={newFolderName}
+           />
+          </div>
+        </div>
+
+        {/* Sidebar Drawer Mobile - CONTAINED WITHIN PANEL */}
+        <div 
+          className={`sm:hidden bg-gray-50 border-r flex-col transition-all duration-300 ease-in-out overflow-hidden ${
+            isDrawerOpen ? 'w-72 flex' : 'w-0'
+          }`}
+        >
+          {isDrawerOpen && (
+            <div className="flex flex-col h-full min-w-0">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between p-3 border-b bg-gray-100 flex-shrink-0">
+                <h3 className="font-semibold text-sm text-gray-800">Folders</h3>
+                <button
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="p-1.5 rounded-md hover:bg-gray-200 transition-colors flex-shrink-0"
+                  aria-label="Close menu"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {/* Drawer Content */}
+              <div className="flex-1 overflow-y-auto p-3">
+                <FolderSidebar
+                  folderTree={folderTree}
+                  folders={folderList}
+                  selectedPath={normalizedSelectedPath}
+                  setSelectedPath={(path) => {
+                    setSelectedPath(path);
+                    setIsDrawerOpen(false); // Close drawer when folder is selected
+                  }}
+                  newFolderName={newFolderName}
+                  setNewFolderName={setNewFolderName}
+                  userRole={userRole}
+                  folderListRef={folderListRef}
+                  loadingFolders={loadingFolders}
+                  addTempUIFolder={addTempUIFolder}
+                  removeTempFolder={removeTempFolder}
+                  createFolder={createFolder}
+                  meta={meta}
+                  editable={editable}
+                  handleRename={handleRename}
+                  handleDelete={handleDelete}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 p-3 overflow-y-auto min-w-0">
+          <FolderContents
             selectedPath={normalizedSelectedPath}
+            subfolders={currentSubfolders}
+            folderTree={folderTree}
             setSelectedPath={setSelectedPath}
-            newFolderName={newFolderName}
-            setNewFolderName={setNewFolderName}
-            userRole={userRole}
-            folderListRef={folderListRef}
-            loadingFolders={loadingFolders}
-            addTempUIFolder={addTempUIFolder}
-            removeTempFolder={removeTempFolder}
-            createFolder={createFolder}
-            meta={meta}
+            setIsEditModalOpen={setIsEditModalOpen}
+            onDropFiles={onDropFiles}
+            axiosSecure={axiosSecure}
+            projectId={projectId}
             editable={editable}
-            handleRename={handleRename}
-            handleDelete={handleDelete}
+            files={files}
+            folderContents={folderContents}
+            ghostFilesByPath={ghostFilesByPath}
+            setGhostFilesByPath={setGhostFilesByPath}
+            setFiles={setFiles}
           />
         </div>
       </div>
 
-      {/* Sidebar Drawer Mobile - CONTAINED ONLY TO FILEDIRECTORY PANEL */}
-      {isDrawerOpen && (
-        <div
-          className="absolute inset-0 z-40 bg-black/20 sm:hidden"
-          style={{ borderRadius: 'inherit' }}
-          onClick={() => setIsDrawerOpen(false)}
-          aria-label="Close folder drawer"
-        >
-          <aside
-            className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl p-4 z-50"
-            style={{ borderTopLeftRadius: 'inherit', borderBottomLeftRadius: 'inherit' }}
-            onClick={e => e.stopPropagation()}
+      {/* Footer */}
+      <div className="border-t p-3 bg-white flex justify-between items-center">
+        {editable && (
+          <div
+            onDrop={(e) => {
+              e.preventDefault();
+              const payload = e.dataTransfer.getData("application/json");
+              if (!payload) return;
+              const { paths } = JSON.parse(payload);
+              handleDelete(paths);
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            className="flex items-center gap-2 bg-gray-100 rounded-lg shadow px-3 py-1 border border-gray-300 text-gray-600 cursor-pointer"
           >
-            <FolderSidebar
-              folderTree={folderTree}
-              folders={folderList}
-              selectedPath={normalizedSelectedPath}
-              setSelectedPath={setSelectedPath}
-              newFolderName={newFolderName}
-              setNewFolderName={setNewFolderName}
-              userRole={userRole}
-              folderListRef={folderListRef}
-              loadingFolders={loadingFolders}
-              addTempUIFolder={addTempUIFolder}
-              removeTempFolder={removeTempFolder}
-              createFolder={createFolder}
-              meta={meta}
-              editable={editable}
-              handleRename={handleRename}
-              handleDelete={handleDelete}
-            />
-          </aside>
-        </div>
-      )}
+            <IconDelete size={26} />
+            <span className="font-semibold">Drop here to Delete</span>
+          </div>
+        )}
 
-      {/* Main Content */}
-      <div className="flex-1 p-3 overflow-y-auto">
-        <FolderContents
+        <UploadButton
+          key={`upload-${normalizedSelectedPath}`}
           selectedPath={normalizedSelectedPath}
-          subfolders={currentSubfolders}
-          folderTree={folderTree}
-          setSelectedPath={setSelectedPath}
-          setIsEditModalOpen={setIsEditModalOpen}
-          onDropFiles={onDropFiles}
-          axiosSecure={axiosSecure}
           projectId={projectId}
-          editable={editable}
-          files={files}
-          folderContents={folderContents}
-          ghostFilesByPath={ghostFilesByPath}
-          setGhostFilesByPath={setGhostFilesByPath}
+          axiosSecure={axiosSecure}
           setFiles={setFiles}
+          setGhostFilesByPath={setGhostFilesByPath}
+          liveFiles={files}
+          uploadEnabled={uploadEnabled}
+          ghostFilesByPath={ghostFilesByPath}
         />
       </div>
     </div>
-
-    {/* Footer */}
-    <div className="border-t p-3 bg-white flex justify-between items-center">
-      {editable && (
-        <div
-          onDrop={(e) => {
-            e.preventDefault();
-            const payload = e.dataTransfer.getData("application/json");
-            if (!payload) return;
-            const { paths } = JSON.parse(payload);
-            handleDelete(paths);
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          className="flex items-center gap-2 bg-gray-100 rounded-lg shadow px-3 py-1 border border-gray-300 text-gray-600 cursor-pointer"
-        >
-          <IconDelete size={26} />
-          <span className="font-semibold">Drop here to Delete</span>
-        </div>
-      )}
-
-      <UploadButton
-        key={`upload-${normalizedSelectedPath}`}
-        selectedPath={normalizedSelectedPath}
-        projectId={projectId}
-        axiosSecure={axiosSecure}
-        setFiles={setFiles}
-        setGhostFilesByPath={setGhostFilesByPath}
-        liveFiles={files}
-        uploadEnabled={uploadEnabled}
-        ghostFilesByPath={ghostFilesByPath}
-      />
-    </div>
-  </div>
-);
-
-
+  );
 };
 
 export default FileDirectoryPanel;
