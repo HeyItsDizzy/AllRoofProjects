@@ -2,16 +2,19 @@
 /* PRODUCTION READY*/
 import { Button } from "antd";
 import { useEffect, useRef, useState, useContext, useCallback } from "react";
-import { IconBackArrow, IconDownload, IconFolder, IconDelete } from "../shared/IconSet.jsx";
+import { IconBackArrow, IconDownload, IconFolder, IconDelete } from "@/shared/IconSet.jsx";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
-import AddressInput from "../Components/AddressInput";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
+import AddressInput from "../components/AddressInput";
 import Swal from '@/shared/swalConfig';
 import { AuthContext } from "../auth/AuthProvider";
 import FileDirectoryPanel from "@/FileManager/panel/FileDirectoryPanel";
 import FileDropModal from "@/FileManager/components/FileDropModal";
 import { useFolderManager } from "@/FileManager/hooks/useFolderManager";
 import FolderPanelWrapper from "@/FileManager/shared/FolderPanelWrapper";
+import EstimateCompleteModal from "@/modals/emails/jobboard/EstimateCompleteModal";
+import ScopeRequestDropZone from "../components/ScopeRequestDropZone";
+import { normalizeProjectName as normalizeProjectNameUtil } from '../utils/projectNameNormalizer';
 
 // Constants
 const DEFAULT_USER_ROLE = "User";
@@ -36,8 +39,10 @@ const ProjectsView = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState([]);
   const [showFolderModal, setShowFolderModal] = useState(false);
+  const [showTakeoffModal, setShowTakeoffModal] = useState(false);
   const [sharedFiles, setSharedFiles] = useState([]);
   const [sharedGhosts, setSharedGhosts] = useState({});
+  const [isGhostInitialized, setIsGhostInitialized] = useState(false);
   
   // UI state management
   const [folderPanelRefreshKey, setFolderPanelRefreshKey] = useState(0);
@@ -67,6 +72,56 @@ const ProjectsView = () => {
   const isEditingAllowed = isEditing && (userRole === "Admin" || (userRole === "User" && isUserLinked));
   const isEstimatorEditingAllowed = isEditing && userRole === "Estimator";
   
+  // Handle live file changes by updating ghost file system
+  const handleFileChange = useCallback((changeData) => {
+    console.log('🔥 handleFileChange called with:', changeData);
+    
+    const { type, fileName, relativePath } = changeData;
+    
+    // Extract the folder path from the file's relative path
+    const pathParts = relativePath.split('/');
+    const folderPath = pathParts.slice(0, -1).join('/') || '.';
+    
+    console.log(`🔥 Live file update: ${type} "${fileName}" in folder "${folderPath}"`);
+    
+    setSharedGhosts(prev => {
+      console.log(`🔥 Current sharedGhosts state before update:`, prev);
+      const currentFiles = prev[folderPath] || [];
+      console.log(`🔥 Current files in "${folderPath}":`, currentFiles);
+      console.log(`🔥 Processing ${type} event for file: "${fileName}"`);
+      
+      let newState = { ...prev };
+      
+      if (type === 'added') {
+        // Add file to ghost system if not already present
+        if (!currentFiles.includes(fileName)) {
+          console.log(`🔥 Adding file "${fileName}" to ghost system`);
+          newState[folderPath] = [...currentFiles, fileName];
+        } else {
+          console.log(`🔥 File "${fileName}" already exists in ghost system`);
+          return prev; // No changes needed
+        }
+      } else if (type === 'removed' || type === 'deleted') {
+        // Remove file from ghost system (handle both 'removed' and 'deleted' event types)
+        console.log(`🔥 Removing file "${fileName}" from ghost system`);
+        newState[folderPath] = currentFiles.filter(f => f !== fileName);
+      } else if (type === 'modified') {
+        // For modified files, ensure file is in the list (in case it was just created)
+        if (!currentFiles.includes(fileName)) {
+          console.log(`🔥 Adding modified file "${fileName}" to ghost system`);
+          newState[folderPath] = [...currentFiles, fileName];
+        } else {
+          console.log(`🔥 File "${fileName}" already in ghost system for modification - no changes needed`);
+          return prev; // No changes needed
+        }
+      }
+      
+      console.log(`🔥 Updated files in "${folderPath}":`, newState[folderPath]);
+      console.log(`🔥 Final ghost state after update:`, newState);
+      return newState;
+    });
+  }, []); // Remove all dependencies to avoid stale closures
+  
   // Folder management hook
   const {
     folderList,
@@ -75,7 +130,50 @@ const ProjectsView = () => {
     selectedPath,
     setSelectedPath,
     setRefreshFlag,
-  } = useFolderManager(project?._id, user?.role || "user");
+  } = useFolderManager(project?._id, user?.role || "user", 0, handleFileChange);
+
+  // Initialize ghost system with current folder contents
+  useEffect(() => {
+    if (folderTree && Object.keys(folderTree).length > 0 && !isGhostInitialized) {
+      console.log('🔄 Initializing ghost system with folder tree:', folderTree);
+      
+      setSharedGhosts(prevGhosts => {
+        const newGhosts = { ...prevGhosts }; // Preserve existing ghost state
+        
+        // Traverse the folder tree and extract files for each path
+        const traverseTree = (node, currentPath = '.') => {
+          if (node && typeof node === 'object') {
+            // Extract files at this level
+            if (node.__files && Array.isArray(node.__files)) {
+              // Only initialize if path doesn't exist in ghost state yet
+              if (!newGhosts[currentPath]) {
+                newGhosts[currentPath] = [...node.__files];
+                console.log(`📁 Ghost init: "${currentPath}" has ${node.__files.length} files:`, node.__files);
+              } else {
+                console.log(`📁 Ghost init: Skipping "${currentPath}" - already has ghost files:`, newGhosts[currentPath]);
+              }
+            }
+            
+            // Traverse subdirectories
+            Object.keys(node).forEach(key => {
+              if (key !== '__files' && key !== '__meta' && typeof node[key] === 'object') {
+                const subPath = currentPath === '.' ? key : `${currentPath}/${key}`;
+                traverseTree(node[key], subPath);
+              }
+            });
+          }
+        };
+        
+        traverseTree(folderTree);
+        
+        console.log('🔄 Merging ghost system with existing state. Final ghosts:', newGhosts);
+        return newGhosts;
+      });
+      
+      setIsGhostInitialized(true);
+      console.log('✅ Ghost system initialization completed');
+    }
+  }, [folderTree, isGhostInitialized]);
 
   /**
    * Validates project data before operations
@@ -87,6 +185,16 @@ const ProjectsView = () => {
       return false;
     }
     return true;
+  }, []);
+
+  /**
+   * Normalizes project name using the comprehensive utility function
+   * @param {string} name - Project name to normalize
+   * @returns {string} - Normalized project name
+   */
+  const normalizeProjectName = useCallback((name) => {
+    if (typeof name !== "string") return "";
+    return normalizeProjectNameUtil(name);
   }, []);
 
   /**
@@ -238,6 +346,11 @@ const ProjectsView = () => {
 
       // Normalize location data
       updatedProject.location = normalizeLocation(updatedProject.location);
+      
+      // Normalize project name
+      if (updatedProject.name) {
+        updatedProject.name = normalizeProjectName(updatedProject.name);
+      }
 
       // Check if there are actual changes
       if (JSON.stringify(updatedProject) === JSON.stringify(originalData)) {
@@ -248,9 +361,13 @@ const ProjectsView = () => {
       const response = await axiosSecure.patch(`/projects/update/${project._id}`, updatedProject);
 
       if (response?.data?.success) {
+        // Update the UI immediately with normalized values
+        const updatedProjectState = { ...project, ...updatedProject };
+        setProject(updatedProjectState);
+        setOriginalProject(updatedProjectState);
+
         handleSuccess("Project Updated", "Project updated successfully!", () => {
           setIsEditing(false);
-          setOriginalProject(project);
         });
 
         // Attempt to rename folder on disk
@@ -516,12 +633,21 @@ const ProjectsView = () => {
               </button>
             </>
           ) : (
-            <button
-              className="px-4 py-2 rounded-md border-2 border-blue-500 bg-blue-500 text-white"
-              onClick={() => setIsEditing(true)}
-            >
-              Edit
-            </button>
+            <>
+              <button
+                className="px-4 py-2 rounded-md border-2 border-green-500 bg-green-500 text-white hover:bg-green-600 transition-colors"
+                onClick={() => setShowTakeoffModal(true)}
+                title="Send Takeoff Email"
+              >
+                Send Takeoff
+              </button>
+              <button
+                className="px-4 py-2 rounded-md border-2 border-blue-500 bg-blue-500 text-white"
+                onClick={() => setIsEditing(true)}
+              >
+                Edit
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -649,56 +775,79 @@ const ProjectsView = () => {
           </FolderPanelWrapper>
         </div>
 
-        {/* Job Details Section */}
-        <div className="bg-white p-4 rounded-md mb-4 shadow-sm mt-6">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-lg font-semibold">Job Scope/Details</h4>
-            <button
-              onClick={() => setIsJobScopeExpanded(!isJobScopeExpanded)}
-              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-800"
-              title={isJobScopeExpanded ? "Collapse" : "Expand"}
-            >
-              <span className="text-md font-medium">
-                {isJobScopeExpanded ? "Collapse" : "Expand"}
-              </span>
-              <svg
-                className={`w-4 h-4 transition-transform duration-200 ${
-                  isJobScopeExpanded ? "rotate-180" : ""
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+        {/* Scope Request Section - Hidden from Users */}
+        {userRole !== "User" && (
+          <div className="bg-white p-4 rounded-md mb-4 shadow-sm mt-6">
+            <ScopeRequestDropZone 
+              projectId={project?._id}
+              onProcessingComplete={(result) => {
+                console.log('Email processed:', result);
+                // Optionally refresh folder panel to show new files
+                setFolderPanelRefreshKey(prev => prev + 1);
+                
+                // Show success message
+                Swal.fire({
+                  title: 'Success!',
+                  text: `Email processed: ${result.data.attachmentsProcessed} attachments saved`,
+                  icon: 'success',
+                  confirmButtonText: 'OK'
+                });
+              }}
+            />
+          </div>
+        )}
+
+        {/* Job Description Section - Hidden from Users */}
+        {userRole !== "User" && (
+          <div className="bg-white p-4 rounded-md mb-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-lg font-semibold">Job Description</h4>
+              <button
+                onClick={() => setIsJobScopeExpanded(!isJobScopeExpanded)}
+                className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-800"
+                title={isJobScopeExpanded ? "Collapse" : "Expand"}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
+                <span className="text-md font-medium">
+                  {isJobScopeExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 transition-transform duration-200 ${
+                    isJobScopeExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="transition-all duration-300 ease-in-out">
+              {renderFormField(
+                "description",
+                "textarea",
+                project?.description,
+                (e) => setProject({ ...project, description: e.target.value }),
+                <div
+                  className={`text-gray-800 bg-gray-50 border border-gray-200 p-4 rounded-md overflow-y-auto transition-all duration-300 ease-in-out whitespace-pre-wrap ${
+                    isJobScopeExpanded ? "max-h-[900px]" : "max-h-[300px]"
+                  }`}
+                >
+                  {project?.description || "No description provided"}
+                </div>
+              )}
+            </div>
           </div>
-          
-          <div className="transition-all duration-300 ease-in-out">
-            {renderFormField(
-              "description",
-              "textarea",
-              project?.description,
-              (e) => setProject({ ...project, description: e.target.value }),
-              <div
-                className={`prose prose-sm max-w-none text-gray-800 bg-gray-50 border border-gray-200 p-4 rounded-md overflow-y-auto transition-all duration-300 ease-in-out ${
-                  isJobScopeExpanded ? "max-h-[900px]" : "max-h-[300px]"
-                }`}
-                dangerouslySetInnerHTML={{
-                  __html: (project?.description || "").replace(/\n/g, "<br />"),
-                }}
-              />
-            )}
-          </div>
-        </div>
+        )}
 
         {/* Estimate Notes Section */}
-        <div className="bg-white p-4 rounded-md shadow-sm">
+        <div className="bg-white p-4 rounded-md shadow-sm mt-4">
           <h4 className="text-lg font-semibold mb-2">Estimate Notes</h4>
           {["notes", "assumptions", "exclusions"].map((section) => (
             <div key={section} className="mb-4">
@@ -723,61 +872,63 @@ const ProjectsView = () => {
           ))}
         </div>
 
-        {/* Quote Breakdown Section */}
-        <div className="w-full bg-white p-4 rounded-md shadow-sm mt-4">
-          <h3 className="font-semibold text-lg mb-4">Project Quote Breakdown</h3>
-          
-          {/* Sub Total */}
-          <div className="flex justify-between items-center py-2">
-            <p className="text-gray-800 font-medium">Sub Total</p>
-            <div className="text-right">
-              {renderFormField(
-                "subTotal",
-                "number",
-                project?.subTotal || 0,
-                (e) => {
-                  const newSubTotal = parseFloat(e.target.value) || 0;
-                  const gst = project?.gst || 0;
-                  setProject({ 
-                    ...project, 
-                    subTotal: newSubTotal,
-                    total: newSubTotal + gst
-                  });
-                },
-                <p className="text-gray-800">${project?.subTotal?.toFixed(2) || '0.00'}</p>
-              )}
+        {/* Quote Breakdown Section - Hidden for Estimators */}
+        {userRole !== "Estimator" && (
+          <div className="w-full bg-white p-4 rounded-md shadow-sm mt-4">
+            <h3 className="font-semibold text-lg mb-4">Project Quote Breakdown</h3>
+            
+            {/* Sub Total */}
+            <div className="flex justify-between items-center py-2">
+              <p className="text-gray-800 font-medium">Sub Total</p>
+              <div className="text-right">
+                {renderFormField(
+                  "subTotal",
+                  "number",
+                  project?.subTotal || 0,
+                  (e) => {
+                    const newSubTotal = parseFloat(e.target.value) || 0;
+                    const gst = project?.gst || 0;
+                    setProject({ 
+                      ...project, 
+                      subTotal: newSubTotal,
+                      total: newSubTotal + gst
+                    });
+                  },
+                  <p className="text-gray-800">${project?.subTotal?.toFixed(2) || '0.00'}</p>
+                )}
+              </div>
+            </div>
+            
+            {/* GST */}
+            <div className="flex justify-between items-center py-2">
+              <p className="text-gray-800 font-medium">GST</p>
+              <div className="text-right">
+                {renderFormField(
+                  "gst",
+                  "number",
+                  project?.gst || 0,
+                  (e) => {
+                    const newGst = parseFloat(e.target.value) || 0;
+                    const subTotal = project?.subTotal || 0;
+                    setProject({ 
+                      ...project, 
+                      gst: newGst,
+                      total: subTotal + newGst
+                    });
+                  },
+                  <p className="text-gray-800">${project?.gst?.toFixed(2) || '0.00'}</p>
+                )}
+              </div>
+            </div>
+            
+            {/* Total */}
+            <div className="h-[2px] bg-gray-300 my-3"></div>
+            <div className="flex justify-between items-center font-semibold text-lg">
+              <h2 className="text-gray-900">Total</h2>
+              <p className="text-gray-900">${((project?.subTotal || 0) + (project?.gst || 0)).toFixed(2)}</p>
             </div>
           </div>
-          
-          {/* GST */}
-          <div className="flex justify-between items-center py-2">
-            <p className="text-gray-800 font-medium">GST</p>
-            <div className="text-right">
-              {renderFormField(
-                "gst",
-                "number",
-                project?.gst || 0,
-                (e) => {
-                  const newGst = parseFloat(e.target.value) || 0;
-                  const subTotal = project?.subTotal || 0;
-                  setProject({ 
-                    ...project, 
-                    gst: newGst,
-                    total: subTotal + newGst
-                  });
-                },
-                <p className="text-gray-800">${project?.gst?.toFixed(2) || '0.00'}</p>
-              )}
-            </div>
-          </div>
-          
-          {/* Total */}
-          <div className="h-[2px] bg-gray-300 my-3"></div>
-          <div className="flex justify-between items-center font-semibold text-lg">
-            <h2 className="text-gray-900">Total</h2>
-            <p className="text-gray-900">${((project?.subTotal || 0) + (project?.gst || 0)).toFixed(2)}</p>
-          </div>
-        </div>
+        )}
 
         {/* File Drop Modal */}
         {showFolderModal && (
@@ -795,6 +946,15 @@ const ProjectsView = () => {
             onUpload={({ files, folderPath }) => {
               console.log('Files uploaded:', files, 'to path:', folderPath);
             }}
+          />
+        )}
+
+        {/* Estimate Complete Modal */}
+        {showTakeoffModal && (
+          <EstimateCompleteModal
+            isVisible={showTakeoffModal}
+            onClose={() => setShowTakeoffModal(false)}
+            project={project}
           />
         )}
       </div>

@@ -1,5 +1,5 @@
 // useFolderManager.js
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import useAxiosSecure from "../../hooks/AxiosSecure/useAxiosSecure";
 import { message } from "antd";
 import buildNestedTree from "../utils/buildNestedTree";
@@ -9,13 +9,14 @@ import {
   normalizePath,
   dedupeName,
 } from "../utils/FMFunctions";
-import Swal from "@/shared/swalConfig";
+import Swal from "../../shared/swalConfig";
+import { useLiveFolderSync } from "./useLiveFolderSync";
 
 function showMessage(type, content) {
   message[type](content);
 }
 
-export const useFolderManager = (projectId, userRole = "user", refreshKey = 0) => {
+export const useFolderManager = (projectId, userRole = "user", refreshKey = 0, onFileChange = null) => {
   const axiosSecure = useAxiosSecure();
 
   const [folderTree, setFolderTree] = useState({});
@@ -108,6 +109,8 @@ if (!metaData && filteredTree["."]?.__meta) {
     }
   }, [projectId, refreshKey]); // ✅ now reacts to refreshKey
 
+  // Live sync will be initialized after folder functions are defined
+
   // 🧭 Subfolders of selected path
   const subfolders = useMemo(() => {
     if (!selectedPath || !folderTree["."]) return {};
@@ -187,6 +190,14 @@ const createFolder = useCallback(
 
       showMessage("success", "📂 Folder created successfully");
 
+      // 📡 REMOVED: Let ghost folders handle UI updates instead
+      // notifyFolderChange({
+      //   type: 'folder created',
+      //   fileName: folderNameToUse,
+      //   relativePath: fullPath,
+      //   isFolder: true
+      // });
+
       // ─── AUTO‐UPDATE .meta.json ACL & STRUCTURE ────────────────────────
       if (meta) {
         // 1) Determine creator ACL: always Admin + creator’s role
@@ -215,7 +226,8 @@ const createFolder = useCallback(
 
       // ✅ Let the disk watcher / syncFromDisk handle the UI update
       setNewFolderName("");
-      setSelectedPath(fullPath);
+      // DON'T auto-navigate into created folder - stay in current directory
+      // setSelectedPath(fullPath);
     } catch (err) {
       console.error("🔥 Folder creation error:", err?.response?.data || err.message);
       showMessage("error", "Failed to create folder");
@@ -258,10 +270,49 @@ const addTempUIFolder = useCallback(
     };
 
     setFolderTree(treeCopy);
-    setSelectedPath(fullPath);
+    // DON'T auto-navigate into temp folder - stay in current directory
+    // setSelectedPath(fullPath);
     return safeName;
   },
   [folderTree, selectedPath]
+);
+
+// 📡 Add ghost folder to any specific path (for live sync)
+const addGhostFolderToPath = useCallback(
+  (folderName, targetPath = ".") => {
+    const parts = targetPath === "." ? [] : targetPath.split("/");
+    const treeCopy = { ...folderTree };
+    let current = treeCopy["."]; // 🌱 always start from root
+
+    // Navigate to target path
+    for (const part of parts) {
+      if (!current[part]) current[part] = {};
+      current = current[part];
+    }
+
+    // Check if folder already exists - PREVENT DUPLICATES
+    if (current[folderName]) {
+      console.log("⛔ Folder already exists in UI:", folderName, "at path:", targetPath);
+      console.log("� Live sync: Skipping duplicate folder creation");
+      return folderName; // Return early without updating state
+    }
+
+    const fullPath = normalizePath(targetPath, folderName);
+
+    current[folderName] = {
+      __meta: {
+        name: fullPath,
+        label: folderName,
+        isTemporary: true,
+        isFromLiveSync: true, // Mark as coming from live sync
+      },
+    };
+
+    setFolderTree(treeCopy);
+    console.log(`📁 Added ghost folder "${folderName}" to path "${targetPath}"`);
+    return folderName;
+  },
+  [folderTree]
 );
 
   
@@ -314,8 +365,90 @@ const addTempUIFolder = useCallback(
     });
   };
   
+  // 🔄 Live folder sync - Using ghost folder system for efficient updates
+  const processedEventsRef = useRef(new Set());
+  const addGhostFolderRef = useRef(addGhostFolderToPath);
+  const removeTempFolderRef = useRef(removeTempFolder);
+  
+  // Update refs when functions change
+  useEffect(() => {
+    addGhostFolderRef.current = addGhostFolderToPath;
+    removeTempFolderRef.current = removeTempFolder;
+  }, [addGhostFolderToPath, removeTempFolder]);
+  
+  const handleLiveFolderChange = useCallback((changeData) => {
+    console.log('🔄 Live folder change detected:', changeData);
+    
+    // Create a unique key for this event to prevent duplicates
+    const eventKey = `${changeData.type}-${changeData.relativePath}-${changeData.isFolder}-${changeData.timestamp}`;
+    
+    // Check if we've already processed this exact event
+    if (processedEventsRef.current.has(eventKey)) {
+      console.log('⏭️ Skipping duplicate event:', eventKey);
+      return;
+    }
+    
+    // Add to processed events and remove after 2 seconds
+    processedEventsRef.current.add(eventKey);
+    setTimeout(() => {
+      processedEventsRef.current.delete(eventKey);
+    }, 2000);
 
+    // Handle file changes (modified, added, removed)
+    if (!changeData.isFolder) {
+      console.log(`📄 Live sync: File "${changeData.type}" - ${changeData.fileName}`);
+      console.log(`📄 File path: ${changeData.relativePath}`);
+      console.log(`📞 onFileChange callback type:`, typeof onFileChange);
+      console.log(`📞 onFileChange callback exists:`, !!onFileChange);
+      
+      // Call the file change callback if provided
+      if (typeof onFileChange === 'function') {
+        console.log('✅ Calling onFileChange callback for file update...');
+        onFileChange(changeData);
+        console.log('✅ onFileChange callback completed');
+      } else {
+        console.log('⚠️ No onFileChange callback provided - user must manually refresh');
+        // No automatic fallback - let user manually refresh if needed
+      }
+      return;
+    }
+    
+    // Use ghost folder system for efficient UI updates
+    if (changeData.isFolder && changeData.type === 'folder added') {
+      // Extract folder name and parent path from relativePath
+      const relativePath = changeData.relativePath || '';
+      const pathParts = relativePath.split('/').filter(part => part.length > 0);
+      const folderName = pathParts[pathParts.length - 1];
+      const parentPath = pathParts.slice(0, -1).join('/') || '.';
+      
+      console.log(`📁 Live sync: Adding folder "${folderName}" to path "${parentPath}"`);
+      console.log(`📁 Full relative path: "${relativePath}"`);
+      
+      // Add the folder to UI using ghost system at the correct path
+      addGhostFolderRef.current(folderName, parentPath);
+    }
+    
+    // Handle folder removed events
+    if (changeData.isFolder && changeData.type === 'folder removed') {
+      // Extract folder name and parent path from relativePath
+      const relativePath = changeData.relativePath || '';
+      const pathParts = relativePath.split('/').filter(part => part.length > 0);
+      const folderName = pathParts[pathParts.length - 1];
+      const parentPath = pathParts.slice(0, -1).join('/') || '.';
+      
+      console.log(`🗑️ Live sync: Removing folder "${folderName}" from path "${parentPath}"`);
+      console.log(`🗑️ Full relative path: "${relativePath}"`);
+      
+      // Remove the folder from UI using ghost system
+      removeTempFolderRef.current(folderName, parentPath);
+    }
+  }, [fetchFolders]); // Include fetchFolders in dependencies
 
+  const { isConnected: isLiveSyncConnected, notifyFolderChange } = useLiveFolderSync({
+    projectId,
+    onFolderChange: handleLiveFolderChange,
+    enabled: true // Re-enabled with ghost folder integration
+  });
 
   const folderList = useMemo(() => {
     return extractFlatFolders(folderTree);
@@ -329,6 +462,7 @@ const addTempUIFolder = useCallback(
     fetchFolders,
     createFolder,
     addTempUIFolder,
+    addGhostFolderToPath,
     removeTempFolder,
     renameTempFolder,
     newFolderName,
@@ -337,5 +471,7 @@ const addTempUIFolder = useCallback(
     subfolders,
     folderList,
     meta,
+    isLiveSyncConnected,
+    notifyFolderChange,
   };
 };

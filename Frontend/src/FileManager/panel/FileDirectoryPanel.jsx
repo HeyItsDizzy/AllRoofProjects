@@ -1,12 +1,12 @@
 // src/FileManager/panel/FileDirectoryPanel.jsx
 import { useState, useRef, useEffect , useContext} from "react";
-import Swal from '@/shared/swalConfig';
+import Swal from '../../shared/swalConfig';
 import FolderSidebar from "./FolderSidebar";
 import FolderContents from "./FolderContents";
 import { getSubfoldersAtPath, isVisibleFolderKey, renameFolderPath, getLiveFileNames, downloadToZIP } from "../utils/FMFunctions";
-import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";           
-import { IconDelete, IconSidebarMenu, IconDownload  } from "@/shared/IconSet.jsx"; 
-import UploadButton from "@/FileManager/components/UploadButton";
+import useAxiosSecure from "../../hooks/AxiosSecure/useAxiosSecure";           
+import { IconDelete, IconSidebarMenu, IconDownload  } from "../../shared/IconSet.jsx"; 
+import UploadButton from "../components/UploadButton";
 
 const FileDirectoryPanel = ({
   folderTree,
@@ -28,6 +28,10 @@ const FileDirectoryPanel = ({
   editable = false,
   uploadEnabled = false,
   projectId,
+  files,
+  setFiles,
+  ghostFilesByPath,
+  setGhostFilesByPath,
 }) => {
   const axiosSecure = useAxiosSecure();
   const folderListRef = useRef(null);
@@ -37,9 +41,6 @@ const FileDirectoryPanel = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [lockedHeight, setLockedHeight] = useState(null);
 
-  const [ghostFilesByPath, setGhostFilesByPath] = useState({});
-  const [files, setFiles] = useState([]);
-
   const normalizedSelectedPath = selectedPath === '.' ? '.' : selectedPath.replace(/^\.\/+/, '');
   //const diskFiles = folderContents?.[normalizedSelectedPath]?.__files || [];
 
@@ -48,6 +49,14 @@ const FileDirectoryPanel = ({
 
   // ─── Build contents based on meta.structure & allowedRoles ─────────────
   const rawSubfolders = getSubfoldersAtPath(folderTree, normalizedSelectedPath) || {};
+  
+  // Compute files for the current selected path from ghost system
+  const diskFiles = rawSubfolders?.__files || [];
+  const currentPathFiles = getLiveFileNames({
+    selectedPath: normalizedSelectedPath,
+    ghostFilesByPath,
+    diskFileNames: diskFiles,
+  });
   const allKeys = Object.keys(rawSubfolders).filter((k) => k !== "__meta" && k !== "__files");
 
   // For root level, only show folders that are in meta.structure AND allowed for this role
@@ -145,32 +154,92 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
 
     // 4) Perform delete
     try {
-      await axiosSecure.delete(
+      console.log("🗑️ [DELETE] Attempting to delete folder:");
+      console.log("  - Original path:", path);
+      console.log("  - Encoded path:", encodeURIComponent(path));
+      console.log("  - Full URL:", `/files/${projectId}/folders/${encodeURIComponent(path)}`);
+      console.log("  - Project ID:", projectId);
+      
+      const response = await axiosSecure.delete(
         `/files/${projectId}/folders/${encodeURIComponent(path)}`
       );
+      
+      console.log("✅ [DELETE] Folder deletion successful:", response.data);
       removeTempFolder(folderName, parentPath);
       Swal.fire("Deleted", `"${folderName}" has been removed.`, "success");
     } catch (err) {
-      console.error("❌ Folder delete failed:", err);
-      Swal.fire("Error", "Failed to delete folder", "error");
+      console.error("❌ [DELETE] Folder deletion failed:");
+      console.error("  - Error object:", err);
+      console.error("  - Response status:", err.response?.status);
+      console.error("  - Response data:", err.response?.data);
+      console.error("  - Request URL:", err.config?.url);
+      console.error("  - Request method:", err.config?.method);
+      
+      // Extract detailed error information
+      const errorData = err.response?.data;
+      const statusCode = err.response?.status;
+      const errorMessage = errorData?.error || "Unknown error";
+      const errorDetails = errorData?.details || err.message;
+      
+      let userMessage = "Failed to delete folder";
+      let swalIcon = "error";
+      
+      // Provide specific error messages based on status code and error type
+      switch (statusCode) {
+        case 404:
+          if (errorData?.requestedPath) {
+            userMessage = `Folder not found: "${errorData.requestedPath}"`;
+            console.error("❌ [DELETE] Path issue - Requested:", errorData.requestedPath);
+            console.error("❌ [DELETE] Full disk path:", errorData.fullDiskPath);
+            console.error("❌ [DELETE] Project base path:", errorData.projectBasePath);
+          } else {
+            userMessage = "Folder or project not found";
+          }
+          break;
+          
+        case 403:
+          userMessage = `Cannot delete protected folder: "${folderName}"`;
+          swalIcon = "warning";
+          break;
+          
+        case 400:
+          if (errorMessage.includes("not a folder")) {
+            userMessage = `"${folderName}" is not a folder`;
+          } else if (errorMessage.includes("Missing folder path")) {
+            userMessage = "Invalid folder path provided";
+            console.error("❌ [DELETE] Path parameter issue - received params:", errorData?.receivedParams);
+          } else {
+            userMessage = `Invalid request: ${errorMessage}`;
+          }
+          break;
+          
+        case 409:
+          userMessage = `Folder "${folderName}" is in use or not empty`;
+          break;
+          
+        case 500:
+          if (errorData?.errorCode) {
+            userMessage = `Server error (${errorData.errorCode}): ${errorMessage}`;
+          } else {
+            userMessage = `Server error: ${errorMessage}`;
+          }
+          break;
+          
+        default:
+          userMessage = `${errorMessage}: ${errorDetails}`;
+      }
+      
+      // Show detailed error in Swal
+      Swal.fire({
+        icon: swalIcon,
+        title: "Delete Failed",
+        text: userMessage,
+        footer: process.env.NODE_ENV === 'development' ? 
+          `Status: ${statusCode} | Path: ${path} | Details: ${errorDetails}` : 
+          null
+      });
     }
   };
-
-
-useEffect(() => {
-  const rawSubfolders = getSubfoldersAtPath(folderTree, normalizedSelectedPath) || {};
-  const diskFiles = rawSubfolders?.__files || [];
-  setFiles(
-    getLiveFileNames({
-      selectedPath: normalizedSelectedPath,
-      ghostFilesByPath,
-      diskFileNames: diskFiles,
-    })
-  );
-  // ⬇️ ONLY run on folder/disk change!
-}, [folderTree, normalizedSelectedPath]);
-
-
 
 
   useEffect(() => {
@@ -300,7 +369,7 @@ useEffect(() => {
             axiosSecure={axiosSecure}
             projectId={projectId}
             editable={editable}
-            files={files}
+            files={currentPathFiles}
             folderContents={folderContents}
             ghostFilesByPath={ghostFilesByPath}
             setGhostFilesByPath={setGhostFilesByPath}

@@ -1,9 +1,9 @@
 // FolderContents.jsx
 import React, { useState, useEffect, useContext } from "react";
-import { IconEdit, IconFolder, IconFile, IconDownload } from "@/shared/IconSet.jsx";
+import { IconEdit, IconFolder, IconFile, IconDownload } from "../../shared/IconSet.jsx";
 import { Button, Input } from "antd";
-import Swal from '@/shared/swalConfig';
-import SortableFile from "@/FileManager/dnd/SortableFile";
+import Swal from '../../shared/swalConfig';
+import SortableFile from "../dnd/SortableFile";
 import {
   sortFolderKeys,
   isVisibleFolderKey,
@@ -16,9 +16,10 @@ import {
   getLiveFileNames,
   safeSetFilesAndGhosts,
   getFolderMetaAtPath,
-} from "@/FileManager/utils/FMFunctions";
-import { useDropHandler } from "@/FileManager/hooks/useDropHandler";
-import { AuthContext } from "@/auth/AuthProvider";
+} from "../utils/FMFunctions";
+import { useDropHandler } from "../hooks/useDropHandler";
+import { getSupportedExtensions, formatExtensionsForDisplay } from "../hooks/useUploadManager";
+import { AuthContext } from "../../auth/AuthProvider";
 
 
 import debounce from "lodash.debounce";

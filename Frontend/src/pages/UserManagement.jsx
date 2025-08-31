@@ -532,7 +532,7 @@ export default function UserManagement() {
       <InviteUserModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
-        onInviteSuccess={fetchUsers}
+        onInviteSent={fetchUsers}
       />
     </div>
   );

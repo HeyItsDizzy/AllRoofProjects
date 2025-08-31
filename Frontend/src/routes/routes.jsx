@@ -25,6 +25,7 @@ import AllProjects       from "../pages/AllProjects";
 import AddNewProjects    from "../pages/AddNewProjects";
 import AssignedProjects  from "../pages/AssignedProjects";
 import ProjectsView      from "../pages/ProjectsView";
+import ReadOnlyProjectView from "../pages/ReadOnlyProjectView";
 import UserManagement    from "../pages/UserManagement";
 // ─── (Legacy / Unused) ─────────────────────────────────────────────────────────
 // import UserTable from "../pages/UserTable";
@@ -184,6 +185,11 @@ export const router = createBrowserRouter([
   },
 
   // ─── Public Routes (Outside User Layout) ──────────────────────────────────────
+  {
+    path: "/project/view/:token",
+    element: <ReadOnlyProjectView />,
+    handle: { title: "Project View" },
+  },
   {
     path: "/navbar-preview",  
     element: <NavBarPreview />,

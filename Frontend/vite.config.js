@@ -18,5 +18,61 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "src"), // ✅ Enables "@/..." paths
       },
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'https://projects.allrooftakeoffs.com.au',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, _res) => {
+              console.log('🔴 Proxy error:', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
+              console.log('🟡 Sending Request to Target:', req.method, req.url);
+              proxyReq.setHeader('Origin', 'https://projects.allrooftakeoffs.com.au');
+            });
+            proxy.on('proxyRes', (proxyRes, req, _res) => {
+              console.log('🟢 Received Response from Target:', proxyRes.statusCode, req.url);
+            });
+          },
+        },
+        '/socket.io': {
+          target: 'https://projects.allrooftakeoffs.com.au:5001',
+          changeOrigin: true,
+          secure: true,
+          ws: true, // Enable WebSocket proxying
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, _res) => {
+              console.log('🔴 Socket Proxy error:', err);
+            });
+            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+              console.log('🟡 WebSocket Request to Target:', req.url);
+            });
+          },
+        }
+      }
+    },
+    preview: {
+      proxy: {
+        '/api': {
+          target: 'https://projects.allrooftakeoffs.com.au',
+          changeOrigin: true,
+          secure: true,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, _res) => {
+              console.log('preview proxy error', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
+              console.log('Preview: Sending Request to the Target:', req.method, req.url);
+            });
+            proxy.on('proxyRes', (proxyRes, req, _res) => {
+              console.log('Preview: Received Response from the Target:', proxyRes.statusCode, req.url);
+            });
+          },
+        }
+      }
+    },
   };
 });

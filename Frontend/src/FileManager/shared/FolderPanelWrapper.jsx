@@ -19,8 +19,8 @@ const renderNoFoldersMessage = (folderTree, folderList) => {
   );
 };
 
-const FolderPanelWrapper = ({ projectId, userRole = "user", refreshKey = 0, children }) => {
-  const folderManager = useFolderManager(projectId, userRole, refreshKey);
+const FolderPanelWrapper = ({ projectId, userRole = "user", refreshKey = 0, onFileChange = null, children }) => {
+  const folderManager = useFolderManager(projectId, userRole, refreshKey, onFileChange);
 
   const {
     folderTree,
