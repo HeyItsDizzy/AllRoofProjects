@@ -1,9 +1,9 @@
 // CompanyForm
 import React, { useState } from "react";
-import { IconExpandBox, IconCollapseBox } from "../shared/IconSet";
+import { IconExpandBox, IconCollapseBox } from "@/shared/IconSet";
 import AddressInput from "./AddressInput";
 import CompanyAutocomplete from "./CompanyAutocomplete";
-import Avatar from "../shared/Avatar";
+import Avatar from "@/shared/Avatar";
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL;

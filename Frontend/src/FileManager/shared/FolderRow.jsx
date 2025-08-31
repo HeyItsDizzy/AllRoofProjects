@@ -1,5 +1,5 @@
 // FolderRow.jsx
-import { IconEdit, IconDelete } from "@/shared/IconSet.jsx";
+import { IconEdit, IconDelete } from "../../shared/IconSet.jsx";
 
 const FolderRow = ({ 
   path, 

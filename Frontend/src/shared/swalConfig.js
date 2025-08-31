@@ -107,6 +107,8 @@ const Swal = {
   fire: fire.fire.bind(fire),  // Modal (custom styled)
   toast,                       // Toast (top-end, auto-close)
   other,                       // Placeholder (returns 'pass')
+  showLoading: SweetAlert.showLoading.bind(SweetAlert), // Loading spinner
+  close: SweetAlert.close.bind(SweetAlert), // Close modal
 };
 
 export default Swal;

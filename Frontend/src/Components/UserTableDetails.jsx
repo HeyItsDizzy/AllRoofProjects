@@ -1,10 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { IconDown, IconUp } from "../shared/IconSet.jsx";
+import { IconDown, IconUp } from "@/shared/IconSet.jsx";
 import { Button, Drawer, Space } from "antd";
-import { IconBackArrow } from "../shared/IconSet.jsx";
-import { IconDownload } from "../shared/IconSet.jsx";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure.js";
+import { IconBackArrow } from "@/shared/IconSet.jsx";
+import { IconDownload } from "@/shared/IconSet.jsx";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure.js";
 import { useParams } from "react-router-dom";
 
 const UserTableDetails = ({ id }) => {

@@ -8,6 +8,7 @@ import {
   IconEdit,
   IconDelete,
   IconView,
+  IconSave,
   IconDownload,
   IconUploadFile,
   IconFileArrowUp,
@@ -31,14 +32,16 @@ import {
   IconPending,
   IconSync,
   IconComplete,
+  IconWarning,
   IconBlock,
   IconUnblock,
   IconInvite,
   IconRefresh,
   IconPromote,
   IconDemote,
+  IconSend,
   getFileIcon,
-} from "../shared/IconSet.jsx";
+} from "@/shared/IconSet.jsx";
 
 const groupedIcons = {
   "⬅️ Navigation": {
@@ -52,6 +55,7 @@ const groupedIcons = {
     IconEdit,
     IconDelete,
     IconView,
+    IconSave,
     IconDownload,
     IconUploadFile,
     IconFileArrowUp,
@@ -85,8 +89,12 @@ const groupedIcons = {
     IconPending,
     IconComplete,
     IconSync,
+    IconWarning,
   },
-  "👥 User Management": {
+  "� Communication": {
+    IconSend,
+  },
+  "�👥 User Management": {
     IconBlock,
     IconUnblock,
     IconInvite,

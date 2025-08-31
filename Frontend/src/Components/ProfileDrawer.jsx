@@ -1,10 +1,10 @@
 import { Button, Drawer, Space } from "antd";
 import { useContext, useState } from "react";
-import { IconBackArrow } from "../shared/IconSet.jsx";
+import { IconBackArrow } from "@/shared/IconSet.jsx";
 import { AuthContext } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
-import { IconMenuDots } from "../shared/IconSet.jsx";
-import Avatar from "../shared/Avatar";
+import { IconMenuDots } from "@/shared/IconSet.jsx";
+import Avatar from "@/shared/Avatar";
 
 const ProfileDrawer = () => {
   const [open, setOpen] = useState(false);
@@ -54,7 +54,7 @@ const ProfileDrawer = () => {
             <div className="flex gap-2">
               {isUser && (
                 <Button className="bg-secondary text-white">
-                  <Link to="/myProjects">My Projects</Link>
+                  <Link to="/projects">My Projects</Link>
                 </Button>
               )}
               <Button className="bg-red-500 text-white" onClick={handleLogOut}>

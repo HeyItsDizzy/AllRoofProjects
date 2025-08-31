@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
-import NavBar from "../shared/NavBar"; // ✅ Import NavBar
+import NavBar from "@/shared/NavBar"; // ✅ Import NavBar
 
 const Forbidden = () => {
   const location = useLocation();

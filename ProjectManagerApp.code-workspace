@@ -7,6 +7,9 @@
 		{
 			"name": "Frontend",
 			"path": "Frontend"
+		},
+		{
+			"path": "W:/"
 		}
 	],
 	"settings": {

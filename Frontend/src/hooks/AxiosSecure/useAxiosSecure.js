@@ -14,7 +14,6 @@ axiosSecure.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    config.headers["Access-Control-Allow-Credentials"] = "true";
 
     if (!config.headers["Content-Type"]) {
       config.headers["Content-Type"] = "application/json";
@@ -22,6 +21,18 @@ axiosSecure.interceptors.request.use(
 
     if (!config.headers["Accept"]) {
       config.headers["Accept"] = "application/json, text/plain, */*";
+    }
+
+    // Debug logging for phone verification endpoints
+    if (config.url?.includes('verification-code') || config.url?.includes('verify-phone')) {
+      console.log("🔍 Axios Request Debug:", {
+        url: config.url,
+        method: config.method,
+        headers: config.headers,
+        data: config.data,
+        hasToken: !!token,
+        token: token ? `${token.substring(0, 20)}...` : null
+      });
     }
 
     return config;
@@ -39,18 +50,27 @@ axiosSecure.interceptors.response.use(
   (error) => {
     // Check for forced refresh requirement
     if (error.response?.status === 401 && error.response?.data?.requiresRefresh) {
-      console.log("🔄 Session expired due to role change, forcing page refresh");
+      console.log("🔄 Session expired due to role change, forcing re-authentication");
       
-      // Show user-friendly message
+      // Show user-friendly message and force re-login
       Swal.fire({
         icon: "warning",
-        title: "Session Updated", 
-        text: "Your permissions have changed. The page will refresh to update your access.",
-        showConfirmButton: false,
-        timer: 3000
-      }).then(() => {
-        // Force a page refresh to get new token with updated permissions
-        window.location.reload();
+        title: "Session Expired", 
+        text: "Your permissions have changed. Please sign in again to continue.",
+        showConfirmButton: true,
+        confirmButtonText: 'Sign In Again',
+        allowOutsideClick: false,
+        allowEscapeKey: false
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // Clear all auth data
+          localStorage.removeItem("authUser");
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("user");
+          
+          // Redirect to login
+          window.location.href = '/login';
+        }
       });
       
       return Promise.reject(error);

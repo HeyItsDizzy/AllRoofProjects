@@ -57,7 +57,10 @@ export async function saveJobBoardData(projectId, updates) {
     // Use the environment variable for the API base URL
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
     
-    const response = await fetch(`${apiBaseUrl}/projects/update-jobboard/${projectId}`, {
+    console.log("💾 Saving job board data:", { projectId, updates });
+    
+    // Use the correct project update endpoint
+    const response = await fetch(`${apiBaseUrl}/projects/update/${projectId}`, {
       method: "PATCH",
       headers: { 
         "Content-Type": "application/json",
@@ -68,6 +71,8 @@ export async function saveJobBoardData(projectId, updates) {
 
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
+    
+    console.log("✅ Job board data saved successfully:", data);
     return data;
   } catch (err) {
     console.error("❌ Failed to save job board data:", err.message);

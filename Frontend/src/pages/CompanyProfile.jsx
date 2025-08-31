@@ -2,11 +2,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from "../auth/AuthProvider";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
-import Avatar from "../shared/Avatar";
+import Avatar from "@/shared/Avatar";
 import { resizeImage } from "@/utils/imageHelpers";
 import CompanyDetails from '../components/CompanyDetails';
+import { calculateCompanyProfileStrength, getStrengthColors } from "@/utils/profileStrength";
 
 const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL;
 
@@ -46,6 +47,7 @@ export default function CompanyProfile() {
   const [headerFit, setHeaderFit] = useState(false); // New state for fit option
   const [footerPlacement, setFooterPlacement] = useState("full");
   const [hasPreviewChanges, setHasPreviewChanges] = useState(false); // Track if user made preview changes
+  const [showCompanyStrengthDetails, setShowCompanyStrengthDetails] = useState(false); // Track company strength details visibility
   
   // Wrapper functions to track preview changes
   const handleHeaderRatioChange = (ratio) => {
@@ -75,6 +77,38 @@ export default function CompanyProfile() {
     footerImage: null,
   });
 
+  // Company data for strength calculation
+  const [companyData, setCompanyData] = useState({
+    name: "",
+    legalName: "",
+    abn: "",
+    logoUrl: "",
+    billingAddress: {
+      line1: "",
+      line2: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "",
+      region: "",
+      full_address: "",
+      streetNumber: ""
+    },
+    mainContact: {
+      name: "",
+      email: "",
+      phone: ""
+    }
+  });
+
+  // Company profile strength calculation
+  const companyStrength = React.useMemo(() => {
+    if (!companyData || Object.keys(companyData).length === 0) {
+      return { percentage: 0, completedFields: 0, totalFields: 0, suggestions: [] };
+    }
+    return calculateCompanyProfileStrength(companyData);
+  }, [companyData]);
+
   const fetchCompanyImages = async () => {
     try {
       const clientId = getClientId();
@@ -99,6 +133,30 @@ export default function CompanyProfile() {
         setHeaderRatio(savedRatio);
         setHeaderFit(savedFit);
         setFooterPlacement(savedPlacement);
+        
+        // Update company data for strength calculation
+        setCompanyData({
+          name: data.client.name || "",
+          legalName: data.client.legalName || "",
+          abn: data.client.abn || "",
+          logoUrl: data.client.logoUrl ? `${BASE_URL}${data.client.logoUrl}?t=${Date.now()}` : "",
+          billingAddress: {
+            line1: data.client.billingAddress?.line1 || "",
+            line2: data.client.billingAddress?.line2 || "",
+            city: data.client.billingAddress?.city || "",
+            state: data.client.billingAddress?.state || "",
+            postalCode: data.client.billingAddress?.postalCode || "",
+            country: data.client.billingAddress?.country || "",
+            region: data.client.billingAddress?.region || "",
+            full_address: data.client.billingAddress?.full_address || "",
+            streetNumber: data.client.billingAddress?.streetNumber || ""
+          },
+          mainContact: {
+            name: data.client.mainContact?.name || "",
+            email: data.client.mainContact?.email || "",
+            phone: data.client.mainContact?.phone || ""
+          }
+        });
       }
     } catch (error) {
       console.error("Error fetching company images:", error);
@@ -256,16 +314,125 @@ export default function CompanyProfile() {
       <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mt-10">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6">
           <h2 className="text-xl font-semibold text-textBlack">Company Images</h2>
-          <button
-            onClick={() => {
-              setIsEditingImages((prev) => !prev);
-              setHasPreviewChanges(false); // Reset preview changes when toggling edit mode
-            }}
-            className="text-primary underline w-fit sm:w-auto text-sm"
-          >
-            {isEditingImages ? "Cancel" : "Update Images"}
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Company Strength Indicator */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Company Strength:</span>
+              <button
+                onClick={() => setShowCompanyStrengthDetails(!showCompanyStrengthDetails)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all hover:shadow-md ${
+                  companyStrength.percentage >= 150 ? 'bg-green-100 text-green-800 border-green-300' :
+                  companyStrength.percentage >= 120 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                  companyStrength.percentage >= 75 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                  'bg-red-100 text-red-800 border-red-300'
+                }`}
+                title="Click to see detailed breakdown"
+              >
+                {companyStrength.percentage >= 150 ? '💚' :
+                 companyStrength.percentage >= 120 ? '💙' :
+                 companyStrength.percentage >= 75 ? '💛' :
+                 '❤️'} {Math.round((companyStrength.percentage / 150) * 100)}% {
+                  companyStrength.percentage >= 150 ? 'Complete' :
+                  companyStrength.percentage >= 120 ? 'Trusted' :
+                  companyStrength.percentage >= 75 ? 'Workable' :
+                  'Incomplete'}
+                <svg className={`w-3 h-3 ml-1 inline transition-transform ${showCompanyStrengthDetails ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setIsEditingImages((prev) => !prev);
+                setHasPreviewChanges(false); // Reset preview changes when toggling edit mode
+              }}
+              className="text-primary underline w-fit sm:w-auto text-sm"
+            >
+              {isEditingImages ? "Cancel" : "Update Images"}
+            </button>
+          </div>
         </div>
+
+        {/* Company Profile Strength Details */}
+        {showCompanyStrengthDetails && (
+          <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-800 mb-3">🏢 Company Completion Breakdown (150 Points Max)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[
+                { key: 'mainContact.email', label: 'Contact Email', weight: 30 },
+                { key: 'mainContact.name', label: 'Contact Name', weight: 25 },
+                { key: 'name', label: 'Company Name', weight: 20 },
+                { key: 'legalName', label: 'Legal Entity Name', weight: 20 },
+                { key: 'abn', label: 'ABN', weight: 20 },
+                { key: 'billingAddress', label: 'Billing Address', weight: 15 },
+                { key: 'logoUrl', label: 'Company Logo', weight: 15 },
+                { key: 'mainContact.phone', label: 'Contact Phone', weight: 10 }
+              ].map(field => {
+                let isCompleted = false;
+                
+                if (field.key.includes('.')) {
+                  const keys = field.key.split('.');
+                  let value = companyData;
+                  for (const key of keys) {
+                    value = value?.[key];
+                  }
+                  isCompleted = value && value.toString().trim().length > 0;
+                } else {
+                  switch (field.key) {
+                    case 'logoUrl':
+                      isCompleted = companyData.logoUrl && companyData.logoUrl.length > 0;
+                      break;
+                    case 'billingAddress':
+                      isCompleted = companyData.billingAddress && (
+                        (companyData.billingAddress.line1 && companyData.billingAddress.line1.trim().length > 0) ||
+                        (companyData.billingAddress.streetNumber && companyData.billingAddress.streetNumber.trim().length > 0) ||
+                        (companyData.billingAddress.full_address && companyData.billingAddress.full_address.trim().length > 0)
+                      ) && 
+                      companyData.billingAddress.city && companyData.billingAddress.city.trim().length > 0 &&
+                      companyData.billingAddress.state && companyData.billingAddress.state.trim().length > 0 &&
+                      companyData.billingAddress.postalCode && companyData.billingAddress.postalCode.trim().length > 0;
+                      break;
+                    default:
+                      isCompleted = companyData[field.key] && companyData[field.key].toString().trim().length > 0;
+                  }
+                }
+                
+                return (
+                  <div key={field.key} className="flex items-center justify-between p-2 rounded border border-gray-200 bg-white">
+                    <span className="text-sm text-gray-700">{field.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">{field.weight} pts</span>
+                      <span className={`w-4 h-4 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-gray-300'}`}>
+                        {isCompleted && <span className="text-white text-xs flex items-center justify-center">✓</span>}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-300">
+              <div className="flex justify-between items-center text-sm font-medium">
+                <span>Total Score:</span>
+                <span className="text-primary">{companyStrength.percentage}/150 points</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Company Profile Improvement Suggestions */}
+        {companyStrength.suggestions.length > 0 && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="text-sm font-medium text-yellow-800 mb-2">💡 Improve Your Company Profile</h3>
+            <p className="text-sm text-yellow-700 mb-3">Complete these fields to strengthen your company profile:</p>
+            <div className="flex flex-wrap gap-2">
+              {companyStrength.suggestions.map((suggestion, index) => (
+                <span key={index} className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full border border-yellow-300">
+                  {suggestion}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 5x5 Grid Layout - Perfect Square Cells */}
         <div className="grid grid-cols-5 grid-rows-5 gap-4 mb-8 aspect-square max-w-2xl mx-auto">

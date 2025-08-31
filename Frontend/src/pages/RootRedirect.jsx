@@ -9,12 +9,8 @@ const RootRedirect = () => {
     const user = storedUser ? JSON.parse(storedUser) : null;
 
     if (user) {
-      // Redirect based on role
-      if (user.role === "Admin") {
-        navigate("/projects"); // Redirect Admins to Projects
-      } else {
-        navigate("/myprojects"); // Redirect Regular Users to Dashboard
-      }
+      // All authenticated users go to the unified projects view
+      navigate("/projects"); // Unified route for all roles
     } else {
       navigate("/login"); // Redirect to login if no user found
     }

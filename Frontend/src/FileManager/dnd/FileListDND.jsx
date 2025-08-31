@@ -11,7 +11,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { SortableFile } from "./SortableFile";
-import Swal from '@/shared/swalConfig';
+import Swal from '../../shared/swalConfig';
 //import Swal from "sweetalert2";
 
 /**

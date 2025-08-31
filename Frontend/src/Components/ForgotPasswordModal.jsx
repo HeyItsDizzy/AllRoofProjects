@@ -1,6 +1,6 @@
 // src/components/ForgotPasswordModal.jsx
 import { useState } from "react";
-import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic";
+import axiosPublic from "@/hooks/AxiosPublic/useAxiosPublic";
 import Swal from "@/shared/swalConfig";
 
 const ForgotPasswordModal = ({ isOpen, onClose, onComplete }) => {

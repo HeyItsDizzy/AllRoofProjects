@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
-import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic"; // Adjust as needed
+import axiosPublic from "@/hooks/AxiosPublic/useAxiosPublic"; // Adjust as needed
 
 const ResetPassword = () => {
   const { token } = useParams(); // Get token from URL

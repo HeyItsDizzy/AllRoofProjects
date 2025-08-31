@@ -6,12 +6,12 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { IconUp, IconNewFolder } from "@/shared/IconSet.jsx";
-import { sortFolderKeys, normalizePath, isVisibleFolderKey, } from "@/FileManager/utils/FMFunctions";
-import renderTree from "@/FileManager/utils/renderTree";
-import Swal from '@/shared/swalConfig';
+import { IconUp, IconNewFolder } from "../../shared/IconSet.jsx";
+import { sortFolderKeys, normalizePath, isVisibleFolderKey, } from "../utils/FMFunctions";
+import renderTree from "../utils/renderTree";
+import Swal from '../../shared/swalConfig';
 //import Swal from "sweetalert2";
-import { AuthContext } from "@/auth/AuthProvider";
+import { AuthContext } from "../../auth/AuthProvider";
 
 import debounce from "lodash.debounce";
 const debouncedLog = debounce((...args) => {console.log(...args);}, 300);

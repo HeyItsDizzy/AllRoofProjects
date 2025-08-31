@@ -1,6 +1,6 @@
 // src/components/PermissionMatrix.jsx
 import React, { useState, useEffect } from 'react';
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
 
 const PermissionMatrix = ({ isOpen, onClose, onPermissionsUpdate }) => {

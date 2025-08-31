@@ -23,15 +23,14 @@ const NavBar = () => {
   const isUser = role === "User";
 
   const getProjectsPath = () => {
-    if (isAdmin) return "/projects";
-    if (isEstimator) return "/estimates";
-    return "/MyProjects";
+    // All roles now use the unified projects view with role-based filtering
+    return "/projects";
   };
 
   const navLinks = [
     {
       name: "Job Board",
-      path: "/job-board",
+      path: "/job-board",  // Both Admin and Estimator use same job board
       show: isAdmin || isEstimator,
     },
     {
@@ -41,9 +40,9 @@ const NavBar = () => {
       activeMatch: "/projects",
     },
     {
-      name: "Users",
-      path: "/users",
-      show: isAdmin || isEstimator,
+      name: "Clients",
+      path: "/clients",
+      show: isAdmin, // Only show to Admins, hide from Estimators
     },
     {
       name: "User Management",

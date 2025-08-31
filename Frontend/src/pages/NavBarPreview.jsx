@@ -1,5 +1,5 @@
 import React from "react";
-import NavBar from "../shared/NavBar"; // Adjust the path to where your NavBar is located
+import NavBar from "@/shared/NavBar"; // Adjust the path to where your NavBar is located
 
 const NavBarPreview = () => {
   return (

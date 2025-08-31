@@ -1,6 +1,6 @@
 // projectAliasUtils.js - Utilities for secure project URL aliasing
 
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 
 /**
  * Custom hook for managing project aliases

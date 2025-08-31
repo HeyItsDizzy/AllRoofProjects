@@ -14,7 +14,6 @@ import RootRedirect from "../pages/RootRedirect";
 import NavBarPreview from "../pages/NavBarPreview";
 import IconGallery from "../pages/IconGallery";
 // ─── User-Scoped Pages ─────────────────────────────────────────────────────────
-import MyProjects from "../pages/MyProjects";
 import Profile from "../pages/Profile";
 import CompanyChoice from "../pages/CompanyChoice";
 import CompanyProfile from "../pages/CompanyProfile";
@@ -22,11 +21,13 @@ import JobBoard from "../pages/JobBoard";
 // ─── Admin-Scoped Pages ────────────────────────────────────────────────────────
 import AllClientsTable from "../pages/AllClientsTable";
 import AllProjects       from "../pages/AllProjects";
+import UnifiedProjectsView from "../pages/UnifiedProjectsView"; // New unified view
 import AddNewProjects    from "../pages/AddNewProjects";
 import AssignedProjects  from "../pages/AssignedProjects";
 import ProjectsView      from "../pages/ProjectsView";
 import ReadOnlyProjectView from "../pages/ReadOnlyProjectView";
 import UserManagement    from "../pages/UserManagement";
+import LiveFolderSyncTest from "../pages/LiveFolderSyncTest";
 // ─── (Legacy / Unused) ─────────────────────────────────────────────────────────
 // import UserTable from "../pages/UserTable";
 // import UserTableDetails from "../components/UserTableDetails";
@@ -70,15 +71,6 @@ export const router = createBrowserRouter([
 
       // ─── User-Scoped Pages ─────────────────────────────────────────────────────
       {
-        path: "/MyProjects",
-        element: (
-          <PrivateRoutes>
-            <MyProjects />
-          </PrivateRoutes>
-        ),
-        handle: { title: "My Projects" },
-      },
-      {
         path: "/profile",
         element: (
           <PrivateRoutes>
@@ -117,7 +109,7 @@ export const router = createBrowserRouter([
 
       // ─── Admin-Scoped Pages ────────────────────────────────────────────────────
       {
-        path: "/users",
+        path: "/clients",
         element: (
           <AdminRoutes>
             <AllClientsTable />
@@ -137,11 +129,11 @@ export const router = createBrowserRouter([
       {
         path: "/projects",
         element: (
-          <AdminRoutes>
-            <AllProjects />
-          </AdminRoutes>
+          <PrivateRoutes>
+            <UnifiedProjectsView />
+          </PrivateRoutes>
         ),
-        handle: { title: "Admin Projects" },
+        handle: { title: "Projects" },
       },
       {
         path: "/addNewProject",
@@ -185,6 +177,11 @@ export const router = createBrowserRouter([
   },
 
   // ─── Public Routes (Outside User Layout) ──────────────────────────────────────
+  {
+    path: "/socket-test",
+    element: <LiveFolderSyncTest />,
+    handle: { title: "Live Folder Sync Test" },
+  },
   {
     path: "/project/view/:token",
     element: <ReadOnlyProjectView />,

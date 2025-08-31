@@ -2,13 +2,13 @@
 import React, { useState, useEffect, useContext } from "react";
 import { Button, Spin } from "antd";
 import { Link, useNavigate } from "react-router-dom";
-import { IconSearch } from "../shared/IconSet.jsx";
-import { IconDown } from "../shared/IconSet.jsx";
-import { IconPending } from "../shared/IconSet.jsx";
-import { IconComplete } from "../shared/IconSet.jsx";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import { IconSearch } from "@/shared/IconSet.jsx";
+import { IconDown } from "@/shared/IconSet.jsx";
+import { IconPending } from "@/shared/IconSet.jsx";
+import { IconComplete } from "@/shared/IconSet.jsx";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
-import { projectStatuses } from "../shared/projectStatuses";
+import { projectStatuses } from "@/shared/projectStatuses";
 import { AuthContext } from "../auth/AuthProvider";  // ← pull user info
 
 const UserProjectTable = () => {
@@ -29,40 +29,48 @@ const UserProjectTable = () => {
   // Fetch projects for *all* companies this user is linked to
 const { user } = useContext(AuthContext);
 
+// Debug user changes (role switching)
+useEffect(() => {
+  console.log("🔄 MyProjects - User context changed:", {
+    userId: user?._id,
+    userName: user?.name,
+    userRole: user?.role,
+    userEmail: user?.email,
+    timestamp: new Date().toISOString()
+  });
+}, [user]);
+
 useEffect(() => {
   if (!user?._id) return;
 
   const loadMyProjects = async () => {
     setLoading(true);
+    console.log("🔍 MyProjects - Starting to load projects for user:", {
+      userId: user._id,
+      userName: user.name,
+      userRole: user.role,
+      userEmail: user.email
+    });
+    
     try {
-      // 1) fetch all clients
-      const clientsRes = await axiosSecure.get("/clients");
-      const allClients = Array.isArray(clientsRes.data)
-        ? clientsRes.data
-        : clientsRes.data.client || [];
+      // Use the client-projects endpoint for regular users
+      console.log("🔍 MyProjects - Fetching client projects...");
+      const response = await axiosSecure.get("/projects/get-client-projects");
+      const clientProjects = response.data.data || [];
+      console.log("✅ MyProjects - Client projects found:", clientProjects.length);
 
-      // 2) filter to the clients you belong to
-      const myClients = allClients.filter((c) =>
-        Array.isArray(c.linkedUsers) &&
-        c.linkedUsers.some((uid) => uid.toString() === user._id)
-      );
+      console.log("✅ MyProjects - Client projects loaded:", {
+        clientProjects: clientProjects.length,
+        projects: clientProjects.map(p => ({ 
+          id: p._id, 
+          name: p.name, 
+          status: p.status
+        }))
+      });
 
-      // 3) gather every linkedProjects ID, dedupe
-      const allProjectIds = [
-        ...new Set(myClients.flatMap((c) => c.linkedProjects || [])),
-      ];
-
-      // 4) fetch each project via the user-safe endpoint
-      const projectPromises = allProjectIds.map((pid) =>
-        axiosSecure
-          .get(`/projects/get-project/${pid}`)
-          .then((res) => res.data.data || res.data)
-      );
-      const fetched = await Promise.all(projectPromises);
-
-      setProjects(fetched);
+      setProjects(clientProjects);
     } catch (err) {
-      console.error("Error loading MyProjects:", err);
+            console.log("❌ MyProjects - Error loading client projects:", err);
     } finally {
       setLoading(false);
     }
@@ -75,6 +83,9 @@ useEffect(() => {
 
   // Fetch user details based on linked users
   useEffect(() => {
+    // TODO: Remove this - no longer needed with client-based project access
+    // In the new system, users access projects through clients, not direct user linking
+    /*
     const fetchUserDetails = async () => {
       if (!projects.length) return;
   
@@ -103,6 +114,7 @@ useEffect(() => {
     };
   
     fetchUserDetails();
+    */
   }, [projects]);
   
 

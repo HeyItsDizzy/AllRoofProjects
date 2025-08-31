@@ -4,7 +4,7 @@ import logo from "../assets/logo.png";
 import { useContext, useState } from "react";
 import { AuthContext } from "../auth/AuthProvider";
 import { Link, useNavigate } from "react-router-dom";
-import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic"; 
+import axiosPublic from "@/hooks/AxiosPublic/useAxiosPublic"; 
 import ForgotPasswordModal from "../components/ForgotPasswordModal"; // Ensure this is the correct path
 
 const Login = () => {
@@ -42,12 +42,9 @@ const Login = () => {
         }
         // ────────────────────────────────────────────────────────────────────
 
-        if (user.role === "Admin") {
-          console.log("Redirecting Admin to /job-board");
-          navigate("/job-board"); 
-        } else {
-          navigate("/MyProjects"); 
-        }
+        // All authenticated users go to the unified projects view
+        console.log(`Redirecting ${user.role} to /projects`);
+        navigate("/projects");
       } else {
         alert(`Login failed: ${response.data.message}`);
       }
@@ -102,11 +99,12 @@ const Login = () => {
               Login
             </button>
           </form>
+          
           <Link
             to="/register"
-            className="text-blue-400 underline mt-4 text-center"
+            className="w-full bg-gray-200 text-gray-700 font-semibold py-2 rounded-md mt-4 text-center block hover:bg-gray-300 transition-colors"
           >
-            Create account
+            Register
           </Link>
 
           {/* Forgot Password Button */}
@@ -126,8 +124,8 @@ const Login = () => {
         onClose={() => setShowResetModal(false)}
         onComplete={() => {
           setShowResetModal(false);
-          // After full flow, route to company choice (then eventually login)
-          navigate("/company-choice");
+          // After password reset, redirect to login page for user to sign in
+          // They will then be properly routed based on their linkedClients status
         }}
       />
     </div>

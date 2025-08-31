@@ -1,7 +1,7 @@
 // src/pages/CompanyChoice.jsx
 import React, { useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useAxiosSecure from '../hooks/AxiosSecure/useAxiosSecure';
+import useAxiosSecure from '@/hooks/AxiosSecure/useAxiosSecure';
 import Swal from '@/shared/swalConfig';
 import { AuthContext } from '../auth/AuthProvider';
 
@@ -14,7 +14,7 @@ export default function CompanyChoice() {
   useEffect(() => {
     if (user && user.linkedClients && user.linkedClients.length > 0) {
       console.log("User already has linkedClients, redirecting to MyProjects");
-      navigate('/MyProjects');
+      navigate('/projects');
     }
   }, [user, navigate]);
 
@@ -79,7 +79,7 @@ const handleConnectToCompany = async () => {
       confirmButtonText: 'Go to Dashboard'
     });
 
-    navigate('/MyProjects');
+    navigate('/projects');
   }
 };
 

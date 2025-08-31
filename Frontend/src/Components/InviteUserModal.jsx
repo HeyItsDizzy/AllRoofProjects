@@ -1,9 +1,9 @@
 // src/components/InviteUserModal.jsx
 import React, { useState, useContext, useEffect } from 'react';
 import { AuthContext } from "../auth/AuthProvider";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
-import Avatar from "../shared/Avatar";
+import Avatar from "@/shared/Avatar";
 import useClients from "../hooks/useClients";
 import AssignClient from "./AssignClient";
 

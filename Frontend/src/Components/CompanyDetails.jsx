@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../auth/AuthProvider";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
 import CompanyForm from "./CompanyForm";
+import { calculateCompanyProfileStrength } from "../utils/profileStrength";
 
 const CompanyDetails = ({ isNewMode = false }) => {
   const navigate = useNavigate();
@@ -54,6 +55,16 @@ const CompanyDetails = ({ isNewMode = false }) => {
     sameAsMainContact: false
   });
   const [companyLoading, setCompanyLoading] = useState(true);
+  
+  // Profile strength state
+  const [showCompanyStrengthDetails, setShowCompanyStrengthDetails] = useState(false);
+  const [companyStrength, setCompanyStrength] = useState({ percentage: 0, completedFields: 0, totalFields: 0 });
+
+  // Calculate company profile strength whenever form data changes
+  useEffect(() => {
+    const strength = calculateCompanyProfileStrength(companyForm);
+    setCompanyStrength(strength);
+  }, [companyForm]);
 
   // Fetch company data
   const fetchCompanyData = async () => {
@@ -473,20 +484,122 @@ const CompanyDetails = ({ isNewMode = false }) => {
   }
 
   return (
-    <CompanyForm
-      isEmbedded={true}
-      showHeader={true}
-      form={companyForm}
-      handleChange={handleCompanyChange}
-      onAddressChange={handleCompanyAddressChange}
-      handleSubmit={handleSubmitCompany}
-      isEditing={isEditingCompany}
-      setIsEditing={setIsEditingCompany}
-      isAdmin={user?.companyAdmin}
-      submitButtonText={isNewMode ? "Create Company" : "Save Changes"}
-      onCancel={handleCancelEdit}
-      onEnterEdit={handleEnterEditMode}
-    />
+    <div>
+      {/* Company Profile Strength */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-textBlack">Company Details</h2>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Company Strength:</span>
+              <button
+                onClick={() => setShowCompanyStrengthDetails(!showCompanyStrengthDetails)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all hover:shadow-md ${
+                  companyStrength.percentage >= 150 ? 'bg-green-100 text-green-800 border-green-300' :
+                  companyStrength.percentage >= 120 ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                  companyStrength.percentage >= 75 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                  'bg-red-100 text-red-800 border-red-300'
+                }`}
+                title="Click to see detailed breakdown"
+              >
+                {companyStrength.percentage >= 150 ? '💚' :
+                 companyStrength.percentage >= 120 ? '�' :
+                 companyStrength.percentage >= 75 ? '💛' :
+                 '❤️'} {companyStrength.percentage}/150 {
+                  companyStrength.percentage >= 150 ? 'Complete' :
+                  companyStrength.percentage >= 120 ? 'Trusted' :
+                  companyStrength.percentage >= 75 ? 'Workable' :
+                  'Incomplete'}
+                <svg className={`w-3 h-3 ml-1 inline transition-transform ${showCompanyStrengthDetails ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Company Profile Strength Details */}
+        {showCompanyStrengthDetails && (
+          <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-800 mb-3">🏢 Company Completion Breakdown (150 Points Max)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[
+                { key: 'mainContact.email', label: 'Contact Email', weight: 30 },
+                { key: 'mainContact.name', label: 'Contact Name', weight: 25 },
+                { key: 'name', label: 'Company Name', weight: 20 },
+                { key: 'legalName', label: 'Legal Entity Name', weight: 20 },
+                { key: 'abn', label: 'ABN', weight: 20 },
+                { key: 'billingAddress', label: 'Billing Address', weight: 15 },
+                { key: 'logoUrl', label: 'Company Logo', weight: 15 },
+                { key: 'mainContact.phone', label: 'Contact Phone', weight: 10 }
+              ].map(field => {
+                let isCompleted = false;
+                
+                if (field.key.includes('.')) {
+                  const keys = field.key.split('.');
+                  let value = companyForm;
+                  for (const key of keys) {
+                    value = value?.[key];
+                  }
+                  isCompleted = value && value.toString().trim().length > 0;
+                } else {
+                  switch (field.key) {
+                    case 'logoUrl':
+                      isCompleted = companyForm.logoUrl && companyForm.logoUrl.length > 0;
+                      break;
+                    case 'billingAddress':
+                      isCompleted = companyForm.billingAddress && (
+                        (companyForm.billingAddress.line1 && companyForm.billingAddress.line1.trim().length > 0) ||
+                        (companyForm.billingAddress.streetNumber && companyForm.billingAddress.streetNumber.trim().length > 0) ||
+                        (companyForm.billingAddress.full_address && companyForm.billingAddress.full_address.trim().length > 0)
+                      ) && 
+                      companyForm.billingAddress.city && companyForm.billingAddress.city.trim().length > 0 &&
+                      companyForm.billingAddress.state && companyForm.billingAddress.state.trim().length > 0 &&
+                      companyForm.billingAddress.postalCode && companyForm.billingAddress.postalCode.trim().length > 0;
+                      break;
+                    default:
+                      isCompleted = companyForm[field.key] && companyForm[field.key].toString().trim().length > 0;
+                  }
+                }
+                
+                return (
+                  <div key={field.key} className="flex items-center justify-between p-2 rounded border border-gray-200 bg-white">
+                    <span className="text-sm text-gray-700">{field.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">{field.weight} pts</span>
+                      <span className={`w-4 h-4 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-gray-300'}`}>
+                        {isCompleted && <span className="text-white text-xs flex items-center justify-center">✓</span>}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-300">
+              <div className="flex justify-between items-center text-sm font-medium">
+                <span>Total Score:</span>
+                <span className="text-primary">{companyStrength.percentage}/150 points</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <CompanyForm
+        isEmbedded={true}
+        showHeader={false}
+        form={companyForm}
+        handleChange={handleCompanyChange}
+        onAddressChange={handleCompanyAddressChange}
+        handleSubmit={handleSubmitCompany}
+        isEditing={isEditingCompany}
+        setIsEditing={setIsEditingCompany}
+        isAdmin={user?.companyAdmin}
+        submitButtonText={isNewMode ? "Create Company" : "Save Changes"}
+        onCancel={handleCancelEdit}
+        onEnterEdit={handleEnterEditMode}
+      />
+    </div>
   );
 };
 

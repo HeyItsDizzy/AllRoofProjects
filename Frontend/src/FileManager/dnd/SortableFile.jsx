@@ -1,9 +1,10 @@
 import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { IconEdit, IconDelete, IconDownload, IconView, getFileIcon } from "../../shared/IconSet.jsx";
-import { downloadFile, renameFile, deleteFile } from "@/FileManager/utils/FMFunctions";
-import Swal from "@/shared/swalConfig";
+import { IconEdit, IconDelete, IconDownload, IconView } from "../../shared/IconSet.jsx";
+import { downloadFile, renameFile, deleteFile } from "../utils/FMFunctions";
+import Swal from "../../shared/swalConfig";
+import { handleFileOpen, getFileIcon } from "../utils/fileTypeHandler.jsx";
 
 /**
  * SortableFile component for rendering a sortable file item.
@@ -50,10 +51,60 @@ const SortableFile = ({
   const handlePreview = async (e) => {
     e.stopPropagation();
 
-    const ext = fileName.split(".").pop().toLowerCase();
-    const previewable = ["jpg", "jpeg", "png", "gif", "webp", "pdf"];
+    // Use the new file type handler for enhanced file opening
+    const handled = await handleFileOpen(fileName, {
+      axiosSecure,
+      selectedPath,
+      projectId,
+      mode: "preview"
+    });
 
-    if (previewable.includes(ext)) {
+    // If the file type wasn't handled by our custom handler, fall back to default
+    if (!handled) {
+      const ext = fileName.split(".").pop().toLowerCase();
+      const previewable = ["jpg", "jpeg", "png", "gif", "webp", "pdf"];
+
+      if (previewable.includes(ext)) {
+        downloadFile({
+          axiosSecure,
+          selectedPath,
+          projectId,
+          fileName,
+          mode: "preview",
+        });
+      } else {
+        const confirm = await Swal.fire({
+          icon: "question",
+          title: "Cannot preview this file type",
+          text: "Would you like to download it instead?",
+          showCancelButton: true,
+          confirmButtonText: "Download",
+        });
+
+        if (confirm.isConfirmed) {
+          downloadFile({
+            axiosSecure,
+            selectedPath,
+            projectId,
+            fileName,
+            mode: "download",
+          });
+        }
+      }
+    }
+  };
+
+  const handleDoubleClick = async () => {
+    // Use the new file type handler for enhanced file opening
+    const handled = await handleFileOpen(fileName, {
+      axiosSecure,
+      selectedPath,
+      projectId,
+      mode: "preview"
+    });
+
+    // If the file type wasn't handled by our custom handler, fall back to default
+    if (!handled) {
       downloadFile({
         axiosSecure,
         selectedPath,
@@ -61,35 +112,7 @@ const SortableFile = ({
         fileName,
         mode: "preview",
       });
-    } else {
-      const confirm = await Swal.fire({
-        icon: "question",
-        title: "Cannot preview this file type",
-        text: "Would you like to download it instead?",
-        showCancelButton: true,
-        confirmButtonText: "Download",
-      });
-
-      if (confirm.isConfirmed) {
-        downloadFile({
-          axiosSecure,
-          selectedPath,
-          projectId,
-          fileName,
-          mode: "download",
-        });
-      }
     }
-  };
-
-  const handleDoubleClick = () => {
-    downloadFile({
-      axiosSecure,
-      selectedPath,
-      projectId,
-      fileName,
-      mode: "preview",
-    });
   };
 
 

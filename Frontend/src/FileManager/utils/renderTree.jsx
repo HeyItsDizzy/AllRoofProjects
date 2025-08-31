@@ -1,7 +1,7 @@
 import React from "react";
 import SortableFolder from "../dnd/SortableFolder";
 import { isAllowed } from "../shared/permissions";
-import { isVisibleFolderKey } from "@/FileManager/utils/FMFunctions";
+import { isVisibleFolderKey } from "./FMFunctions";
 
 /**
  * Recursively renders a nested folder tree structure.

@@ -4,7 +4,7 @@ import logo from "../assets/logo.png";
 import { Input, Checkbox } from "antd";
 import { useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import axiosPublic from "../hooks/AxiosPublic/useAxiosPublic";
+import axiosPublic from "@/hooks/AxiosPublic/useAxiosPublic";
 import Swal from '@/shared/swalConfig';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { AuthContext } from "../auth/AuthProvider";
@@ -35,21 +35,31 @@ const Register = () => {
   };
 
   /**
-   * Validates and formats phone number using libphonenumber-js
+   * Validates phone number for registration - lenient validation for multi-country support
+   * Only checks for invalid special characters, allows various international formats
    * @param {string} rawPhone - Raw phone number input
-   * @returns {object} - Object containing validation status and formatted numbers
+   * @returns {object} - Object containing validation status and cleaned phone
    */
   const validateAndFormatPhone = (rawPhone) => {
-    const cleaned = rawPhone.replace(/[^\d+]/g, ''); // ← remove all but numbers and +
-    const phoneNumber = parsePhoneNumberFromString(cleaned, 'AU');
-    if (!phoneNumber || !phoneNumber.isValid()) {
+    // Remove spaces, dashes, parentheses - common formatting
+    const cleaned = rawPhone.replace(/[\s\-\(\)]/g, '');
+    
+    // Check for invalid special characters (allow only digits, +, and common separators)
+    const hasInvalidChars = /[^0-9+\s\-\(\)\.]/g.test(rawPhone);
+    
+    if (hasInvalidChars) {
+      return { isValid: false };
+    }
+    
+    // Basic length check - too short or too long
+    if (cleaned.length < 6 || cleaned.length > 20) {
       return { isValid: false };
     }
 
     return {
       isValid: true,
-      smsReadyPhone: phoneNumber.format("E.164"),    // For backend/API usage
-      displayPhone: phoneNumber.formatNational(),    // For UI display
+      smsReadyPhone: cleaned,        // Store cleaned version for backend
+      displayPhone: rawPhone.trim(), // Keep original format for display
     };
   };
 
@@ -82,8 +92,14 @@ const Register = () => {
           showConfirmButton: false,
         });
 
-        // Navigate to user dashboard
-        navigate("/MyProjects");
+        // Check if user needs to link to a company first
+        if (loggedInUser.role !== "Admin" && (!loggedInUser.linkedClients || loggedInUser.linkedClients.length === 0)) {
+          console.log("New user has no linkedClients → redirecting to /company-choice");
+          navigate("/company-choice");
+        } else {
+          // Navigate to projects dashboard
+          navigate("/projects");
+        }
       } else {
         setResError({ message: "Account created, but login failed. Please try logging in." });
       }
@@ -116,10 +132,10 @@ const Register = () => {
       return;
     }
   
-    // Validate and format phone number
+    // Validate and format phone number (lenient for registration)
     const phoneValidation = validateAndFormatPhone(rawPhone);
     if (!phoneValidation.isValid) {
-      setResError({ message: "Please enter a valid phone number." });
+      setResError({ message: "Please enter a valid phone number (no special characters except +, -, (), spaces)." });
       return;
     }
   

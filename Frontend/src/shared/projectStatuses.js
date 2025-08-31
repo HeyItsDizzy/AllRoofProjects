@@ -22,6 +22,7 @@ export const projectStatuses = [
     { label: "HOLD",            color: "bg-red-700 text-white" },
     { label: "Small Fix",       color: "bg-pink-300 text-black" },
     { label: "Cancelled", color: "bg-gray-200 text-gray-500" },
+    { label: "Awaiting Review", color: "bg-orange-400 text-white" },
     { label: "Estimate Completed",        color: "bg-green-500 text-white" },
   ];
     

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "antd";
 import { Link, useNavigate } from "react-router-dom";
-import { IconSearch, IconDown, IconPending, IconComplete } from "../shared/IconSet.jsx";
+import { IconSearch, IconDown, IconPending, IconComplete } from "@/shared/IconSet.jsx";
 //import AssignUser from "../components/AssignUser";
 import AssignClient from "../components/AssignClient";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
-import { projectStatuses } from "../shared/projectStatuses";
+import { projectStatuses } from "@/shared/projectStatuses";
 
 const AllProjects = () => {
   const [projects, setProjects] = useState([]); // Holds all projects

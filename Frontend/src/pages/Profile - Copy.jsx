@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useContext } from "react";
 import AddressInput from "../Components/AddressInput";
 import { AuthContext } from "../auth/AuthProvider";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
-import Avatar from "../shared/Avatar";
+import Avatar from "@/shared/Avatar";
 import { resizeImage } from "@/utils/imageHelpers";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;

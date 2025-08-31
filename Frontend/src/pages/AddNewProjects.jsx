@@ -1,8 +1,8 @@
 import { Button, Select } from "antd";
 import Avatar from "@/shared/Avatar";
-import { IconBackArrow } from "../shared/IconSet.jsx";
+import { IconBackArrow } from "@/shared/IconSet.jsx";
 import { Link, useNavigate } from "react-router-dom";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import { useContext, useEffect, useState, useRef } from "react";
 import { AuthContext } from "../auth/AuthProvider";
 import Swal from '@/shared/swalConfig';
@@ -56,17 +56,20 @@ const AddNewProjects = () => {
     loadClients();
   }, [axiosSecure, isAdmin, user._id]);
 
-// When Admin selects a user, update "Created for:"
-const handleUserSelection = (e) => {
-  const userId = e.target.value;
-  setSelectedUserId(userId);
+// after your clients load, set a default
+useEffect(() => {
+  if (clients.length === 0) return;
 
-  const userDetails = users.find((u) => u._id === userId);
-  setselectedClientDetails(
-    userDetails || { name: "", email: "", phone: "", address: "" }
-  );
-};
-
+  // 1) look for last-used in localStorage
+  const last = localStorage.getItem("lastClientId");
+  if (last && clients.some((c) => c._id === last)) {
+    handleClientSelection(last);
+  }
+  // 2) otherwise pick the first in the list
+  else {
+    handleClientSelection(clients[0]._id);
+  }
+}, [clients]); 
 
   useEffect(() => {
     const fetchUserCountry = async () => {
@@ -269,25 +272,6 @@ useEffect(() => {
             <div className="w-full md:w-1/2 border-2 rounded-md border-bgGray p-4">
               <div className="flex flex-col gap-2">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Created for:</h3>
-
-                {/* Admin Dropdown to Select a User */}
-                {isAdmin && (
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-gray-700 mb-1">Select Client</label>
-                    <select
-                      value={selectedUserId}
-                      onChange={handleUserSelection}
-                      className="w-full pl-2 bg-bgGray h-8 border-2 rounded-md text-sm"
-                    >
-                      <option value="">Select a client</option>
-                      {users.map((u) => (
-                        <option key={u._id} value={u._id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 {/* Name */}
                 <div className="flex flex-col">

@@ -1,6 +1,6 @@
 import { Modal } from "antd";
 import { useState, useContext } from "react";
-import FileDirectoryPanel from "@/FileManager/panel/FileDirectoryPanel";
+import FileDirectoryPanel from "../panel/FileDirectoryPanel";
 import FolderPanelWrapper from "../shared/FolderPanelWrapper";
 import { AuthContext } from "../../auth/AuthProvider";
 
@@ -10,8 +10,6 @@ import { AuthContext } from "../../auth/AuthProvider";
  */
 const FileDropModal = ({
   projectId,
-  selectedPath,
-  setSelectedPath,
   files,
   setFiles,
   ghostFilesByPath,
@@ -43,8 +41,6 @@ const FileDropModal = ({
         {(folderManager) => (
 <FileDirectoryPanel
   {...folderManager}
-  selectedPath={selectedPath}
-  setSelectedPath={setSelectedPath}
   editable={true}
   projectId={projectId}
   files={files}

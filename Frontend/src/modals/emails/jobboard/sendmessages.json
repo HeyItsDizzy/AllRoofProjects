@@ -1,0 +1,42 @@
+  const messageTypes = [
+    {
+      id: 'job-logged',
+      title: 'Job Logged',
+      description: 'Initial project acknowledgment',
+      color: 'bg-blue-500',
+      icon: '📋',
+      status: 'planned' // Future implementation
+    },
+    {
+      id: 'job-complete',
+      title: 'Job Complete',
+      description: 'Completion notification to client',
+      color: 'bg-orange-500',
+      icon: '✅',
+      status: 'planned' // Future implementation
+    },
+    {
+      id: 'job-delayed',
+      title: 'Job Delayed',
+      description: 'Delay notification with new timeline',
+      color: 'bg-red-500',
+      icon: '⏰',
+      status: 'planned' // Future implementation
+    },
+    {
+      id: 'longer-lead-time',
+      title: 'Longer Lead Time',
+      description: 'Extended timeline notification',
+      color: 'bg-yellow-500',
+      icon: '📅',
+      status: 'planned' // Future implementation
+    },
+    {
+      id: 'estimate-complete',
+      title: 'Estimate Complete',
+      description: 'Send completed estimate to client',
+      color: 'bg-green-600',
+      icon: '💰',
+      status: 'active' // Currently implemented
+    }
+  ];

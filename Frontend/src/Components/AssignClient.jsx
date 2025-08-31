@@ -1,15 +1,21 @@
 //AssignClient.jsx
 import { Button, Modal, Grid } from "antd";
 import React, { useState, useEffect } from "react";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
-import Avatar from "../shared/Avatar";
+import Avatar from "@/shared/Avatar";
 const { useBreakpoint } = Grid;
 
 const AssignClient = ({ clients = [], projectId, project, closeModal, updateProjectClients }) => {
   /*console.log("🔍 AssignClient - clients received:", clients);
   console.log("🔍 AssignClient - projectId received:", projectId);
   console.log("🔍 AssignClient - project received:", project);*/
+  
+  // Early return if projectId is not provided
+  if (!projectId) {
+    console.error("AssignClient: projectId is required but not provided");
+    return null;
+  }
   
   const screens = useBreakpoint();
     // if screen is xs (i.e. mobile), use 80%, otherwise fixed 600px
@@ -19,8 +25,8 @@ const AssignClient = ({ clients = [], projectId, project, closeModal, updateProj
 
   const [loading, setLoading] = useState(false);
   const axiosSecure = useAxiosSecure();
-  const url = `/projects/assignClient/${projectId.trim()}`;
-  const unassignUrl = `/projects/unassignClient/${projectId.trim()}`;
+  const url = `/projects/assignClient/${projectId?.trim() || ''}`;
+  const unassignUrl = `/projects/unassignClient/${projectId?.trim() || ''}`;
   const [filteredClients, setFilteredClients] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [multiAssignMode, setMultiAssignMode] = useState(false);

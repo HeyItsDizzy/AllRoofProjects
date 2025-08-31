@@ -1,20 +1,20 @@
 // src/pages/UserManagement.jsx
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from "../auth/AuthProvider";
-import useAxiosSecure from "../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
-import Avatar from "../shared/Avatar";
+import Avatar from "@/shared/Avatar";
 import { 
   IconEdit, 
   IconDelete, 
   IconBlock, 
   IconUnblock, 
-  IconPromote, 
-  IconDemote,
   IconInvite,
   IconRefresh
-} from "../shared/IconSet";
+} from "@/shared/IconSet";
 import InviteUserModal from "../components/InviteUserModal";
+import EditUserModal from "../components/EditUserModal";
+import { getStrengthColors, getStrengthLevel, calculateUserProfileStrength } from "../utils/profileStrength";
 
 export default function UserManagement() {
   const { user: currentUser } = useContext(AuthContext);
@@ -27,6 +27,8 @@ export default function UserManagement() {
   const [filterRole, setFilterRole] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,56 +107,6 @@ export default function UserManagement() {
   };
 
   // User Actions
-  const handlePromoteUser = async (userId, userName) => {
-    try {
-      const result = await Swal.fire({
-        title: `Promote ${userName} to Admin?`,
-        text: "This will give them full administrative privileges.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Yes, promote!",
-      });
-
-      if (result.isConfirmed) {
-        const response = await axiosSecure.patch(`/users/make-admin/${userId}`);
-        if (response.data.success) {
-          await fetchUsers();
-          Swal.fire("Promoted!", `${userName} is now an Admin.`, "success");
-        }
-      }
-    } catch (error) {
-      console.error("Error promoting user:", error);
-      Swal.fire("Error", "Failed to promote user", "error");
-    }
-  };
-
-  const handleDemoteUser = async (userId, userName) => {
-    try {
-      const result = await Swal.fire({
-        title: `Demote ${userName} to User?`,
-        text: "This will remove their administrative privileges.",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Yes, demote!",
-      });
-
-      if (result.isConfirmed) {
-        const response = await axiosSecure.patch(`/users/remove-admin/${userId}`);
-        if (response.data.success) {
-          await fetchUsers();
-          Swal.fire("Demoted!", `${userName} is now a regular User.`, "success");
-        }
-      }
-    } catch (error) {
-      console.error("Error demoting user:", error);
-      Swal.fire("Error", "Failed to demote user", "error");
-    }
-  };
-
   const handleBlockUser = async (userId, userName) => {
     try {
       const result = await Swal.fire({
@@ -218,6 +170,16 @@ export default function UserManagement() {
     }
   };
 
+  const handleEditUser = (user) => {
+    setSelectedUser(user);
+    setShowEditModal(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setSelectedUser(null);
+  };
+
   const getUserStatusBadge = (user) => {
     if (user.isDeleted) {
       return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Deleted</span>;
@@ -233,6 +195,7 @@ export default function UserManagement() {
     const colors = {
       Admin: "bg-purple-100 text-purple-800",
       User: "bg-blue-100 text-blue-800",
+      Estimator: "bg-green-100 text-green-800",
     };
     return (
       <span className={`px-2 py-1 text-xs rounded-full ${colors[roleStr] || colors.User}`}>
@@ -302,6 +265,7 @@ export default function UserManagement() {
                 <option value="All">All Roles</option>
                 <option value="Admin">Admin</option>
                 <option value="User">User</option>
+                <option value="Estimator">Estimator</option>
               </select>
             </div>
             <div>
@@ -329,7 +293,7 @@ export default function UserManagement() {
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50">  
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
@@ -353,13 +317,27 @@ export default function UserManagement() {
                           <div className="text-sm font-medium text-textBlack">
                             {String(user.firstName || '')} {String(user.lastName || '')}
                           </div>
-                          <div className="text-sm text-textGray">{String(user.email || '')}</div>
+                          <div className="text-sm text-textGray mt-2">
+                            {(() => {
+                              const profileData = calculateUserProfileStrength(user);
+                              const strengthData = getStrengthLevel(profileData.percentage);
+                              const colorClasses = getStrengthColors(strengthData.color);
+                              return (
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs font-medium border ${colorClasses.bg} ${colorClasses.text} ${colorClasses.border}`}
+                                  title={`Profile completion: ${profileData.percentage}%`}
+                                >
+                                  {strengthData.icon} {profileData.percentage}% {strengthData.level}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-textBlack">{String(user.phone || 'No phone')}</div>
-                      <div className="text-sm text-textGray">{String(user.address || 'No address')}</div>
+                      <div className="text-sm text-textGray">{String(user.email || 'No email')}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-textBlack">{String(user.company || 'No company')}</div>
@@ -375,26 +353,6 @@ export default function UserManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        {/* Role Management */}
-                        {String(user.role) === "User" && !user.isDeleted && (
-                          <button
-                            onClick={() => handlePromoteUser(user._id, getUserName(user))}
-                            className="p-1 text-green-600 hover:text-green-800 transition"
-                            title="Promote to Admin"
-                          >
-                            <IconPromote className="w-6 h-6" />
-                          </button>
-                        )}
-                        {String(user.role) === "Admin" && String(user._id) !== String(currentUser._id) && !user.isDeleted && (
-                          <button
-                            onClick={() => handleDemoteUser(user._id, getUserName(user))}
-                            className="p-1 text-orange-600 hover:text-orange-800 transition"
-                            title="Demote to User"
-                          >
-                            <IconDemote className="w-6 h-6" />
-                          </button>
-                        )}
-
                         {/* Block/Unblock */}
                         {!user.isDeleted && String(user._id) !== String(currentUser._id) && (
                           <>
@@ -431,7 +389,7 @@ export default function UserManagement() {
 
                         {/* Edit */}
                         <button
-                          onClick={() => {/* TODO: Implement edit user modal */}}
+                          onClick={() => handleEditUser(user)}
                           className="p-1 text-gray-600 hover:text-gray-800 transition"
                           title="Edit User"
                         >
@@ -533,6 +491,14 @@ export default function UserManagement() {
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
         onInviteSent={fetchUsers}
+      />
+
+      {/* Edit User Modal */}
+      <EditUserModal
+        isOpen={showEditModal}
+        onClose={handleCloseEditModal}
+        user={selectedUser}
+        onUserUpdated={fetchUsers}
       />
     </div>
   );

@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { IconDown, IconUp } from "../shared/IconSet.jsx";
+import { IconDown, IconUp } from "@/shared/IconSet.jsx";
 import { Button, Drawer, Space } from "antd";
-import { IconBackArrow } from "../shared/IconSet.jsx";
-import { IconDownload } from "../shared/IconSet.jsx";
+import { IconBackArrow } from "@/shared/IconSet.jsx";
+import { IconDownload } from "@/shared/IconSet.jsx";
 // eslint-disable-next-line react/prop-types
 const Details = ({ data }) => {
   // console.log(data);

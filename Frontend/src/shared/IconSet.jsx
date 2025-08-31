@@ -1,3 +1,5 @@
+// Lucide Icons (Pin)
+import { LuPin as IconPin, LuPinOff as IconUnpin } from "react-icons/lu";
 // src/shared/IconSet.jsx
 
 // ─────────── Imports ───────────
@@ -18,6 +20,8 @@ import {
   MdRefresh as IconRefresh,
   MdKeyboardArrowUp as IconPromote,
   MdKeyboardArrowDown as IconDemote,
+  MdForwardToInbox as IconSend,
+  MdClose as IconClose,
 } from "react-icons/md";
 
 // Font Awesome v5
@@ -31,6 +35,7 @@ import {
   FaPlusCircle as IconNewFile,
   FaPlusSquare as IconExpandBox,
   FaMinusSquare as IconCollapseBox,
+  FaRegSave as IconSave,
 } from "react-icons/fa";
 
 // Font Awesome v6
@@ -59,6 +64,7 @@ import {
   IoIosMenu as IconSidebarMenu,
   IoMdSync as IconSync,
 } from "react-icons/io";
+import { ImWarning as IconWarning } from "react-icons/im";
 
 // Heroicons
 import { HiDotsVertical as IconMenuDots } from "react-icons/hi";
@@ -98,6 +104,9 @@ function getFileIcon(fileName, size = 32, colorClass = null) {
 // ─────────── Exports ───────────
 
 export {
+  // Pin Icons
+  IconPin,
+  IconUnpin,
   // Navigation
   IconBackArrow,
   IconBackSmall,
@@ -109,6 +118,7 @@ export {
   IconEdit,
   IconDelete,
   IconView,
+  IconSave,
 
   // File Transfer
   IconDownload,
@@ -140,6 +150,7 @@ export {
   IconPending,
   IconComplete,
   IconSync,
+  IconWarning,
 
   // User Management
   IconBlock,
@@ -148,6 +159,8 @@ export {
   IconRefresh,
   IconPromote,
   IconDemote,
+  IconSend,
+  IconClose,
 
   // Utility
   getFileIcon,

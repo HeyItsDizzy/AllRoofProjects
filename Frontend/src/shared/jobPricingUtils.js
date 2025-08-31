@@ -3,6 +3,7 @@ import { planTypes } from '@/shared/planPricing'; // enriched with tiers, FX, CO
 /**
  * Calculates Est Cost (AUD) based on PlanType and EstInv flag.
  * Pulls from planPricing enriched tier structure.
+ * Currently using Gold tier for all clients.
  */
 export function calculateAUD(row, allPlans = planTypes) {
   const { PlanType = '', EstInv = 0 } = row;
@@ -11,12 +12,13 @@ export function calculateAUD(row, allPlans = planTypes) {
   const match = allPlans.find(plan => plan.label === PlanType);
   if (!match) return '';
 
-  const tier = match.tiers.find(t => t.name === "Bronze") || match.tiers[0];
+  const tier = match.tiers.find(t => t.name === "Gold") || match.tiers[0];
   return tier?.AUD ?? '';
 }
 
 /**
  * Converts Est Cost (AUD) into NOK using enriched pricing
+ * Currently using Gold tier for all clients.
  */
 export function calculateNOK(row, allPlans = planTypes, exchangeRate = 7) {
   const { PlanType = '', EstInv = 0 } = row;
@@ -25,7 +27,7 @@ export function calculateNOK(row, allPlans = planTypes, exchangeRate = 7) {
   const match = allPlans.find(plan => plan.label === PlanType);
   if (!match) return '';
 
-  const tier = match.tiers.find(t => t.name === "Bronze") || match.tiers[0];
+  const tier = match.tiers.find(t => t.name === "Gold") || match.tiers[0];
   const audPrice = tier?.AUD ?? '';
   if (!audPrice || isNaN(audPrice)) return '';
 
@@ -35,12 +37,12 @@ export function calculateNOK(row, allPlans = planTypes, exchangeRate = 7) {
 
 /**
  * Calculates Estimator Pay:
- * If Qty > 0 and Estimator filled, returns Qty × FIXED_RATE (default 120)
+ * If EstQty > 0 and Estimator filled, returns EstQty × FIXED_RATE (always $30 AUD)
  */
-export function calculatePay(row, FIXED_RATE = 120) {
-  const { Qty = 0, Est = '' } = row;
-  if (Qty > 0 && Est.trim().length > 1) {
-    return Qty * FIXED_RATE;
+export function calculatePay(row, FIXED_RATE = 30) {
+  const { EstQty = 0, linkedEstimators = [] } = row;
+  if (EstQty > 0 && linkedEstimators.length > 0) {
+    return EstQty * FIXED_RATE;
   }
   return 0;
 }

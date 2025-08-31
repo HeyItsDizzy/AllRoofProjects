@@ -1,7 +1,7 @@
 // UploadButton.jsx
 import React from "react";
-import { useUploadManager } from "@/FileManager/hooks/useUploadManager";
-import Swal from '@/shared/swalConfig';
+import { useUploadManager } from "../hooks/useUploadManager";
+import Swal from '../../shared/swalConfig';
 
 const UploadButton = ({
   projectId,

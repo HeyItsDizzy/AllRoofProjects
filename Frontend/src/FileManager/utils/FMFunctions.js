@@ -1,7 +1,7 @@
 import { message } from "antd";
 //import SortableFolder from "../dnd/SortableFolder";
 import mime from "mime";
-import Swal from '@/shared/swalConfig';
+import Swal from '../../shared/swalConfig';
 //import Swal from "sweetalert2";
 
 
@@ -90,7 +90,22 @@ function buildFolderListFromDiskTree(metadata = {}) {
 async function renameFolderPath({ projectId, axiosSecure, folderPath, newName, onSuccess }) {
   try {
     const normalizedPath = normalizePath(folderPath);
-    const endpoint = `/files/${projectId}/folders/${encodeURIComponent(normalizedPath)}`;
+    
+    // Split path and encode each segment separately to avoid double-encoding
+    const pathSegments = normalizedPath.split('/').map(segment => encodeURIComponent(segment));
+    const encodedPath = pathSegments.join('/');
+    
+    const endpoint = `/files/${projectId}/folders/${encodedPath}`;
+
+    console.log("🔍 [RENAME FOLDER DEBUG]");
+    console.log("   Original folderPath:", folderPath);
+    console.log("   Normalized path:", normalizedPath);
+    console.log("   Path segments:", normalizedPath.split('/'));
+    console.log("   Encoded segments:", pathSegments);
+    console.log("   Final encoded path:", encodedPath);
+    console.log("   Full endpoint:", endpoint);
+    console.log("   Project ID:", projectId);
+    console.log("   New name:", newName);
 
     const res = await axiosSecure.put(endpoint, { newName });
 
@@ -98,6 +113,13 @@ async function renameFolderPath({ projectId, axiosSecure, folderPath, newName, o
     if (onSuccess) onSuccess();
     return res?.data;
   } catch (err) {
+    console.error("❌ Folder rename failed:");
+    console.error("   Error status:", err?.response?.status);
+    console.error("   Error message:", err?.message);
+    console.error("   Response data:", err?.response?.data);
+    console.error("   Request URL:", err?.config?.url);
+    console.error("   Full error:", err);
+    
     showMessage("error", "Rename failed");
     logMessage("❌ Folder rename failed:", err);
   }
