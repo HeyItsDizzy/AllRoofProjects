@@ -3,6 +3,8 @@
 
 // Base URL for static assets from environment variables
 const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL || "";
+const IS_DEV = import.meta.env.DEV;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 /**
  * Avatar component that displays user profile pictures or initials
@@ -46,18 +48,43 @@ const Avatar = ({ name = "", avatarUrl = "", size = "md" }) => {
   /**
    * Determines the appropriate image source URL
    * Handles blob URLs, external URLs, and static assets
+   * Properly handles development vs production environments
    * @param {string} url - Avatar URL to process
    * @returns {string} Complete image source URL
    */
   const getImageSource = (url) => {
     if (!url) return "";
     
-    // Use URL as-is for blob URLs and external URLs
-    if (url.startsWith("blob:") || url.startsWith("http")) {
+    // Use URL as-is for blob URLs
+    if (url.startsWith("blob:")) {
       return url;
     }
     
-    // Prepend base URL for static assets
+    // In development mode, if we get a localhost URL from backend, 
+    // convert it to use the production base URL
+    if (IS_DEV && (url.includes("localhost") || url.includes("127.0.0.1"))) {
+      // Extract the path part (e.g., "/uploads/avatars/user/123.jpg")
+      const pathMatch = url.match(/\/uploads\/.*$/);
+      if (pathMatch) {
+        const productionUrl = `${BASE_URL}${pathMatch[0]}`;
+        console.log(`🖼️ Avatar Dev Mode: Converting ${url} → ${productionUrl}`);
+        return productionUrl;
+      }
+    }
+    
+    // In development mode, if we get a relative path, use production base URL
+    if (IS_DEV && url.startsWith("/uploads")) {
+      const productionUrl = `${BASE_URL}${url}`;
+      console.log(`🖼️ Avatar Dev Mode: Relative path ${url} → ${productionUrl}`);
+      return productionUrl;
+    }
+    
+    // Use URL as-is for external URLs that are not localhost
+    if (url.startsWith("http")) {
+      return url;
+    }
+    
+    // For production builds or relative paths, prepend base URL
     return `${BASE_URL}${url}`;
   };
 
