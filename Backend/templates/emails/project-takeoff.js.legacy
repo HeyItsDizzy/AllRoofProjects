@@ -1,0 +1,196 @@
+/**
+ * Estimate Complete Email Template
+ * Professional email template for sending completed project estimates
+ */
+
+/**
+ * Generate estimate complete email
+ * @param {object} data - Template data
+ * @param {string} data.projectAddress - Project address/description
+ * @param {string} data.estimateDescription - Description of what the estimate contains
+ * @param {string} data.projectNumber - Project number (used as reference)
+ * @param {string} data.clientName - Name of the client receiving the email
+ * @param {string} data.projectViewUrl - Direct URL to view the project with read-only token
+ * @param {string} data.companyLogoUrl - Company's uploaded logo URL (optional)
+ * @param {string} data.optionalBody - Optional personalized message or notes (optional)
+ * @returns {object} - Email subject and HTML content
+ */
+const estimateComplete = (data) => {
+  const { projectAddress, estimateDescription, projectNumber, clientName, projectViewUrl, companyLogoUrl, optionalBody } = data;
+  
+  const subject = `Estimate Complete - ${projectAddress} - Ref: ${projectNumber}`;
+  
+  // Header logo - company logo or fallback to All Roof Takeoffs
+  const headerLogoUrl = companyLogoUrl 
+    ? `https://projects.allrooftakeoffs.com.au${companyLogoUrl}` 
+    : `https://ui-avatars.com/api/?name=All+Roof+Takeoffs&background=009245&color=fff&size=200`;
+  
+  // Footer logo - All Roof Takeoffs logo
+  const footerLogoUrl = `https://projects.allrooftakeoffs.com.au/uploads/artrepo/SocialMedia_LI2.png`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Estimate Complete - ${projectNumber}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #E1E5E5; font-family: Arial, sans-serif; line-height: 1.6; color: #081F13;">
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #E1E5E5;">
+        <tr>
+          <td align="center" style="padding: 20px 0;">
+            <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border: 1px solid #ddd;">
+              
+              <!-- Header with Logo -->
+              <tr>
+                <td style="background-color: #009245; padding: 40px 30px; text-align: center;">
+                  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                    <tr>
+                      <td align="center" style="padding-bottom: 20px;">
+                        <img src="${headerLogoUrl}" 
+                             alt="All Roof Takeoffs Logo" 
+                             height="120"
+                             style="max-width: 300px; max-height: 120px; width: auto; height: 120px; display: block; border-radius: 8px;">
+                      </td>
+                    </tr>
+                    <tr>
+                      <td align="center">
+                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold; font-family: Arial, sans-serif;">
+                          All Roof Takeoffs
+                        </h1>
+                        <p style="margin: 8px 0 0 0; color: #ffffff; font-size: 16px; font-family: Arial, sans-serif;">
+                          Professional Roof Takeoff Services
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              
+              <!-- Main Content -->
+              <tr>
+                <td style="padding: 40px 30px;">
+                  <h2 style="margin: 0 0 20px 0; color: #081F13; font-size: 24px; font-weight: bold; font-family: Arial, sans-serif;">
+                    Estimate Complete
+                  </h2>
+                  
+                  <p style="margin: 0 0 20px 0; color: #696D7D; font-size: 16px; line-height: 1.6; font-family: Arial, sans-serif;">
+                    ${clientName ? `Dear ${clientName},` : 'Hello,'}
+                  </p>
+                  
+                  ${optionalBody ? `
+                  <!-- Optional Personal Message -->
+                  <div style="background-color: #f8fffe; border-left: 3px solid #009245; padding: 15px 20px; margin: 20px 0; border-radius: 0 4px 4px 0;">
+                    <p style="margin: 0; color: #696D7D; font-size: 16px; line-height: 1.6; font-family: Arial, sans-serif; white-space: pre-wrap;">${optionalBody}</p>
+                  </div>
+                  ` : ''}
+                  
+                  <p style="margin: 0 0 20px 0; color: #696D7D; font-size: 16px; line-height: 1.6; font-family: Arial, sans-serif;">
+                    Please find estimate for <strong style="color: #009245;">${projectAddress}</strong> here:
+                  </p>
+                  
+                  <!-- Project Link Button -->
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${projectViewUrl}" 
+                       style="background-color: #009245; color: #ffffff; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block; font-family: Arial, sans-serif;">
+                      View Project Estimate
+                    </a>
+                  </div>
+                  
+                  <p style="margin: 0 0 20px 0; color: #696D7D; font-size: 16px; line-height: 1.6; font-family: Arial, sans-serif;">
+                    This estimate contains <strong>${estimateDescription}</strong>
+                  </p>
+                  
+                  <div style="background-color: #f8f9fa; border-left: 4px solid #009245; padding: 20px; margin: 30px 0;">
+                    <p style="margin: 0 0 10px 0; color: #081F13; font-size: 16px; font-weight: bold; font-family: Arial, sans-serif;">
+                      Questions or Queries?
+                    </p>
+                    <p style="margin: 0; color: #696D7D; font-size: 16px; line-height: 1.6; font-family: Arial, sans-serif;">
+                      Please refer to reference number: <strong style="color: #009245;">#${projectNumber}</strong>
+                    </p>
+                  </div>
+                  
+                  <p style="margin: 30px 0 20px 0; color: #696D7D; font-size: 16px; line-height: 1.6; font-family: Arial, sans-serif;">
+                    Thanks and Kind regards,<br>
+                    <strong style="color: #081F13;">Rodney Pedersen</strong>
+                  </p>
+                  
+                
+                        <img src="${footerLogoUrl}" 
+                             alt="All Roof Takeoffs" 
+                             height="80"
+                             style="max-height: 80px; width: auto; opacity: 0.8; display: block;">
+                  <!-- Contact Information -->
+                  <div style="background-color: #f1f9f4; border: 1px solid #009245; border-radius: 8px; padding: 15px; margin: 30px 0;">
+                    <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td style="padding: 0px 0; color: #081F13; font-size: 14px; font-family: Arial, sans-serif;">
+                          <strong>ABN:</strong> 28 212 267 152
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0px 0; color: #081F13; font-size: 14px; font-family: Arial, sans-serif;">
+                          <strong>Email:</strong> <a href="mailto:requests@allrooftakeoffs.com.au" style="color: #009245; text-decoration: none;">requests@allrooftakeoffs.com.au</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0px 0; color: #081F13; font-size: 14px; font-family: Arial, sans-serif;">
+                          <strong>Website:</strong> <a href="https://allrooftakeoffs.com.au/" style="color: #009245; text-decoration: none;">https://allrooftakeoffs.com.au/</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0px 0; color: #081F13; font-size: 14px; font-family: Arial, sans-serif;">
+                          <strong>Call:</strong> Between 4:00pm-9:00pm AEST
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:px 0; color: #081F13; font-size: 14px; font-family: Arial, sans-serif;">
+                          <strong>WhatsApp:</strong> +61 438 399 983
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 0px 0; color: #696D7D; font-size: 12px; font-style: italic; font-family: Arial, sans-serif;">
+                          (I travel internationally - WhatsApp will always reach me)
+                        </td>
+                      </tr>
+                    </table>
+                  </div>
+                  
+                </td>
+              </tr>
+              
+              <!-- Footer -->
+              <tr>
+                <td style="background-color: #081F13; padding: 30px; text-align: center;">
+                  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                    <tr>
+<td align="center" style="padding-bottom: 15px;">
+                      </td>
+                    </tr>
+                    <tr>
+                      <td align="center">
+                        <p style="margin: 0 0 8px 0; color: #ffffff; font-size: 14px; font-weight: bold; font-family: Arial, sans-serif;">
+                          All Roof Takeoffs - Professional Roof Takeoff Services
+                        </p>
+                        <p style="margin: 0; color: #999999; font-size: 11px; font-family: Arial, sans-serif;">
+                          This is an automated message from All Roof Takeoffs project management system.<br>
+                          Please do not reply to this email address.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+};
+
+module.exports = estimateComplete;
