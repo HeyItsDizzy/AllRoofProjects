@@ -43,7 +43,8 @@ Local Development State:
 
 echo ""
 echo "📤 Pushing to GitHub..."
-if git push origin main; then
+echo "   (Force pushing to overwrite remote changes)"
+if git push origin main --force; then
     echo ""
     echo "============================================"
     echo "🎉 SUCCESS! PROJECT PUSHED TO GITHUB! 🎉"
