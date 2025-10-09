@@ -15,10 +15,6 @@
     {
       "name": "🗂️ Recovered Files",
       "path": "../recovered-files"
-    },
-    {
-      "name": "💻 Live Backend (VPS)",
-      "uri": "vscode-remote://ssh-remote+myvps/root/ART/ProjectManagerApp/Backend"
     }
   ],
   "remoteAuthority": "ssh-remote+myvps",
@@ -27,7 +23,7 @@
     // FILE & SEARCH EXCLUDES
     // ==============================
     "files.exclude": {
-      "Backend/**": true,
+      //"Backend/**": true,
       "**/node_modules": true,
       "**/.git": true,
       "**/.DS_Store": true,

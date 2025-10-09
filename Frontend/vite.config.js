@@ -125,9 +125,9 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api': {
-          target: 'https://projects.allrooftakeoffs.com.au',
+          target: 'http://localhost:5002',
           changeOrigin: true,
-          secure: true,
+          secure: false,
           rewrite: (path) => path,
           configure: (proxy, _options) => {
             proxy.on('error', (err, _req, _res) => {
@@ -135,7 +135,7 @@ export default defineConfig(({ mode }) => {
             });
             proxy.on('proxyReq', (proxyReq, req, _res) => {
               console.log('🟡 Sending Request to Target:', req.method, req.url);
-              proxyReq.setHeader('Origin', 'https://projects.allrooftakeoffs.com.au');
+              proxyReq.setHeader('Origin', 'http://localhost:5002');
             });
             proxy.on('proxyRes', (proxyRes, req, _res) => {
               console.log('🟢 Received Response from Target:', proxyRes.statusCode, req.url);
@@ -143,9 +143,9 @@ export default defineConfig(({ mode }) => {
           },
         },
         '/socket.io': {
-          target: 'http://projects.allrooftakeoffs.com.au:5001',
+          target: 'http://localhost:3002',
           changeOrigin: true,
-          secure: false,  // Change to false since we're using HTTP
+          secure: false,
           ws: true, // Enable WebSocket proxying
           configure: (proxy, _options) => {
             proxy.on('error', (err, _req, _res) => {

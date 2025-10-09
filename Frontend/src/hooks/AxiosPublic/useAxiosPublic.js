@@ -5,9 +5,9 @@ import { APP_CONFIG } from '../../config/version';
 console.log("public VITE_API_BASE_URL:", import.meta.env.VITE_API_BASE_URL);
 console.log("Full environment:", import.meta.env);
 
-// In development mode, use relative URLs to enable Vite proxy
+// In development mode, use the environment variable for local backend
 // In production, use the full URL from environment
-const baseURL = import.meta.env.MODE === 'development' ? '/api' : import.meta.env.VITE_API_BASE_URL;
+const baseURL = import.meta.env.VITE_API_BASE_URL;
 
 console.log("🔧 [AXIOS PUBLIC] Using baseURL:", baseURL, "| Mode:", import.meta.env.MODE);
 
