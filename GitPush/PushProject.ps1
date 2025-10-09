@@ -44,8 +44,9 @@ Local Development State:
 
 Write-Host ""
 Write-Host "📤 Pushing to GitHub..." -ForegroundColor Yellow
+Write-Host "   (Force pushing to overwrite remote changes)" -ForegroundColor Cyan
 try {
-    git push origin main
+    git push origin main --force
     Write-Host ""
     Write-Host "============================================" -ForegroundColor White
     Write-Host "🎉 SUCCESS! PROJECT PUSHED TO GITHUB! 🎉" -ForegroundColor Green -BackgroundColor Black
