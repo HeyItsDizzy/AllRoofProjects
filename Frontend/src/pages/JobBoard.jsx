@@ -12,6 +12,7 @@ import { basePlanTypes } from "@/shared/planTypes";
 import { useAutoSave } from "@/appjobboard/hooks/useAutoSave";
 import { useTablePreferences } from "@/appjobboard/hooks/useTablePreferences";
 import { normalizeProjectName } from "@/utils/projectNameNormalizer";
+import { notifyProjectDataUpdate } from "@/utils/ProjectDataSync";
 
 const JobBoard = () => {
   const { user } = useContext(AuthContext);
@@ -58,17 +59,86 @@ const JobBoard = () => {
     pendingProjects
   } = useAutoSave(async (projectId, changes) => {
     try {
+      console.log(`🚀 JobBoard auto-save triggered for project ${projectId}`);
+      console.log(`👤 Current user role: ${user?.role}`);
+      console.log(`📋 Changes object:`, changes);
+      console.log(`� Changes.jobBoardStatus:`, changes.jobBoardStatus);
+      console.log(`📋 Type of changes.jobBoardStatus:`, typeof changes.jobBoardStatus);
+      console.log(`📋 Has jobBoardStatus property:`, changes.hasOwnProperty('jobBoardStatus'));
+      console.log(`📋 All change keys:`, Object.keys(changes));
+      
       // Normalize project name before saving if it exists in changes
       if (changes.name && typeof changes.name === 'string') {
         changes.name = normalizeProjectName(changes.name);
       }
       
-      await axiosSecure.patch(`/projects/update/${projectId}`, changes);
+      // Handle JobBoard status updates separately (Feature #31 - Dual Status System)
+      if (changes.jobBoardStatus) {
+        console.log(`📊 ✅ ENTERING JobBoard status branch: "${changes.jobBoardStatus}"`);
+        
+        // 🔄 Special Status Mapping: JobBoard → ProjectTable
+        // - JobBoard "Sent" → ProjectTable "Estimate Completed" 
+        // - JobBoard "Estimate Completed" → ProjectTable "Estimate Completed"
+        // - JobBoard "Awaiting Review" (Estimator auto-change) → ProjectTable "Estimate Completed"
+        // - All other statuses remain the same
+        const jobBoardStatus = changes.jobBoardStatus;
+        let projectTableStatus = jobBoardStatus;
+        
+        if (jobBoardStatus === 'Sent') {
+          projectTableStatus = 'Estimate Completed';
+          console.log('🔄 Status mapping: JobBoard "Sent" → ProjectTable "Estimate Completed"');
+        } else if (jobBoardStatus === 'Awaiting Review') {
+          projectTableStatus = 'Estimate Completed';
+          console.log('🔄 Status mapping: JobBoard "Awaiting Review" → ProjectTable "Estimate Completed"');
+        } else if (jobBoardStatus === 'Estimate Completed') {
+          projectTableStatus = 'Estimate Completed';
+          console.log('🔄 Status mapping: JobBoard "Estimate Completed" → ProjectTable "Estimate Completed"');
+        }
+        
+        console.log(`📡 🎯 SENDING TO SPECIAL ENDPOINT: /projects/update-jobboard-status/${projectId}`);
+        console.log(`📡 Request payload:`, {
+          jobBoardStatus: jobBoardStatus,
+          status: projectTableStatus
+        });
+        
+        // Update both jobBoardStatus and regular status with mapping
+        const response = await axiosSecure.patch(`/projects/update-jobboard-status/${projectId}`, {
+          jobBoardStatus: jobBoardStatus,
+          status: projectTableStatus  // Also update regular status with mapped value
+        });
+        
+        console.log(`✅ API response:`, response.data);
+        
+        // Remove jobBoardStatus from regular changes to avoid duplicate updates
+        const { jobBoardStatus: removedJobBoardStatus, ...otherChanges } = changes;
+        
+        // If there are other changes, save them with the regular endpoint
+        if (Object.keys(otherChanges).length > 0) {
+          console.log(`📡 Sending additional updates for other fields:`, otherChanges);
+          await axiosSecure.patch(`/projects/update/${projectId}`, otherChanges);
+        }
+      } else {
+        console.log(`� ❌ ENTERING regular update branch (no jobBoardStatus):`, changes);
+        console.log(`📡 🎯 SENDING TO REGULAR ENDPOINT: /projects/update/${projectId}`);
+        // Regular update for non-JobBoard status fields
+        await axiosSecure.patch(`/projects/update/${projectId}`, changes);
+      }
+      
+      console.log(`✅ JobBoard auto-save completed successfully for project ${projectId}`);
       return true;
     } catch (error) {
-      console.error('Failed to save project:', error);
+      console.error(`❌ JobBoard auto-save failed for project ${projectId}:`, error);
+      console.error(`❌ Error details:`, error.response?.data || error.message);
       throw error;
     }
+  }, (projectId, changes) => {
+    // 🔄 After-save callback: Notify other components about the update
+    console.log('🔄 JobBoard auto-save completed, notifying other components:', {
+      projectId,
+      changes,
+      source: 'JobBoard'
+    });
+    notifyProjectDataUpdate(projectId, changes, 'JobBoard');
   });
 
   // Update row function for immediate UI updates (no normalization here - keep raw input for editing)
@@ -316,7 +386,6 @@ useEffect(() => {
           openAssignEstimator={openAssignEstimatorModal}
           openEstimateModal={openEstimateModal}
           openSendModal={openSendMessageModal}
-          updateRow={updateRow}
           columnSizing={columnSizing}
           onColumnSizingChange={setColumnSizing}
           sorting={sorting}

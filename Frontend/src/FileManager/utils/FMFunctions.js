@@ -220,17 +220,24 @@ async function downloadFile({ axiosSecure, selectedPath, projectId, fileName, mo
       console.log(`📊 [DEV] File extension: ${ext}`);
     }
     
-    // Use direct backend URL for both PDFs and images
-    // The proxy seems to have routing issues with the file endpoints
-    const backendURL = process.env.NODE_ENV === 'development' 
-      ? 'https://projects.allrooftakeoffs.com.au' 
-      : (axiosSecure.defaults.baseURL || '');
+    // 🔧 FIXED: Proper URL construction for both dev and prod
+    let baseURL;
     
-    const directURL = `${backendURL}/api/files/${projectId}/download/${cleanPath}/${encodeURIComponent(fileName)}?preview=true`;
+    if (isDev) {
+      // Development: Use current origin (Vite will proxy /api)
+      baseURL = window.location.origin; // http://localhost:5173
+    } else {
+      // Production: Use current origin (nginx proxies /api to backend)
+      baseURL = window.location.origin; // https://projects.allrooftakeoffs.com.au
+    }
+    
+    // Build the complete URL - backend expects: /api/files/:projectId/download/...
+    const directURL = `${baseURL}/api/files/${projectId}/download/${cleanPath}/${encodeURIComponent(fileName)}?preview=true`;
     
     if (isDev) {
       console.log('🚀 [DEV] Opening preview URL:', directURL);
       console.log(`📏 [DEV] URL length: ${directURL.length} characters`);
+      console.log(`🔧 [DEV] Base URL: ${baseURL}`);
     }
     
     // ELEGANT UX: PDFs in new tab, Images in modal
@@ -883,6 +890,8 @@ async function openImageModal(imageUrl, fileName, startTime) {
     if (isDev) {
       console.log('🌐 [DEV] Loading image in elegant modal:', imageUrl);
       console.log(`📏 [DEV] Image URL length: ${imageUrl.length} characters`);
+    } else {
+      console.log('🌐 [PROD] Loading image in modal:', imageUrl);
     }
     
     // Since nginx is fixed, we can now load images directly via src

@@ -14,9 +14,11 @@ png
 gif
 webp
 
-# cad
+# cad / Applicad File types
 dwg
 dxf
+dab
+dbk 
 
 # archives
 zip

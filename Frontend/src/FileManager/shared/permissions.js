@@ -1,6 +1,4 @@
 // permissions.js
-import fs from "fs";
-import path from "path";
 
 // Fallback permission rules for known folders if meta is missing
 const DEFAULT_FOLDER_PERMISSIONS = {

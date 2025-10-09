@@ -43,6 +43,8 @@ import Avatar from "@/shared/Avatar";
 import { navigateToProject } from "../utils/projectAliasUtils";
 import { AuthContext } from "../auth/AuthProvider";
 import { useMonthGrouping } from "@/appjobboard/hooks/useMonthGrouping";
+import MonthFilterTabs from "@/shared/components/MonthFilterTabs";
+import "../styles/cls-fix.css";
 
 export default function ProjectTable({
   projects = [],
@@ -55,6 +57,7 @@ export default function ProjectTable({
   userRole = "User",
   columnConfig = {},
   isUserView = false,
+  isLoading = false,
 }) {
   const navigate = useNavigate();
   const axiosSecure = useAxiosSecure();
@@ -69,24 +72,15 @@ export default function ProjectTable({
   const [sortOrder, setSortOrder] = useState("desc");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  // Month filtering state (matches JobBoard exactly)
-  // - activeTab: Currently selected month tab ('all', month ID, or 'older')
-  // - selectedOlderMonth: When user clicks older month from dropdown, becomes separate tab
-  // - showOlderDropdown: Controls visibility of older months dropdown menu
-  // - dropdownPosition: Absolute positioning for dropdown menu
-  // - hasUserSelectedTab: Tracks if user has made an explicit tab selection (prevents auto-selection override)
+  // Month filtering state - now managed by shared MonthFilterTabs component
   const [activeTab, setActiveTab] = useState('all');
   const [selectedOlderMonth, setSelectedOlderMonth] = useState(null);
-  const [showOlderDropdown, setShowOlderDropdown] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
-  const [hasUserSelectedTab, setHasUserSelectedTab] = useState(false);
 
   // ══════════════════════════════════════════════════════════════════
-  // 🗓️ MONTH FILTERING SYSTEM (Matches JobBoard Exactly)
+  // 🗓️ MONTH FILTERING SYSTEM - Now handled by shared MonthFilterTabs component
   // ══════════════════════════════════════════════════════════════════
 
-  // Use shared month grouping hook for consistency with JobBoard
-  // Returns: allMonths, recentMonths (last 3), olderMonths, helper functions
+  // Use shared month grouping hook for getting filtered data
   const { 
     allMonths, 
     recentMonths, 
@@ -95,113 +89,56 @@ export default function ProjectTable({
     totalJobCount 
   } = useMonthGrouping(projects);
 
-  // Generate tab structure matching JobBoard exactly:
-  // 1. All Projects → 2. Older (dropdown) → 3. Selected Older → 4. Recent 3 Months
-  const tabData = useMemo(() => {
-    const tabs = [];
-
-    // 1. All tab - shows all projects regardless of date
-    tabs.push({
-      id: 'all',
-      label: 'All Projects',
-      count: projects.length,
-      jobs: projects // Use original projects array
-    });
-
-    // 2. Older dropdown tab - aggregates all months older than recent 3
-    // This hides older months (like May 2025) in a dropdown menu
-    const olderTotalCount = olderMonths.reduce((sum, month) => sum + month.count, 0);
-    tabs.push({
-      id: 'older',
-      label: 'Older',
-      count: olderTotalCount,
-      isDropdown: true,
-      dropdownOptions: olderMonths,
-      jobs: olderMonths.flatMap(month => month.jobs)
-    });
-
-    // 3. Selected older month as separate tab (when user clicks from dropdown)
-    // This creates a temporary tab next to "Older" with close button
-    if (selectedOlderMonth) {
-      const selectedMonth = getMonthById(selectedOlderMonth);
-      if (selectedMonth) {
-        tabs.push({
-          ...selectedMonth,
-          isSelectedOlder: true // Flag to show close button
-        });
-      }
-    }
-
-    // 4. Recent 3 months in chronological order (2 months ago → last month → current month)
-    // Reversed because useMonthGrouping returns newest first
-    const orderedRecentMonths = [...recentMonths].reverse(); // Reverse to get oldest to newest
-    orderedRecentMonths.forEach(month => {
-      tabs.push(month);
-    });
-
-    return tabs;
-  }, [projects, recentMonths, olderMonths, selectedOlderMonth, getMonthById]);
-
-  // Auto-select appropriate default tab based on user role
-  // Users default to "All" projects, Admin/Estimator default to current month
+  // Set default tab based on user role
   useEffect(() => {
-    // Only set default tab if user hasn't made any explicit selection (initial load only)
-    if (!hasUserSelectedTab && activeTab === 'all') {
-      // For Users: stay on "All" tab (don't change activeTab)
-      if (userRole === "User") {
-        console.log("👤 User role detected → keeping 'All' tab as default");
-        return; // Keep activeTab as 'all'
-      }
+    if (user?.role) {
+      const isAdmin = user.role === 'admin' || user.role === 'Admin' || user.role === 'administrator';
       
-      // For Admin/Estimator: auto-select current month if available
-      if (recentMonths.length > 0) {
-        const currentMonth = recentMonths[0];
-        if (currentMonth) {
-          console.log(`👔 ${userRole} role detected → auto-selecting current month: ${currentMonth.label}`);
-          setActiveTab(currentMonth.id);
+      if (isAdmin) {
+        // Admin: Default to current month (if available), otherwise 'all'
+        if (recentMonths.length > 0) {
+          const currentDate = new Date();
+          const currentMonthKey = `${String(currentDate.getFullYear()).slice(-2)}-${String(currentDate.getMonth() + 1).padStart(2, '0')} ${currentDate.toLocaleDateString('en-US', { month: 'short' })}`;
+          const currentMonth = recentMonths.find(month => month.id === currentMonthKey);
+          setActiveTab(currentMonth ? currentMonth.id : 'all');
+        } else {
+          // No month data available, default to 'all' for admin
+          setActiveTab('all');
         }
+      } else {
+        // All other roles: Default to Most Recent (lastN)
+        setActiveTab('lastN');
       }
     }
-  }, [recentMonths, activeTab, hasUserSelectedTab, userRole]);
+  }, [user?.role, recentMonths.length]);
 
-  // Handle clicks outside dropdown to close it (matches JobBoard behavior)
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showOlderDropdown && !event.target.closest('.dropdown-container')) {
-        setShowOlderDropdown(false);
-      }
-    };
+  // ══════════════════════════════════════════════════════════════════
+  //  LAST N PROJECTS FILTERING (Configurable for Freemium/Premium)
+  // ══════════════════════════════════════════════════════════════════
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showOlderDropdown]);
+  // Configure project limit based on user tier (future freemium feature)
+  // TODO: Connect to user subscription level when freemium is implemented
+  const projectLimit = 30; // Will be: userTier === 'freemium' ? 10 : 30
 
-  // Position dropdown menu relative to "Older" button (matches JobBoard positioning)
-  const handleDropdownToggle = (event) => {
-    if (!showOlderDropdown) {
-      const rect = event.target.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX
-      });
-    }
-    setShowOlderDropdown(!showOlderDropdown);
-  };
-
-  // Get filtered projects based on active month tab
+  // Get filtered projects based on active month tab - this logic will be provided by MonthFilterTabs
   const getFilteredDataByTab = useMemo(() => {
-    const currentTab = tabData.find(tab => tab.id === activeTab);
-    if (!currentTab) return projects;
-    
-    const result = currentTab.id === 'all' ? projects : currentTab.jobs || [];
-    
-    // Development logging for debugging month filters
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🗂️ Month Filter: ${currentTab.label} (${activeTab}) → ${result.length} projects`);
+    // Find the matching month data
+    if (activeTab === 'all') {
+      return projects;
+    } else if (activeTab === 'lastN') {
+      // Sort projects by posting_date (newest first), fallback to creation date or project number
+      const sortedProjects = [...projects].sort((a, b) => {
+        const dateA = new Date(a.posting_date || a.createdAt || a.projectNumber || 0);
+        const dateB = new Date(b.posting_date || b.createdAt || b.projectNumber || 0);
+        return dateB - dateA; // Newest first
+      });
+      return sortedProjects.slice(0, projectLimit);
+    } else {
+      // Find month data from the grouping hook
+      const monthData = [...recentMonths, ...olderMonths].find(month => month.id === activeTab);
+      return monthData ? monthData.jobs : [];
     }
-    
-    return result;
-  }, [tabData, activeTab, projects]);
+  }, [activeTab, projects, recentMonths, olderMonths, projectLimit]);
 
   // ══════════════════════════════════════════════════════════════════
   // 📊 DATA PROCESSING & BUSINESS LOGIC
@@ -235,33 +172,83 @@ export default function ProjectTable({
     setStatusFilter(event.target.value);
   }, []);
 
-  // Handle project status updates with API call and optimistic UI updates
+  // Handle project status updates with performance optimization and loading states
+  const [updatingProjects, setUpdatingProjects] = useState(new Set());
+  
   const handleStatusChange = useCallback(async (projectId, newStatus) => {
+    // Prevent duplicate updates
+    if (updatingProjects.has(projectId)) {
+      console.log(`⏳ Status update already in progress for project ${projectId}`);
+      return;
+    }
+    
     try {
+      console.log(`🔄 Optimistic Status Update: ${projectId} → "${newStatus}"`);
+      
+      // Mark project as updating
+      setUpdatingProjects(prev => new Set(prev).add(projectId));
+      
+      // 🚀 OPTIMISTIC UPDATE - Update UI immediately to prevent freezing
+      setProjects(previousProjects =>
+        previousProjects.map(project =>
+          project._id === projectId 
+            ? { ...project, status: newStatus, _isUpdating: true }
+            : project
+        )
+      );
+      
+      // Make API call in background
       const response = await axiosSecure.patch(
-        `/projects/update-status/${projectId}`,
+        `/projects/update/${projectId}`,
         { status: newStatus }
       );
       
       if (response.data.success) {
-        setProjects((previousProjects) =>
-          previousProjects.map((project) =>
+        console.log(`✅ Confirmed status update: ${projectId} → "${newStatus}"`);
+        
+        // Remove updating flag
+        setProjects(previousProjects =>
+          previousProjects.map(project =>
             project._id === projectId 
-              ? { ...project, status: newStatus } 
+              ? { ...project, _isUpdating: false }
               : project
           )
         );
+        
       } else {
-        throw new Error(response.data.message);
+        throw new Error(response.data.message || 'Update failed');
       }
+      
     } catch (error) {
+      console.error(`❌ Status update failed for ${projectId}:`, error);
+      
+      // 🔄 ROLLBACK - Revert optimistic update on failure
+      setProjects(previousProjects =>
+        previousProjects.map(project =>
+          project._id === projectId 
+            ? { ...project, _isUpdating: false } // Keep original status
+            : project
+        )
+      );
+      
       Swal.fire({
         icon: "error",
-        title: "Error",
-        text: "Failed to update status. Please try again.",
+        title: "Update Failed",
+        text: `Failed to update status to "${newStatus}". Please try again.`,
+        toast: true,
+        position: 'top-end',
+        timer: 3000
+      });
+      
+    } finally {
+      // Clean up updating state
+      setUpdatingProjects(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(projectId);
+        return newSet;
       });
     }
-  }, [axiosSecure, setProjects]);
+  }, [axiosSecure, setProjects, updatingProjects]);
 
   // ══════════════════════════════════════════════════════════════════
   // 🔢 SORTING ALGORITHMS
@@ -348,17 +335,22 @@ export default function ProjectTable({
   // Determine project display properties based on status and role
   // Returns: display label, color styling, and client lock status
   const getProjectDisplayInfo = useCallback((project) => {
+    // 🎯 KISS: Only use the main status field
+    const effectiveStatus = project.status;
+    
     const isProjectStatus = projectStatuses.find(
-      (status) => status.label === project.status
+      (status) => status.label === effectiveStatus
     );
     const isEstimateStatus = estimateStatuses.find(
-      (status) => status.label === project.status
+      (status) => status.label === effectiveStatus
     );
     
-    // Format estimate statuses with "ART:" prefix for clarity
-    const displayLabel = isEstimateStatus && !isProjectStatus
-      ? `ART: ${project.status}`
-      : project.status;
+    // Show "ART:" prefix for ALL estimate statuses (JobBoard context)
+    // Exception: Don't show ART: prefix for "Estimate Completed" as per custom rules
+    const shouldShowArtPrefix = isEstimateStatus && effectiveStatus !== "Estimate Completed";
+    const displayLabel = shouldShowArtPrefix
+      ? `ART: ${effectiveStatus}`
+      : effectiveStatus;
     
     // Use predefined colors or fallback to gray
     const displayColor = (isProjectStatus || isEstimateStatus)?.color ?? 
@@ -366,7 +358,7 @@ export default function ProjectTable({
     
     // Lock client editing for estimates that aren't completed
     const isClientLocked = !isProjectStatus && 
-      project.status !== "Estimate Completed";
+      effectiveStatus !== "Estimate Completed";
 
     return { displayLabel, displayColor, isClientLocked };
   }, []);
@@ -459,29 +451,54 @@ export default function ProjectTable({
     );
   }, [isUserView, clients, openAssignClient, user?.role]);
 
-  // Render status cell with role-based editing permissions
-  // Estimators see read-only display, Admins get editable dropdown
+  // Render status cell with performance optimization and loading states
   const renderStatusCell = useCallback((project) => {
     const { displayLabel, displayColor, isClientLocked } = getProjectDisplayInfo(project);
     const isEstimator = user?.role === "Estimator";
+    const isUpdating = updatingProjects.has(project._id);
     
     return (
       <td onClick={(event) => event.stopPropagation()} className="text-center">
         {isEstimator ? (
-          // Read-only status display for Estimators - looks like original but unclickable
-          <div className={`border rounded-md px-3 py-2 text-sm font-medium ${displayColor}`}>
-            {displayLabel}
+          // Read-only status display for Estimators with loading state
+          <div 
+            className={`border rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 ${displayColor} ${
+              isUpdating ? 'opacity-60 cursor-wait' : ''
+            }`}
+            style={{
+              minWidth: '120px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {isUpdating ? (
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
+                <span>Updating...</span>
+              </div>
+            ) : (
+              displayLabel
+            )}
           </div>
         ) : (
-          // Editable status dropdown for Admin and other roles
+          // Editable status dropdown with loading state
           <select
             value={project.status}
-            onChange={(event) =>
-              handleStatusChange(project._id, event.target.value)
-            }
-            className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium ${displayColor}`}
+            onChange={(event) => handleStatusChange(project._id, event.target.value)}
+            disabled={isUpdating}
+            className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-200 ${displayColor} ${
+              isUpdating ? 'opacity-60 cursor-wait' : 'hover:shadow-sm'
+            }`}
+            style={{
+              minWidth: '120px',
+              height: '36px' // Fixed height to prevent layout shift
+            }}
           >
-            {isClientLocked ? (
+            {isUpdating ? (
+              <option value={project.status}>Updating...</option>
+            ) : isClientLocked ? (
               <>
                 <option value={project.status} disabled>
                   {displayLabel}
@@ -499,12 +516,11 @@ export default function ProjectTable({
         )}
       </td>
     );
-  }, [getProjectDisplayInfo, handleStatusChange, user?.role]);
+  }, [getProjectDisplayInfo, handleStatusChange, user?.role, updatingProjects]);
 
   // Render mobile client section for responsive card layout with role-based permissions
   const renderMobileClientSection = useCallback((project) => {
-    if (isUserView) return null;
-
+    // Note: isUserView and columnConfig checks are now handled at the call site
     const hasLinkedClients = Array.isArray(project.linkedClients) && 
       project.linkedClients.length > 0;
     const isEstimator = user?.role === "Estimator";
@@ -566,7 +582,7 @@ export default function ProjectTable({
         )}
       </div>
     );
-  }, [isUserView, clients, openAssignClient, user?.role]);
+  }, [clients, openAssignClient, user?.role]);
 
   // Render table header with sorting controls and status filter
   const renderTableHeader = useCallback(() => (
@@ -655,8 +671,28 @@ export default function ProjectTable({
 
       {columnConfig.projectName !== false && (
         <td>
-          <span className="font-semibold line-clamp-1">{project.name}</span>
-          <p className="text-gray-500 text-sm line-clamp-2">
+          <span 
+            className="font-semibold line-clamp-1 will-change-auto contain-layout"
+            style={{
+              minHeight: '20px',
+              display: 'block',
+              contain: 'layout style',
+              transform: 'translateZ(0)', // Force GPU acceleration
+              fontSize: '14px',
+              lineHeight: '20px',
+              maxWidth: '250px'
+            }}
+          >
+            {project.name}
+          </span>
+          <p 
+            className="text-gray-500 text-sm line-clamp-2"
+            style={{
+              minHeight: '32px',
+              contain: 'layout',
+              lineHeight: '16px'
+            }}
+          >
             {getProjectLocation(project)}
           </p>
         </td>
@@ -698,13 +734,69 @@ export default function ProjectTable({
     );
   }, [isUserView, columnConfig]);
 
+  // Skeleton loader for preventing layout shifts during loading
+  const renderTableSkeleton = useCallback(() => {
+    const skeletonRows = Array.from({ length: 5 }, (_, index) => (
+      <tr key={`skeleton-${index}`} className="border-b border-gray-100">
+        <td className="py-3"><div className="table-skeleton"></div></td>
+        {columnConfig.assignClient !== false && !isUserView && (
+          <td className="py-3"><div className="table-skeleton"></div></td>
+        )}
+        {columnConfig.projectName !== false && (
+          <td className="py-3"><div className="table-skeleton"></div></td>
+        )}
+        {columnConfig.dueDate !== false && (
+          <td className="py-3"><div className="table-skeleton"></div></td>
+        )}
+        {columnConfig.cost !== false && (
+          <td className="py-3"><div className="table-skeleton"></div></td>
+        )}
+        {columnConfig.status !== false && (
+          <td className="py-3"><div className="table-skeleton"></div></td>
+        )}
+        {columnConfig.postingDate !== false && (
+          <td className="py-3"><div className="table-skeleton"></div></td>
+        )}
+      </tr>
+    ));
+    
+    return (
+      <tbody>
+        {skeletonRows}
+      </tbody>
+    );
+  }, [columnConfig, isUserView]);
+
+  // Mobile skeleton loader
+  const renderMobileSkeleton = useCallback(() => {
+    const skeletonCards = Array.from({ length: 3 }, (_, index) => (
+      <div key={`mobile-skeleton-${index}`} className="bg-white p-5 rounded-lg shadow-md border border-gray-300">
+        <div className="mb-3">
+          <div className="flex justify-between items-start mb-2">
+            <div className="table-skeleton h-4 w-20"></div>
+            <div className="table-skeleton h-4 w-16"></div>
+          </div>
+          <div className="table-skeleton h-6 w-full mb-1"></div>
+          <div className="table-skeleton h-4 w-3/4"></div>
+        </div>
+        <div className="space-y-2">
+          <div className="table-skeleton h-4 w-full"></div>
+          <div className="table-skeleton h-4 w-2/3"></div>
+          <div className="table-skeleton h-4 w-1/2"></div>
+        </div>
+      </div>
+    ));
+    
+    return skeletonCards;
+  }, []);
+
   // ══════════════════════════════════════════════════════════════════
   // 🎨 MAIN COMPONENT RENDER
   // ══════════════════════════════════════════════════════════════════
   return (
     <div className="overflow-x-auto bg-white rounded-md">
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 📅 MONTH FILTER INTERFACE - Matches JobBoard Design Exactly */}
+      {/* 📅 MONTH FILTER INTERFACE - Using Shared MonthFilterTabs Component */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         {/* Header Section with Title and Role Indicators */}
@@ -712,11 +804,15 @@ export default function ProjectTable({
           <div className="flex items-center gap-3">
             <h3 className="text-lg font-semibold text-gray-800">
               Projects by Month
-              {activeTab !== 'all' && (
-                <span className="ml-1 text-blue-600">({tabData.find(t => t.id === activeTab)?.label})</span>
+              {activeTab !== 'all' && activeTab !== 'lastN' && (
+                <span className="ml-1 text-blue-600">({
+                  [...recentMonths, ...olderMonths].find(month => month.id === activeTab)?.label || activeTab
+                })</span>
+              )}
+              {activeTab === 'lastN' && (
+                <span className="ml-1 text-green-600">(Last {projectLimit} Projects)</span>
               )}
             </h3>
-
             {/* Development Mode Role Indicators (Hidden in Production) */}
             {process.env.NODE_ENV === 'development' && userRole === 'Estimator' && (
               <div className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200">
@@ -731,82 +827,23 @@ export default function ProjectTable({
           </div>
         </div>
 
-        {/* Month Filter Tabs - EXACT MATCH TO JOBTABLE */}
-        <div className="flex overflow-x-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 p-2 bg-gray-50">
-          {tabData.map(tab => (
-            <div key={tab.id} className="relative">
-              {tab.isDropdown ? (
-                // Dropdown for "Older" tab
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={handleDropdownToggle}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex items-center ${
-                      activeTab === tab.id || tab.dropdownOptions?.some(opt => opt.id === activeTab)
-                        ? 'border-blue-500 text-blue-600 bg-blue-50'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    {tab.label}
-                    <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                      activeTab === tab.id || tab.dropdownOptions?.some(opt => opt.id === activeTab)
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {tab.count}
-                    </span>
-                    <svg className={`ml-1 w-3 h-3 transition-transform ${showOlderDropdown ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                // Regular tab (including selected older month tabs)
-                <div className="relative">
-                  <button
-                    onClick={() => {
-                      console.log(`🎯 Tab clicked: ${tab.label} (${tab.id})`);
-                      setActiveTab(tab.id);
-                      setHasUserSelectedTab(true); // Mark that user has made explicit selection
-                    }}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600 bg-blue-50'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } ${
-                      tab.isSelectedOlder 
-                        ? 'pr-8' 
-                        : ''
-                    }`}
-                  >
-                    {tab.label}
-                    <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                      activeTab === tab.id
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {tab.count}
-                    </span>
-                  </button>
-                  {/* Close button for selected older month tabs */}
-                  {tab.isSelectedOlder && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedOlderMonth(null);
-                        setActiveTab('all');
-                        setHasUserSelectedTab(true); // Mark that user has made explicit selection
-                      }}
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 w-4 h-4 flex items-center justify-center z-10"
-                      title="Remove this month tab"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Shared Month Filter Tabs Component */}
+        <MonthFilterTabs
+          projects={projects}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          selectedOlderMonth={selectedOlderMonth}
+          onOlderMonthSelect={setSelectedOlderMonth}
+          onOlderMonthRemove={() => setSelectedOlderMonth(null)}
+          lastNConfig={{ 
+            enabled: true, 
+            limit: projectLimit, 
+            label: `Last ${projectLimit}` 
+          }}
+          userRole={userRole}
+          showProjectCount={true}
+          projectCount={displayedProjects.length}
+        />
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -815,14 +852,18 @@ export default function ProjectTable({
       <div className="p-4">
       {/* Desktop Table View */}
       <div className="hidden md:block">
-        <table className="w-full min-w-[600px]">
+        <table className="w-full min-w-[600px] stable-table">
           {renderTableHeader()}
-          <tbody>
-            {displayedProjects.length > 0 
-              ? displayedProjects.map(renderTableRow)
-              : renderEmptyState()
-            }
-          </tbody>
+          {isLoading ? (
+            renderTableSkeleton()
+          ) : (
+            <tbody>
+              {displayedProjects.length > 0 
+                ? displayedProjects.map(renderTableRow)
+                : renderEmptyState()
+              }
+            </tbody>
+          )}
         </table>
       </div>
 
@@ -849,23 +890,10 @@ export default function ProjectTable({
                 <p className="text-sm text-gray-600">{getProjectLocation(project)}</p>
               </div>
 
-              {/* Client Assignment Section */}
-              {renderMobileClientSection(project)}
+              {/* Client Assignment Section - Role-based visibility */}
+              {columnConfig.assignClient !== false && !isUserView && renderMobileClientSection(project)}
 
-              {/* Project Details Grid */}
-              <div className="grid grid-cols-2 gap-4 mb-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-600 block">Due Date:</label>
-                  <span className="text-sm">{project.due_date || "N/A"}</span>
-                </div>
-                {/* Hide Cost for Estimators - Role-based visibility */}
-                {user?.role !== "Estimator" && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-600 block">Cost:</label>
-                    <span className="text-sm font-semibold">${project.total || "0"}</span>
-                  </div>
-                )}
-              </div>
+              {/* Project Details Grid - Removed Due Date and Cost fields */}
 
               {/* Status Section with Role-based Editing */}
               <div className="mb-3">
@@ -907,7 +935,7 @@ export default function ProjectTable({
               {/* Project Footer */}
               <div className="text-right">
                 <span className="text-xs text-gray-500">
-                  Posted: {project.posting_date || "N/A"}
+                  Estimate Due: {project.due_date || "N/A"}
                 </span>
               </div>
             </div>
@@ -922,53 +950,6 @@ export default function ProjectTable({
         )}
       </div>
       </div>
-      
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 📅 OLDER MONTHS DROPDOWN MENU - Matches JobBoard Exactly */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {showOlderDropdown && (
-        <div 
-          className="fixed bg-white border border-gray-200 rounded-lg shadow-xl z-200 min-w-[200px] max-h-[400px] overflow-y-auto pointer-events-auto"
-          style={{
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          {tabData.find(tab => tab.isDropdown)?.dropdownOptions?.map((option, index) => (
-            <div
-              key={option.id}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setSelectedOlderMonth(option.id);
-                setActiveTab(option.id);
-                setShowOlderDropdown(false);
-                setHasUserSelectedTab(true); // Mark that user has made explicit selection
-              }}
-              className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center justify-between transition-colors pointer-events-auto cursor-pointer ${
-                selectedOlderMonth === option.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-              } ${index === 0 ? 'rounded-t-lg' : ''} ${index === tabData.find(tab => tab.isDropdown)?.dropdownOptions?.length - 1 ? 'rounded-b-lg' : ''}`}
-              style={{ zIndex: 99999, position: 'relative' }}
-            >
-              <span className="font-medium">{option.label}</span>
-              <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                selectedOlderMonth === option.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}>
-                {option.count}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

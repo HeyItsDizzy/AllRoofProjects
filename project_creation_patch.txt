@@ -1,0 +1,63 @@
+      this.log(`🤖 AI Response Type: ${aiResponse.type.toUpperCase()}`);
+      this.log(`📝 AI Response Length: ${aiResponse.response.length} characters`);
+
+      // 🏗️ PROJECT CREATION - Check if this is a job request
+      if (this.projectCreator.isJobRequest(emailData)) {
+        this.log('🎯 ═══════════════════════════════════════════');
+        this.log('🎯 JOB REQUEST DETECTED - CREATING PROJECT');
+        this.log('🎯 ═══════════════════════════════════════════');
+
+        try {
+          // Extract project data using AI
+          const projectData = await this.projectCreator.extractProjectDataFromEmail(emailData, this.aiAgent);
+          
+          if (projectData && projectData.isJobRequest) {
+            this.log(`🏗️ Creating project: ${projectData.projectName}`);
+            
+            // Add current date for due date calculation
+            const currentDate = new Date();
+            currentDate.setDate(currentDate.getDate() + 7); // Default 7 days from now
+            projectData.dueDate = currentDate.toISOString();
+            
+            // Create the project
+            const projectResult = await this.projectCreator.createProject(projectData);
+            
+            if (projectResult.success) {
+              this.log(`✅ Project created successfully!`);
+              this.log(`📊 Project ID: ${projectResult.projectId}`);
+              this.log(`🔢 Project Number: ${projectResult.projectNumber}`);
+              
+              // Save email and attachments to project folder
+              const filesResult = await this.projectCreator.saveProjectFiles(
+                projectResult.projectId, 
+                emailData, 
+                emailData.attachments || []
+              );
+              
+              if (filesResult.success) {
+                this.log(`💾 Project files saved: ${filesResult.savedFiles.length} files`);
+                this.log(`📁 Project path: ${filesResult.projectPath}`);
+              }
+              
+              // Update AI response to mention project creation
+              if (aiResponse.shouldReply) {
+                const projectInfo = `\n\n✅ Great news! I've automatically created project #${projectResult.projectNumber} for "${projectData.projectName}" in our system. You'll receive a detailed quote shortly.`;
+                aiResponse.response += projectInfo;
+              }
+              
+            } else {
+              this.log(`❌ Project creation failed: ${projectResult.error}`, 'ERROR');
+              // Continue with normal email processing even if project creation fails
+            }
+          } else {
+            this.log(`ℹ️ Email doesn't contain valid project information, skipping project creation`);
+          }
+        } catch (projectError) {
+          this.log(`❌ Project creation error: ${projectError.message}`, 'ERROR');
+          // Continue with normal email processing even if project creation fails
+        }
+      } else {
+        this.log(`📧 Email not identified as job request, skipping project creation`);
+      }
+
+      // Check if we should send an intelligent response

@@ -249,7 +249,7 @@ export const html = generateHTML({
 const EstimateComplete = (data) => {
   const { projectAddress, estimateDescription, projectNumber, contactName, projectViewUrl, companyLogoUrl, optionalBody } = data;
   
-  const subject = `${projectNumber} - ${projectAddress} - Ref: ${projectNumber}`;
+  const subject = `${projectNumber} - ${projectAddress} - Estimate Complete`;
   
   // Header logo - company logo or fallback to All Roof Takeoffs
   const headerLogoUrl = companyLogoUrl 

@@ -1,8 +1,15 @@
 /* PRODUCTION READY*/
 import { createContext, useEffect, useState } from "react";
 import versionService from "../services/versionService";
+import axios from "axios";
 
 export const AuthContext = createContext();
+
+// Create a simple axios instance for auth validation (without interceptors to avoid circular dependencies)
+const authAxios = axios.create({
+  baseURL: import.meta.env.MODE === 'development' ? '/api' : import.meta.env.VITE_API_BASE_URL,
+  withCredentials: true,
+});
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,44 +17,52 @@ const AuthProvider = ({ children }) => {
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    // Check for dev overrides first
-    const devUserOverride = localStorage.getItem("devUserOverride");
-    const devRoleOverride = localStorage.getItem("devRoleOverride");
-    
-    let storedUser = localStorage.getItem("authUser");
-    const token = localStorage.getItem("authToken");
-
-    // Also check for "user" key (used by dev tools)
-    if (!storedUser) {
-      storedUser = localStorage.getItem("user");
-    }
-
-    if (storedUser && token) {
-      let userData = JSON.parse(storedUser);
+    const initializeAuth = async () => {
+      // Check for dev overrides first
+      const devUserOverride = localStorage.getItem("devUserOverride");
+      const devRoleOverride = localStorage.getItem("devRoleOverride");
       
-      // If there's a full user override, use that instead
-      if (devUserOverride) {
-        try {
-          userData = JSON.parse(devUserOverride);
-        } catch (e) {
-          // If parsing fails, just apply role override
-          if (devRoleOverride) {
-            userData = { ...userData, role: devRoleOverride };
-          }
-        }
-      } else if (devRoleOverride) {
-        // Apply just role override if no full user override
-        userData = { ...userData, role: devRoleOverride };
+      let storedUser = localStorage.getItem("authUser");
+      const token = localStorage.getItem("authToken");
+
+      // Also check for "user" key (used by dev tools)
+      if (!storedUser) {
+        storedUser = localStorage.getItem("user");
       }
-      
-      setUser(userData);
-      
-      // Start version checking for authenticated users
-      versionService.startPeriodicCheck(5); // Check every 5 minutes
-    }
 
-    setLoading(false);
-    setIsAuthReady(true);
+      if (storedUser && token) {
+        let userData = JSON.parse(storedUser);
+        
+        // If there's a full user override, use that instead
+        if (devUserOverride) {
+          try {
+            userData = JSON.parse(devUserOverride);
+          } catch (e) {
+            // If parsing fails, just apply role override
+            if (devRoleOverride) {
+              userData = { ...userData, role: devRoleOverride };
+            }
+          }
+        } else if (devRoleOverride) {
+          // Apply just role override if no full user override
+          userData = { ...userData, role: devRoleOverride };
+        }
+        
+        // Validate the token by making a request to the backend
+        // Don't validate tokens on startup - let the component API calls handle this
+        // This avoids interfering with the axios interceptor popup flow
+        console.log("🔐 Auth startup: Found stored user and token, setting user without validation");
+        setUser(userData);
+        
+        // Start version checking for authenticated users
+        versionService.startPeriodicCheck(5); // Check every 5 minutes
+      }
+
+      setLoading(false);
+      setIsAuthReady(true);
+    };
+
+    initializeAuth();
 
     // Cleanup version checking on unmount
     return () => {

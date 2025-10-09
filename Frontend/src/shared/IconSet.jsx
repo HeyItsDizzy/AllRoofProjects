@@ -12,7 +12,7 @@ import {
   MdCreateNewFolder as IconNewFolder,
   MdArrowBackIosNew as IconBackSmall,
   MdIncompleteCircle as IconPending,
-  MdUploadFile as IconUploadFile,
+  MdUploadFile as IconUploadFile, 
   MdRemoveRedEye as IconView,
   MdBlock as IconBlock,
   MdCheckCircle as IconUnblock,
@@ -22,6 +22,9 @@ import {
   MdKeyboardArrowDown as IconDemote,
   MdForwardToInbox as IconSend,
   MdClose as IconClose,
+  MdFilterList as IconFilter,
+  MdEmail as IconMail,
+  MdPhone as IconPhone,
 } from "react-icons/md";
 
 // Font Awesome v5
@@ -33,6 +36,7 @@ import {
   FaChevronRight as IconRight,
   FaChevronLeft as IconLeft,
   FaPlusCircle as IconNewFile,
+  FaPlus as IconPlus,
   FaPlusSquare as IconExpandBox,
   FaMinusSquare as IconCollapseBox,
   FaRegSave as IconSave,
@@ -115,6 +119,7 @@ export {
   // File System Actions
   IconNewFolder,
   IconNewFile,
+  IconPlus,
   IconEdit,
   IconDelete,
   IconView,
@@ -145,6 +150,7 @@ export {
   IconBell,
   IconExpandBox,
   IconCollapseBox,
+  IconFilter,
 
   // Status Indicators
   IconPending,
@@ -161,6 +167,10 @@ export {
   IconDemote,
   IconSend,
   IconClose,
+
+  // Communication
+  IconMail,
+  IconPhone,
 
   // Utility
   getFileIcon,

@@ -41,8 +41,33 @@ const AllProjects = () => {
         console.error("Error fetching projects:", error);
       }
     };
+    
+    // Initial fetch
     fetchProjects();
+    
+    // Set up polling to refresh data every 30 seconds to sync with JobBoard changes
+    const pollInterval = setInterval(() => {
+      console.log("🔄 Refreshing Projects data to sync with JobBoard...");
+      fetchProjects();
+    }, 30000); // 30 seconds
+    
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, []);
+
+  // Manual refresh function for immediate updates
+  const handleManualRefresh = async () => {
+    try {
+      console.log("🔄 Manual refresh triggered...");
+      const response = await axiosSecure.get("/projects/get-projects");
+      setProjects(response.data.data || []);
+      console.log("✅ Projects data refreshed manually");
+    } catch (error) {
+      console.error("❌ Error during manual refresh:", error);
+    }
+  };
   
   // Fetch clients for assignment
   useEffect(() => {
@@ -214,7 +239,8 @@ const updateProjectClients = (projectId, linkedClients) => {
   const handleStatusChange = async (projectId, newStatus) => {
     try {
       const axiosSecure = useAxiosSecure();
-      const response = await axiosSecure.patch(`/projects/update-status/${projectId}`, { status: newStatus });
+      console.log('AdminProjectTable: Updating project status:', { projectId, newStatus });
+      const response = await axiosSecure.patch(`/projects/update/${projectId}`, { status: newStatus });
 
       if (response.data.success) {
         setProjects((prevProjects) =>
@@ -356,6 +382,14 @@ const closeAssignClientModal = () => {
       {label}
     </button>
   ))}
+  {/* Manual Refresh Button */}
+  <button
+    className="px-4 py-1 rounded-full transition-colors duration-300 bg-blue-100 text-blue-600 hover:bg-blue-200"
+    onClick={handleManualRefresh}
+    title="Refresh data to sync with JobBoard changes"
+  >
+    🔄 Refresh
+  </button>
 </div>
 
       </div>

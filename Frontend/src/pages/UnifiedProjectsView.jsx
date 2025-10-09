@@ -9,7 +9,9 @@ import { IconSearch } from "@/shared/IconSet.jsx";
 import AssignClient from "../components/AssignClient";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
+import { projectStatuses } from "@/shared/projectStatuses";
 import { AuthContext } from "../auth/AuthProvider";
+import { subscribeToProjectDataUpdates } from "@/utils/ProjectDataSync";
 
 const UnifiedProjectsView = () => {
   // Get user context for role-based functionality
@@ -188,7 +190,19 @@ const UnifiedProjectsView = () => {
 
   // Fetch projects
   useEffect(() => {
+    // Initial fetch
     fetchProjects();
+    
+    // Set up polling to refresh data every 30 seconds to sync with JobBoard changes
+    const pollInterval = setInterval(() => {
+      console.log("🔄 Refreshing UnifiedProjects data to sync with JobBoard...");
+      fetchProjects();
+    }, 30000); // 30 seconds
+    
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, [fetchProjects]);
   
   // Fetch clients for both Admin (editing) and Estimator (viewing)
@@ -204,6 +218,21 @@ const UnifiedProjectsView = () => {
       fetchUsers();
     }
   }, [fetchUsers, userRole]);
+
+  // 🔄 Listen for project data updates from other components (e.g., JobBoard)
+  useEffect(() => {
+    const unsubscribe = subscribeToProjectDataUpdates((updateEvent) => {
+      console.log('🔄 UnifiedProjectsView received data update notification:', updateEvent);
+      
+      // Only refresh if the update is from a different component
+      if (updateEvent.source !== 'UnifiedProjectsView') {
+        console.log('📋 Refreshing UnifiedProjectsView data due to external update...');
+        fetchProjects();
+      }
+    });
+
+    return unsubscribe; // Cleanup listener on unmount
+  }, [fetchProjects]);
 
   // Fetch user details based on linked users with optimized error handling
   const fetchUserDetails = useCallback(async () => {
@@ -444,7 +473,8 @@ const UnifiedProjectsView = () => {
 
   const handleStatusChange = useCallback(async (projectId, newStatus) => {
     try {
-      const response = await axiosSecure.patch(`/projects/updateProject/${projectId}`, {
+      console.log('UnifiedProjectsView: Updating project status:', { projectId, newStatus });
+      const response = await axiosSecure.patch(`/projects/update/${projectId}`, {
         status: newStatus
       });
 
@@ -499,21 +529,21 @@ const UnifiedProjectsView = () => {
     }
   }, [userRole]);
 
-  // Role-based filter buttons
+  // Role-based filter buttons - simplified to only show filter options
   const getFilterButtons = useCallback(() => {
-    const baseButtons = [
-      { label: "All Projects", key: "All Projects" },
-      { label: "Open Projects", key: "Open Projects" }
+    return [
+      { 
+        label: "All Projects", 
+        key: "All Projects",
+        tooltip: "Shows all projects regardless of status"
+      },
+      { 
+        label: "Open Projects", 
+        key: "Open Projects",
+        tooltip: "Shows projects with status: New Lead, Estimate Requested, Estimate Completed, Quote Sent, Approved, Project Active. Excludes: Cancelled, Completed, On Hold, etc."
+      }
     ];
-
-    // Add role-specific buttons if needed
-    if (userRole === "Admin") {
-      // Admin might have additional filters
-      return baseButtons;
-    }
-
-    return baseButtons;
-  }, [userRole]);
+  }, []);
 
   if (loading) {
     return (
@@ -544,7 +574,7 @@ const UnifiedProjectsView = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Search & Filter Section - Keep existing improved version */}
+      {/* Search & Filter Section */}
       <div className="w-full mx-auto my-6 flex flex-col md:flex-row md:justify-between items-center gap-4">
         <div className="relative flex-1 max-w-[450px] w-full">
           <IconSearch className="absolute top-[11px] left-2" />
@@ -557,29 +587,34 @@ const UnifiedProjectsView = () => {
           />
         </div>
         
-        {/* Filter Buttons */}
-        <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white">
-          {getFilterButtons().map((button) => (
-            <button
-              key={button.key}
-              className={`px-4 py-1 rounded-full transition-colors duration-300 ${
-                activeButton === button.key ? "bg-secondary text-white" : "bg-transparent text-textGray"
-              }`}
-              onClick={() => setActiveButton(button.key)}
-            >
-              {button.label}
-            </button>
-          ))}
+        {/* Filter Buttons and Create New Project Button */}
+        <div className="flex items-center gap-4">
+          {/* Filter Buttons Selector */}
+          <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white">
+            {getFilterButtons().map((button) => (
+              <button
+                key={button.key}
+                title={button.tooltip}
+                className={`px-4 py-1 rounded-full transition-colors duration-300 ${
+                  activeButton === button.key ? "bg-secondary text-white" : "bg-transparent text-textGray"
+                }`}
+                onClick={() => setActiveButton(button.key)}
+              >
+                {button.label}
+              </button>
+            ))}
+          </div>
           
-          {/* Create New Project Button - Only for Admin - Match AllProjects style */}
+          {/* Standalone Create New Project Button - Only for Admin */}
+          {/* TODO: Future enhancement - Make available to all roles, not just Admin */}
           {userRole === "Admin" && (
             <button
-              className={`px-4 py-1 rounded-full transition-colors duration-300 ${
-                activeButton === "Create New" ? "bg-secondary text-white" : "bg-transparent text-textGray"
-              }`}
+              className="px-4 py-1 bg-primary text-white rounded-2xl hover:bg-primary-dark transition-colors duration-300 flex items-center gap-2"
               onClick={() => navigate("/addNewProject")}
+              title="Create a new project"
             >
-              Create New
+              <span className="text-lg">+</span>
+              <span className="text-sm">Project</span>
             </button>
           )}
         </div>

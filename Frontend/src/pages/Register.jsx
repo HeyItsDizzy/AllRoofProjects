@@ -6,7 +6,7 @@ import { useState, useContext } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import axiosPublic from "@/hooks/AxiosPublic/useAxiosPublic";
 import Swal from '@/shared/swalConfig';
-import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import { AuthContext } from "../auth/AuthProvider";
 import TermsModal from "../components/TermsModal";
 import PrivacyModal from "../components/PrivacyModal";
@@ -93,6 +93,14 @@ const Register = () => {
           timer: 2000,
           showConfirmButton: false,
         });
+
+        // Check if there's a stored redirect URL from a direct link access attempt
+        const redirectUrl = localStorage.getItem('redirectAfterLogin');
+        if (redirectUrl) {
+          localStorage.removeItem('redirectAfterLogin');
+          console.log("Redirecting to stored URL after registration:", redirectUrl);
+          return navigate(redirectUrl);
+        }
 
         // Check if user needs to link to a company first
         if (loggedInUser.role !== "Admin" && (!loggedInUser.linkedClients || loggedInUser.linkedClients.length === 0)) {

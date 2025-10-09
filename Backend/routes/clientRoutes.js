@@ -1185,5 +1185,167 @@ router.post('/:clientId/regenerate-codes', authenticateToken(), async (req, res,
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 🗑️ DELETE CLIENT - Comprehensive cleanup of all references
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.delete('/:clientId', authenticateToken(), async (req, res, next) => {
+  try {
+    const { clientId } = req.params;
+    const userId = req.user?.userId;
+
+    console.log(`🗑️ [DELETE] Starting comprehensive client deletion for ID: ${clientId}`);
+    
+    // Validate client ID
+    if (!mongoose.isValidObjectId(clientId)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid client ID format.' 
+      });
+    }
+
+    // Check if client exists
+    const client = await Client.findById(clientId);
+    if (!client) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Client not found.' 
+      });
+    }
+
+    console.log(`🗑️ [DELETE] Found client: ${client.name}`);
+
+    // Check permissions - Only admin can delete clients
+    const currentUser = await User.findById(userId);
+    if (!currentUser || currentUser.role !== 'Admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Access denied. Admin privileges required to delete clients.' 
+      });
+    }
+
+    console.log(`🗑️ [DELETE] Admin permissions verified for user: ${currentUser.name}`);
+
+    // Start comprehensive cleanup process
+    const cleanupResults = {
+      clientDeleted: false,
+      projectsUpdated: 0,
+      usersUpdated: 0,
+      orphanedUsers: 0
+    };
+
+    // 1. Get database collections
+    const { projectsCollection, userCollection } = require('../db');
+    const projectCollectionRef = await projectsCollection();
+    const userCollectionRef = await userCollection();
+
+    // 2. Remove client reference from all projects
+    console.log(`🗑️ [DELETE] Removing client ${clientId} from project linkedClients arrays...`);
+    const projectUpdateResult = await projectCollectionRef.updateMany(
+      { linkedClients: clientId },
+      { $pull: { linkedClients: clientId } }
+    );
+    cleanupResults.projectsUpdated = projectUpdateResult.modifiedCount;
+    console.log(`✅ [DELETE] Updated ${cleanupResults.projectsUpdated} projects`);
+
+    // 3. Remove client reference from all users' linkedClients arrays
+    console.log(`🗑️ [DELETE] Removing client ${clientId} from user linkedClients arrays...`);
+    const userLinkUpdateResult = await User.updateMany(
+      { linkedClients: clientId },
+      { $pull: { linkedClients: clientId } }
+    );
+    cleanupResults.usersUpdated = userLinkUpdateResult.modifiedCount;
+    console.log(`✅ [DELETE] Updated ${cleanupResults.usersUpdated} users' linkedClients arrays`);
+
+    // 4. Handle users whose company field matches this client's name
+    console.log(`🗑️ [DELETE] Clearing company field for users belonging to: ${client.name}`);
+    const companyUserUpdateResult = await User.updateMany(
+      { company: client.name },
+      { 
+        $unset: { company: "" },
+        $set: { companyAdmin: false }
+      }
+    );
+    cleanupResults.orphanedUsers = companyUserUpdateResult.modifiedCount;
+    console.log(`✅ [DELETE] Cleared company field for ${cleanupResults.orphanedUsers} users`);
+
+    // 5. Handle users in the client's linkedUsers array (if any)
+    if (client.linkedUsers && client.linkedUsers.length > 0) {
+      console.log(`🗑️ [DELETE] Handling ${client.linkedUsers.length} users linked to this client...`);
+      await User.updateMany(
+        { _id: { $in: client.linkedUsers } },
+        { 
+          $unset: { company: "" },
+          $set: { companyAdmin: false },
+          $pull: { linkedClients: clientId }
+        }
+      );
+      console.log(`✅ [DELETE] Processed users from client's linkedUsers array`);
+    }
+
+    // 6. Double-check: Remove any remaining references to this client ID from all collections
+    console.log(`🗑️ [DELETE] Performing final cleanup sweep for client ID: ${clientId}`);
+    
+    // Remove from any projects that might still have the reference (safety net)
+    const finalProjectCleanup = await projectCollectionRef.updateMany(
+      { $or: [
+        { linkedClients: clientId },
+        { linkedClients: new ObjectId(clientId) }
+      ]},
+      { $pull: { 
+        linkedClients: { $in: [clientId, new ObjectId(clientId)] }
+      }}
+    );
+    
+    // Remove from any users that might still have the reference (safety net)
+    const finalUserCleanup = await User.updateMany(
+      { $or: [
+        { linkedClients: clientId },
+        { linkedClients: new ObjectId(clientId) }
+      ]},
+      { $pull: { 
+        linkedClients: { $in: [clientId, new ObjectId(clientId)] }
+      }}
+    );
+    
+    console.log(`✅ [DELETE] Final sweep completed - Projects: ${finalProjectCleanup.modifiedCount}, Users: ${finalUserCleanup.modifiedCount}`);
+
+    // 8. Finally, delete the client document
+    console.log(`🗑️ [DELETE] Deleting client document...`);
+    await Client.findByIdAndDelete(clientId);
+    cleanupResults.clientDeleted = true;
+    console.log(`✅ [DELETE] Client document deleted successfully`);
+
+    // 9. Log comprehensive cleanup summary
+    console.log(`🎯 [DELETE COMPLETE] Cleanup Summary:
+      - Client "${client.name}" deleted: ✅
+      - Projects updated (linkedClients removed): ${cleanupResults.projectsUpdated}
+      - Users updated (linkedClients removed): ${cleanupResults.usersUpdated}
+      - Users with company field cleared: ${cleanupResults.orphanedUsers}
+      - Total operations: ${cleanupResults.projectsUpdated + cleanupResults.usersUpdated + cleanupResults.orphanedUsers + 1}
+    `);
+
+    res.json({
+      success: true,
+      message: `Client "${client.name}" and all associated references have been permanently deleted.`,
+      cleanupSummary: {
+        clientName: client.name,
+        clientId: clientId,
+        projectsAffected: cleanupResults.projectsUpdated,
+        usersAffected: cleanupResults.usersUpdated + cleanupResults.orphanedUsers,
+        totalOperations: cleanupResults.projectsUpdated + cleanupResults.usersUpdated + cleanupResults.orphanedUsers + 1
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ [DELETE ERROR] Failed to delete client:", err);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to delete client and cleanup references.", 
+      error: err.message 
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 
 module.exports = router;

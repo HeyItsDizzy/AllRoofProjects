@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 const AUTOSAVE_DELAY = 2000; // 2 seconds delay after last change
 
-export function useAutoSave(onSave) {
+export function useAutoSave(onSave, onAfterSave = null) {
   const [pendingChanges, setPendingChanges] = useState(new Map());
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const timeoutRefs = useRef(new Map());
@@ -57,12 +57,17 @@ export function useAutoSave(onSave) {
         clearTimeout(timeoutRefs.current.get(projectId));
         timeoutRefs.current.delete(projectId);
       }
+
+      // Notify other components that data has been updated
+      if (onAfterSave) {
+        onAfterSave(projectId, saveData);
+      }
     } catch (error) {
       console.error('Auto-save failed for project:', projectId, error);
     } finally {
       setIsAutoSaving(false);
     }
-  }, [pendingChanges, onSave]);
+  }, [pendingChanges, onSave, onAfterSave]);
 
   // Save all pending changes immediately
   const saveAll = useCallback(async () => {

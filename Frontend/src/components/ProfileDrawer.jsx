@@ -126,7 +126,13 @@ const ProfileDrawer = () => {
           <li>
             <button
               onClick={() => handleNavClick("/templates")}
-              className="block w-full text-left hover:underline text-primary font-medium"
+              disabled={user?.role !== "Admin"}
+              title={user?.role !== "Admin" ? "Admin access only" : ""}
+              className={`block w-full text-left font-medium ${
+                user?.role !== "Admin" 
+                  ? "text-gray-400 cursor-not-allowed" 
+                  : "hover:underline text-primary"
+              }`}
             >
               🧩 Templates
             </button>
@@ -144,9 +150,8 @@ const ProfileDrawer = () => {
 
           <li>
             <button
-              disabled
-              title="Coming soon"
-              className="block w-full text-left text-gray-400 font-medium cursor-not-allowed"
+              onClick={() => window.location.href = 'mailto:support@allrooftakeoffs.com.au?subject=Please help'}
+              className="block w-full text-left hover:underline text-primary font-medium"
             >
               🆘 Support / Help
             </button>

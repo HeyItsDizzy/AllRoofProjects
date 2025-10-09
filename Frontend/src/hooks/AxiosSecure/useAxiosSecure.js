@@ -4,8 +4,14 @@ import { APP_CONFIG } from '../../config/version';
 
 console.log("Full environment:\n- API_URL:", import.meta.env.VITE_API_BASE_URL, import.meta.env);
 
+// In development mode, use relative URLs to enable Vite proxy
+// In production, use the full URL from environment
+const baseURL = import.meta.env.MODE === 'development' ? '/api' : import.meta.env.VITE_API_BASE_URL;
+
+console.log("🔧 [AXIOS] Using baseURL:", baseURL, "| Mode:", import.meta.env.MODE);
+
 const axiosSecure = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL, // Using Vite's environment variable
+  baseURL,
   withCredentials: true,
 });
 
@@ -108,6 +114,12 @@ axiosSecure.interceptors.response.use(
     if (error.response?.status === 401 && error.response?.data?.requiresRefresh) {
       console.log("🔄 Session expired due to role change, forcing re-authentication");
       
+      // Store current URL for redirect after re-authentication (unless already on auth pages)
+      const currentPath = window.location.pathname + window.location.search;
+      if (currentPath !== '/login' && currentPath !== '/register') {
+        localStorage.setItem('redirectAfterLogin', currentPath);
+      }
+      
       // Show user-friendly message and force re-login
       Swal.fire({
         icon: "warning",
@@ -130,6 +142,77 @@ axiosSecure.interceptors.response.use(
       });
       
       return Promise.reject(error);
+    }
+    
+    // Handle general 401 Unauthorized errors (token expired/invalid)
+    if (error.response?.status === 401) {
+      console.log(`🔄 Authentication failed (401), showing session expired popup`);
+      
+      // Store current URL for redirect after re-authentication (unless already on auth pages)
+      const currentPath = window.location.pathname + window.location.search;
+      if (currentPath !== '/login' && currentPath !== '/register') {
+        localStorage.setItem('redirectAfterLogin', currentPath);
+      }
+      
+      // Show session expired popup
+      Swal.fire({
+        title: "Session Expired",
+        text: "Your session has expired. Please sign in again.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Sign In",
+        cancelButtonText: "Cancel"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // Clear auth data and redirect to login
+          localStorage.removeItem("authUser");
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("user");
+          window.location.href = '/login';
+        }
+      });
+      
+      return Promise.reject(error);
+    }
+    
+    // Handle 403 Forbidden errors - but only if it's a token issue, not permission issue
+    if (error.response?.status === 403) {
+      const errorMessage = error.response?.data?.message || '';
+      
+      // Only show popup for token-related 403s, not permission issues
+      if (errorMessage.includes('Token is invalid or expired')) {
+        console.log(`🔄 Token expired (403), showing session expired popup`);
+        
+        // Store current URL for redirect after re-authentication (unless already on auth pages)
+        const currentPath = window.location.pathname + window.location.search;
+        if (currentPath !== '/login' && currentPath !== '/register') {
+          localStorage.setItem('redirectAfterLogin', currentPath);
+        }
+        
+        // Show session expired popup
+        Swal.fire({
+          title: "Session Expired",
+          text: "Your session has expired. Please sign in again.",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Sign In",
+          cancelButtonText: "Cancel"
+        }).then((result) => {
+          if (result.isConfirmed) {
+            // Clear auth data and redirect to login
+            localStorage.removeItem("authUser");
+            localStorage.removeItem("authToken");
+            localStorage.removeItem("user");
+            window.location.href = '/login';
+          }
+        });
+        
+        return Promise.reject(error);
+      } else {
+        // This is a real permission issue, let it through normally
+        console.log(`❌ Permission denied (403): ${errorMessage}`);
+        return Promise.reject(error);
+      }
     }
     
     return Promise.reject(error);

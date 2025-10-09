@@ -1,0 +1,18 @@
+/* InvoiceFeed Component Styles */
+.transactionTable :global(.ant-table-thead > tr > th) {
+  background-color: #f8fafc;
+  font-weight: 600;
+  color: #374151;
+}
+
+.transactionTable :global(.ant-table-tbody > tr:hover > td) {
+  background-color: #f0f9ff !important;
+}
+
+:global(.ant-tabs-tab) {
+  font-weight: 500;
+}
+
+:global(.ant-tabs-tab-active) {
+  font-weight: 600;
+}

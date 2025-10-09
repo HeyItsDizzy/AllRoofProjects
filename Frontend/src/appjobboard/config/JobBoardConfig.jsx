@@ -3,15 +3,16 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Avatar from "@/shared/Avatar"; 
 import DatePicker from "@/shared/DatePicker";
-import { calculateAUD, calculatePay, calculateNOK } from '@/shared/jobPricingUtils';
+import { calculateAUD, calculatePay, calculateNOK, calculateSafeEstQty } from '@/shared/jobPricingUtils';
 import { FilterSortHeader } from '@/appjobboard/config/ColumnConfig';
 import { basePlanTypes } from '@/shared/planTypes';
-import { estimateStatuses as statuses } from '@/shared/projectStatuses';
+import { estimateStatuses as statuses, estimateStatuses } from '@/shared/projectStatuses';
 import MessageTypeSelector from '@/features/emails/modals/jobboard/MessageTypeSelector';
 import { IconSend } from '@/shared/IconSet';
 import { formatLocalDate } from "@/utils/dateUtils";
 import { planTypes } from "@/shared/planPricing";
 import Swal from '@/shared/swalConfig';
+import { COMPONENT_Z_INDEX } from '@/shared/styles/zIndexManager';
 
 // Custom filter function to handle blank/empty values
 const customFilterFn = (row, columnId, filterValue) => {
@@ -71,7 +72,9 @@ export const jobBoardColumns = (
   openSendModal,
   userRole = "Admin", // Add user role parameter
   currentUserId = null, // Add current user ID parameter
-  filterDropdownHandlers = {} // Add filter dropdown handlers
+  filterDropdownHandlers = {}, // Add filter dropdown handlers
+  rowHighlightHandlers = {}, // Add row highlighting handlers for manual click highlighting
+  showInvoiceLine = false // Add toggle for InvoiceLine column visibility (Admin only)
 ) => {
   
   // Define columns that should be hidden for estimators
@@ -91,10 +94,14 @@ export const jobBoardColumns = (
 
   // Define columns that should be completely hidden for all users
   const globalHiddenColumns = [
-    'InvoiceLine',    // accessorKey: 'InvoiceLine' - Hidden but in DB
     'FlashingSet',    // accessorKey: 'FlashingSet' - Hidden but in DB
     'city',           // id: 'city' - Hidden but in DB
     'profit'          // id: 'profit' - Hidden but in DB
+  ];
+
+  // Define columns that should be conditionally hidden based on toggles
+  const conditionallyHiddenColumns = [
+    'InvoiceLine'     // accessorKey: 'InvoiceLine' - Hidden by default, toggle for Admins only
   ];
   
   // Helper function to check if column should be shown
@@ -104,13 +111,16 @@ export const jobBoardColumns = (
       return false;
     }
     
+    // Handle InvoiceLine column - Admin only, based on toggle
+    if (columnId === 'InvoiceLine') {
+      return userRole === "Admin" && showInvoiceLine;
+    }
+    
     if (userRole === "Estimator") {
       return !estimatorHiddenColumns.includes(columnId);
     }
     return true; // Show all columns for Admin and other roles (except globally hidden)
   };
-
-  const allColumns = [
 
 /* I want my collumns in this order
 Project#, Estimator,Client,Project Name, Status, Comments, Received,Due Date,Completed, Plan Type, Qty, Price ea, Total AUD, Total NOK,Est Qty,Est Pay,State,ART Inv#,Actions Column
@@ -121,10 +131,111 @@ Flashing Set
 City
 Profit */
 
+  // Custom Project Number cell with manual highlighting + auto unsaved highlighting + inline editing
+  const ProjectNumberCell = ({ row, getValue }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [value, setValue] = useState(getValue() || '');
+    
+    if (!rowHighlightHandlers) {
+      // Fallback if no handlers provided - simple double-click edit only
+      return (
+        <div
+          onDoubleClick={() => setIsEditing(true)}
+          className="cursor-pointer hover:bg-blue-100 px-1 py-0.5 rounded"
+          title="Double-click to edit"
+        >
+          {getValue() || ''}
+        </div>
+      );
+    }
+    
+    const { highlightedRowId, setHighlightedRowId } = rowHighlightHandlers;
+    
+    // Handle single click for manual row highlighting
+    const handleSingleClick = () => {
+      if (!isEditing) {
+        const rowId = row.id;
+        const newHighlightedRowId = highlightedRowId === rowId ? null : rowId;
+        setHighlightedRowId(newHighlightedRowId);
+        
+        // Auto-fade manual highlight after 5 seconds
+        if (newHighlightedRowId) {
+          setTimeout(() => {
+            setHighlightedRowId(prevId => prevId === newHighlightedRowId ? null : prevId);
+          }, 5000);
+        }
+      }
+    };
+    
+    // Handle double click for editing
+    const handleDoubleClick = () => {
+      setIsEditing(true);
+    };
+    
+    // Handle value changes and save
+    const handleBlur = () => {
+      setIsEditing(false);
+      if (value !== getValue() && updateRow) {
+        updateRow(row.original._id, 'projectNumber', value);
+      }
+    };
+    
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        handleBlur();
+      } else if (e.key === 'Escape') {
+        setValue(getValue() || '');
+        setIsEditing(false);
+      }
+    };
+    
+    useEffect(() => {
+      setValue(getValue() || '');
+    }, [getValue]);
+    
+    if (isEditing) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          className="w-full px-1 py-0.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          autoFocus
+        />
+      );
+    }
+    
+    return (
+      <div
+        onClick={handleSingleClick}
+        onDoubleClick={handleDoubleClick}
+        className="cursor-pointer hover:bg-blue-100 px-1 py-0.5 rounded"
+        title="Click to highlight row (5s), double-click to edit"
+      >
+        {value}
+      </div>
+    );
+  };
+
+  const allColumns = [
+
+/* I want my collumns in this order
+Project#, Estimator,Client,Project Name, Status, Comments, Received,Due Date,Completed, Plan Type, Qty, Price ea, Total AUD, Total NOK,Est Qty,Est Pay,State,ART Inv#,Actions Column
+
+these are to be Hidden but still required to be in DB and allow for calls in future implementations:
+Flashing Set  
+City
+Profit */
+
+//Invoice line - Hidden by default, toggle available for Admins only
+
   // ─── Project Number column ────
-  {    accessorKey: 'projectNumber',
+  {    
+    accessorKey: 'projectNumber',
     header: props => <FilterSortHeader {...props} label="Project#" filterHandlers={filterDropdownHandlers} />,
-    cell: editable('projectNumber'),
+    cell: ProjectNumberCell,
     filterFn: 'arrIncludes',
     enableSorting: true,
     enableColumnFilter: true,
@@ -438,17 +549,25 @@ Profit */
     enableSorting: true,
     enableColumnFilter: true,
   },
-    // ─── Status column (dropdown + autosave) ────
+    // ─── Status column (KISS: Only use main status field) ────
   {    accessorKey: 'status',
+    accessorFn: row => {
+      // Show "Sent" if DateCompleted exists AND status is "Estimate Completed"
+      return (row.DateCompleted && row.status === 'Estimate Completed') ? 'Sent' : (row.status || 'Estimate Requested');
+    },
     header: props => <FilterSortHeader {...props} label="Status" filterHandlers={filterDropdownHandlers} />,
     cell: ({ row, getValue }) => {
       const rowId = row.original._id;
-      const initial = getValue() ?? 'Estimate Requested';
-      const [status, setStatus] = useState(initial);
+      const mainStatus = row.original.status || 'Estimate Requested';
+      // Display "Sent" if DateCompleted exists AND status is "Estimate Completed"
+      const displayStatus = (row.original.DateCompleted && row.original.status === 'Estimate Completed') ? 'Sent' : mainStatus;
+      const [status, setStatus] = useState(displayStatus);
 
       useEffect(() => {
-        setStatus(getValue() ?? 'Estimate Requested');
-      }, [getValue]);
+        // Display "Sent" if DateCompleted exists AND status is "Estimate Completed"
+        const currentDisplayStatus = (row.original.DateCompleted && row.original.status === 'Estimate Completed') ? 'Sent' : (row.original.status || 'Estimate Requested');
+        setStatus(currentDisplayStatus);
+      }, [row.original.status, row.original.DateCompleted]);
 
       const handleChange = (e) => {
         const newStatus = e.target.value;
@@ -459,8 +578,8 @@ Profit */
           // When estimator marks as "Estimate Completed", auto-change to "Awaiting Review"
           const finalStatus = "Awaiting Review";
           setStatus(finalStatus);
-          updateRow(rowId, 'status', finalStatus);
-          updateRow(rowId, 'projectStatus', "Estimate Completed");
+          console.log(`🔄 Estimator auto-status change: "Estimate Completed" → "Awaiting Review" for project ${rowId}`);
+          updateRow(rowId, 'status', finalStatus); // 🎯 KISS: Only update main status field
           
           // Show notification to estimator
           if (typeof Swal !== 'undefined') {
@@ -473,17 +592,48 @@ Profit */
             });
           }
         } else {
-          // Normal status change
-          updateRow(rowId, 'status', newStatus);
+          // Normal status change - update main status field only
+          console.log(`🔄 JobBoard Status Update: Setting status to "${newStatus}" for project ${rowId}`);
           
-          // If "Estimate Completed" is selected by admin, also update the project status
-          if (newStatus === "Estimate Completed") {
-            updateRow(rowId, 'projectStatus', "Estimate Completed");
+          // Status-specific client view mapping
+          if (newStatus === "Sent") {
+            // "Sent" appends to estimateSent array and sets/updates DateCompleted
+            const now = new Date();
+            const isoTimestamp = now.toISOString();
+            const dateOnly = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+            
+            // Get existing estimateSent array or initialize empty array
+            const existingEstimateSent = row.original.estimateSent || [];
+            const updatedEstimateSent = [...existingEstimateSent, isoTimestamp];
+            
+            console.log(`📤 "Sent" status → Appending to estimateSent: [${updatedEstimateSent.join(', ')}], DateCompleted: ${dateOnly}, keeping status as "Estimate Completed"`);
+            updateRow(rowId, 'status', "Estimate Completed");
+            updateRow(rowId, 'estimateSent', updatedEstimateSent);
+            updateRow(rowId, 'DateCompleted', dateOnly);
+          } else if (newStatus === "Estimate Completed" && userRole === "Admin") {
+            // Admin manually sets "Estimate Completed" → Client sees plain "Estimate Completed" (no ART prefix)
+            // Only clear DateCompleted, preserve estimateSent audit trail
+            console.log(`✅ Admin "Estimate Completed" → Client sees "Estimate Completed"`);
+            updateRow(rowId, 'status', "Estimate Completed");
+            updateRow(rowId, 'DateCompleted', null);
+          } else if (newStatus === "Cancelled") {
+            // Cancelled → Client sees plain "Cancelled" (no ART prefix)
+            // Only clear DateCompleted, preserve estimateSent audit trail
+            console.log(`❌ "Cancelled" → Client sees "Cancelled"`);
+            updateRow(rowId, 'status', "Cancelled");
+            updateRow(rowId, 'DateCompleted', null);
+          } else {
+            // All other statuses → Client sees same status (will get "ART:" prefix in ProjectTable)
+            // "In Progress", "Awaiting Review", etc.
+            // Only clear DateCompleted, preserve estimateSent audit trail
+            console.log(`🎯 "${newStatus}" → Client sees "ART: ${newStatus}"`);
+            updateRow(rowId, 'status', newStatus);
+            updateRow(rowId, 'DateCompleted', null);
           }
         }
       };
 
-      const currentStatus = statuses.find(s => s.label === status) || {
+      const currentStatus = estimateStatuses.find(s => s.label === status) || {
         label: status,
         color: "bg-gray-300 text-black",
       };
@@ -525,11 +675,20 @@ Profit */
               MozAppearance: 'none'
             }}
           >
-            {statuses.map((s) => (
-              <option key={s.label} value={s.label} className="bg-white text-black">
-                {s.label}
-              </option>
-            ))}
+            {estimateStatuses
+              .filter(s => {
+                // 🚫 Hide "Sent" option from Estimators (Estimator role restriction)
+                if (userRole === "Estimator" && s.label === "Sent") {
+                  return false;
+                }
+                return true;
+              })
+              .map((s) => (
+                <option key={s.label} value={s.label} className="bg-white text-black">
+                  {s.label}
+                </option>
+              ))
+            }
           </select>
           
           {/* Custom dropdown arrow */}
@@ -549,10 +708,130 @@ Profit */
   // ─── Comments column ────
   {    accessorKey: 'Comments',
     header: props => <FilterSortHeader {...props} label="Comments" filterHandlers={filterDropdownHandlers} />,
-    cell: editable('Comments'),
+    cell: ({ row, getValue }) => {
+      const rowId = row.original._id;
+      const initial = getValue() ?? '';
+      const [comments, setComments] = useState(initial);
+      const [showTooltip, setShowTooltip] = useState(false);
+      const [isEditing, setIsEditing] = useState(false);
+      const [isFocused, setIsFocused] = useState(false);
+      const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+      const cellRef = useRef(null);
+
+      useEffect(() => {
+        if (!isFocused) {
+          setComments(getValue() ?? '');
+        }
+      }, [getValue, isFocused]);
+
+      const handleChange = (e) => {
+        const newValue = e.target.value;
+        setComments(newValue);
+      };
+
+      const handleFocus = () => {
+        setIsEditing(true);
+        setIsFocused(true);
+        setShowTooltip(false);
+      };
+
+      const handleBlur = () => {
+        setIsEditing(false);
+        setIsFocused(false);
+        updateRow(rowId, 'Comments', comments);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.target.blur();
+        }
+      };
+
+      const handleMouseEnter = () => {
+        if (!isEditing && comments && comments.length > 30 && cellRef.current) {
+          const rect = cellRef.current.getBoundingClientRect();
+          setTooltipPosition({
+            top: rect.bottom + window.scrollY + 4,
+            left: rect.left + window.scrollX + (rect.width / 2)
+          });
+          setShowTooltip(true);
+        }
+      };
+
+      const handleMouseLeave = () => {
+        setShowTooltip(false);
+      };
+
+      const truncatedText = comments && comments.length > 30 
+        ? comments.substring(0, 30) + '...' 
+        : comments;
+
+      const shouldShowTooltip = comments && comments.length > 30;
+
+      return (
+        <>
+          <div 
+            ref={cellRef}
+            className="relative"
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <input
+              type="text"
+              value={comments}
+              onChange={handleChange}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              className="w-full px-2 py-1 border-none bg-transparent focus:bg-white focus:border focus:border-blue-300 focus:rounded text-sm"
+              placeholder="Add comments..."
+              style={{ 
+                minHeight: '24px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+              title={shouldShowTooltip ? "" : comments} // Use native tooltip for short text
+            />
+          </div>
+
+          {/* Portal-rendered tooltip for long comments */}
+          {showTooltip && shouldShowTooltip && !isEditing && createPortal(
+            <div 
+              className={`fixed ${COMPONENT_Z_INDEX.JOB_TABLE.COMMENTS_TOOLTIP} p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg pointer-events-none`}
+              style={{
+                top: `${tooltipPosition.top}px`,
+                left: `${tooltipPosition.left}px`,
+                transform: 'translateX(-50%)',
+                width: '350px',
+                maxWidth: '350px',
+                whiteSpace: 'normal',
+                wordWrap: 'break-word',
+                lineHeight: '1.4'
+              }}
+            >
+              {comments}
+              {/* Tooltip arrow */}
+              <div 
+                className="absolute bottom-full left-1/2 transform -translate-x-1/2"
+                style={{
+                  width: 0,
+                  height: 0,
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderBottom: '6px solid rgb(17 24 39)' // gray-900
+                }}
+              />
+            </div>,
+            document.body
+          )}
+        </>
+      );
+    },
     filterFn: customFilterFn,
     enableSorting: true,
     enableColumnFilter: true,
+    size: 200, // Slightly wider for comments
   },
   // ─── Date columns ────
   { // Recieved   
@@ -651,6 +930,25 @@ Profit */
         const newValue = e.target.value;
         setValue(newValue);
         updateRow(rowId, 'PlanType', newValue);
+        
+        // Auto-update EstQty when changing to Manual Price
+        const currentEstQty = row.original.EstQty;
+        const currentQty = row.original.Qty || 0;
+        const isApproved = row.original.EstPayStatus === "Confirmed";
+        
+        if (!isApproved && newValue === "Manual Price" && currentQty > 0) {
+          // For Manual Price, calculate the price using the plan types
+          const updatedRow = {...row.original, PlanType: newValue};
+          const calculatedPrice = calculateAUD(updatedRow, planTypes);
+          
+          // Calculate safe EstQty using the calculated price
+          const estQtyValue = Math.min(currentQty, calculatedPrice || 1);
+          
+          // Update EstQty if it's currently 0, null, undefined, or matches current Qty
+          if (currentEstQty === 0 || currentEstQty === null || currentEstQty === undefined || currentEstQty === currentQty) {
+            updateRow(rowId, 'EstQty', estQtyValue);
+          }
+        }
       };
 
       // Allow both estimators and admins to edit this field
@@ -690,18 +988,32 @@ Profit */
       const isAdmin = userRole === "Admin";
       const initialValue = getValue() || 0;
       const [value, setValue] = useState(initialValue);
+      const [isFocused, setIsFocused] = useState(false);
       
-      useEffect(() => { setValue(getValue() || 0) }, [getValue]);
+      useEffect(() => { 
+        if (!isFocused) {
+          setValue(getValue() || 0);
+        }
+      }, [getValue, isFocused]);
 
       const handleChange = (e) => {
-        const newValue = parseFloat(e.target.value) || 0;
+        const newValue = e.target.value; // Keep as string while typing
         setValue(newValue);
-        updateRow(rowId, 'Qty', newValue);
+      };
+
+      const handleBlur = () => {
+        setIsFocused(false);
+        const numValue = parseFloat(value) || 0;
+        setValue(numValue); // Normalize to number
+        updateRow(rowId, 'Qty', numValue);
         
         // Auto-update EstQty if conditions are met
         const currentEstQty = row.original.EstQty;
         const currentQty = row.original.Qty;
         const isApproved = row.original.EstPayStatus === "Confirmed";
+        
+        // Calculate safe EstQty value (lower of Qty/PriceEach for Manual Price)
+        const estQtyValue = calculateSafeEstQty(row.original, numValue);
         
         // Update EstQty only if:
         // 1. EstQty is 0, null, undefined, OR
@@ -709,14 +1021,20 @@ Profit */
         // 3. Project is not approved (EstPayStatus !== "Confirmed")
         if (!isApproved && 
             (currentEstQty === 0 || currentEstQty === null || currentEstQty === undefined || currentEstQty === currentQty)) {
-          updateRow(rowId, 'EstQty', newValue);
+          updateRow(rowId, 'EstQty', estQtyValue);
+        }
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.target.blur();
         }
       };
 
       if (!isAdmin) {
         return (
           <span className="px-3 py-1 text-sm text-gray-700">
-            {value || 0}
+            {initialValue || 0}
           </span>
         );
       }
@@ -726,7 +1044,12 @@ Profit */
           type="number"
           value={value}
           onChange={handleChange}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            setIsFocused(true);
+            e.target.select();
+          }}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
           min="0"
           step="0.5"
           className="px-3 py-1 w-full text-sm bg-transparent border-none outline-none focus:bg-white focus:shadow-sm"
@@ -781,13 +1104,30 @@ Profit */
       const isConfirmed = row.original.EstPayStatus === "Confirmed";
       const initialValue = getValue() || 0;
       const [value, setValue] = useState(initialValue);
+      const [isFocused, setIsFocused] = useState(false);
       
-      useEffect(() => { setValue(getValue() || 0) }, [getValue]);
+      useEffect(() => { 
+        if (!isFocused) {
+          setValue(getValue() || 0);
+        }
+      }, [getValue, isFocused]);
 
       const handleChange = (e) => {
-        const newValue = parseFloat(e.target.value) || 0;
+        const newValue = e.target.value; // Keep as string while typing
         setValue(newValue);
-        updateRow(rowId, 'EstQty', newValue);
+      };
+
+      const handleBlur = () => {
+        setIsFocused(false);
+        const numValue = parseFloat(value) || 0;
+        setValue(numValue); // Normalize to number
+        updateRow(rowId, 'EstQty', numValue);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.target.blur();
+        }
       };
 
       // Show editable if:
@@ -799,7 +1139,7 @@ Profit */
         return (
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 text-sm text-gray-700 bg-gray-50 rounded">
-              {value || 0}
+              {initialValue || 0}
             </span>
             {isConfirmed && (
               <span className="text-xs text-green-600 font-medium">🔒</span>
@@ -813,7 +1153,12 @@ Profit */
           type="number"
           value={value}
           onChange={handleChange}
-          onFocus={(e) => e.target.select()}
+          onFocus={(e) => {
+            setIsFocused(true);
+            e.target.select();
+          }}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
           min="0"
           step="0.5"
           className="px-3 py-1 w-full text-sm bg-transparent border-none outline-none focus:bg-white focus:shadow-sm"
@@ -833,6 +1178,10 @@ Profit */
       const currentStatus = row.original.EstPayStatus || 'Pending';
       const isAdmin = userRole === "Admin";
       const hasEstQty = row.original.EstQty > 0;
+      const hasQty = row.original.Qty > 0;
+      
+      // Show approval controls if EstQty > 0 OR (EstQty = 0 but Qty > 0 - for free estimator work)
+      const showApprovalControls = hasEstQty || (row.original.EstQty === 0 && hasQty);
       
       const statusColors = {
         'Pending': 'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200',
@@ -885,7 +1234,7 @@ Profit */
             {payAmount ? `$${payAmount}` : '$0'}
           </span>
           
-          {hasEstQty > 0 && (
+          {showApprovalControls && (
             <>
               {currentStatus === 'Pending' ? (
                 <button
@@ -896,7 +1245,7 @@ Profit */
                   ⏳ Pending
                 </button>
               ) : (
-                <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${statusColors[currentStatus]}`}>
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full border whitespace-nowrap ${statusColors[currentStatus]}`}>
                   ✅ Confirmed
                 </span>
               )}
@@ -917,44 +1266,17 @@ Profit */
   {    id: 'state',
     accessorFn: row => row.location?.state || '',
     header: props => <FilterSortHeader {...props} label="State" filterHandlers={filterDropdownHandlers} />,
-    cell: info => info.getValue(),
+    cell: info => {
+      const state = info.getValue();
+      // Display "ACT" instead of "Australian Capital Territory" for thinner column width
+      return state === 'Australian Capital Territory' ? 'ACT' : state;
+    },
     filterFn: 'arrIncludes',
     enableSorting: true,
     enableColumnFilter: true,
   },
   // ─── Invoicing columns ────
-  {    accessorKey: 'ARTInvNumber',
-    header: props => <FilterSortHeader {...props} label="ART Inv#" filterHandlers={filterDropdownHandlers} />,
-    cell: editable('ARTInvNumber'),
-    filterFn: customFilterFn,
-    enableSorting: true,
-    enableColumnFilter: true,
-  },
-  // ─── Actions column ────
-  {    id: 'actions',
-    header: () => (
-      <div className="flex justify-center">
-        <IconSend size={20} className="text-white" />
-      </div>
-    ),
-    cell: ({ row }) => (
-      <div className="flex justify-center">
-        <MessageTypeSelector 
-          project={row.original}
-          onOpenSendModal={openSendModal}
-        />
-      </div>
-    ),
-    enableSorting: false,
-    enableColumnFilter: false,
-    enableResizing: false,
-    size: 60,
-    minSize: 60,
-    maxSize: 60,
-    sticky: 'right',
-  },
-  // ─── Hidden columns (still require backend sync for api calls) ────
-  {    accessorKey: 'InvoiceLine',
+    {    accessorKey: 'InvoiceLine',
     header: props => <FilterSortHeader {...props} label="Invoice Line" filterHandlers={filterDropdownHandlers} />,
     cell: ({ row, getValue }) => {
       const rowId = row.original._id;
@@ -1014,6 +1336,37 @@ Profit */
     enableSorting: true,
     enableColumnFilter: true,
   },
+  {    accessorKey: 'ARTInvNumber',
+    header: props => <FilterSortHeader {...props} label="ART Inv#" filterHandlers={filterDropdownHandlers} />,
+    cell: editable('ARTInvNumber'),
+    filterFn: customFilterFn,
+    enableSorting: true,
+    enableColumnFilter: true,
+  },
+  // ─── Actions column ────
+  {    id: 'actions',
+    header: () => (
+      <div className="flex justify-center">
+        <IconSend size={20} className="text-white" />
+      </div>
+    ),
+    cell: ({ row }) => (
+      <div className="flex justify-center">
+        <MessageTypeSelector 
+          project={row.original}
+          onOpenSendModal={openSendModal}
+        />
+      </div>
+    ),
+    enableSorting: false,
+    enableColumnFilter: false,
+    enableResizing: false,
+    size: 60,
+    minSize: 60,
+    maxSize: 60,
+    sticky: 'right',
+  },
+  // ─── Hidden columns (still require backend sync for api calls) ────
   {    accessorKey: 'FlashingSet', // ─── Flashing Set column ────
     header: props => <FilterSortHeader {...props} label="Flashing Set" filterHandlers={filterDropdownHandlers} />,
     cell: editable('FlashingSet'),

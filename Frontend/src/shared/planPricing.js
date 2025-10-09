@@ -40,11 +40,14 @@ function convertPrice(aud, currency) {
 }
 
 function enrichPlan(plan) {
+  // Manual Price and Nearmap Rebate should not be rounded
+  const shouldRound = !["Manual Price", "Nearmap Rebate"].includes(plan.label);
+  
   return {
     ...plan,
     tiers: plan.tiers.map(tier => ({
       ...tier,
-      AUD: roundUpTo(tier.price, ROUND_RULES.AUD),
+      AUD: shouldRound ? roundUpTo(tier.price, ROUND_RULES.AUD) : tier.price,
       USD: tier.price === -5 ? null : convertPrice(tier.price, "USD"),
       EUR: tier.price === -5 ? null : convertPrice(tier.price, "EUR"),
       NOK: tier.price === -5 ? null : convertPrice(tier.price, "NOK"),

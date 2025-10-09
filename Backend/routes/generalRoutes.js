@@ -238,4 +238,72 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+// ── Bug Report Endpoint ─────────────────────────────────────────────────
+router.post("/support/bug-report", async (req, res) => {
+  try {
+    const { category, subcategory, description, userInfo } = req.body;
+
+    // Validate required fields
+    if (!category || !subcategory) {
+      return res.status(400).json({
+        success: false,
+        message: "Category and subcategory are required"
+      });
+    }
+
+    // Create email content
+    const emailSubject = `🐛 Bug Report: ${category} - ${subcategory}`;
+    
+    const emailBody = `
+      <h2>🐛 Bug Report from Project Manager (BETA)</h2>
+      
+      <h3>Issue Details:</h3>
+      <p><strong>Category:</strong> ${category}</p>
+      <p><strong>Specific Issue:</strong> ${subcategory}</p>
+      
+      ${description ? `
+      <h3>Additional Details:</h3>
+      <p>${description.replace(/\n/g, '<br>')}</p>
+      ` : ''}
+      
+      <h3>User Information:</h3>
+      <p><strong>Name:</strong> ${userInfo.name}</p>
+      <p><strong>Email:</strong> ${userInfo.email}</p>
+      <p><strong>Role:</strong> ${userInfo.role}</p>
+      <p><strong>Current Page:</strong> ${userInfo.currentPage}</p>
+      <p><strong>Timestamp:</strong> ${new Date(userInfo.timestamp).toLocaleString()}</p>
+      
+      <h3>Technical Information:</h3>
+      <p><strong>Browser:</strong> ${userInfo.browser}</p>
+      
+      <hr>
+      <p><em>This bug report was automatically generated from the Project Manager BETA application.</em></p>
+    `;
+
+    // Send email using existing transporter
+    const mailOptions = {
+      from: `"Project Manager BETA" <${process.env.SMTP_USER}>`,
+      to: "support@allrooftakeoffs.com.au",
+      subject: emailSubject,
+      html: emailBody
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    console.log(`🐛 Bug report sent: ${category} - ${subcategory} from ${userInfo.name} (${userInfo.email})`);
+
+    res.json({
+      success: true,
+      message: "Bug report submitted successfully"
+    });
+
+  } catch (error) {
+    console.error("❌ Error sending bug report:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to submit bug report"
+    });
+  }
+});
+
 module.exports = router;

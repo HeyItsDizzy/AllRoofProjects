@@ -37,6 +37,14 @@ const Login = () => {
         setUser(user);
         console.log("User successfully logged in:", user);
 
+        // Check if there's a stored redirect URL from a direct link access attempt
+        const redirectUrl = localStorage.getItem('redirectAfterLogin');
+        if (redirectUrl) {
+          localStorage.removeItem('redirectAfterLogin');
+          console.log("Redirecting to stored URL after login:", redirectUrl);
+          return navigate(redirectUrl);
+        }
+
         // ── Redirect non-admins without any linkedClients ─────────────────
         if (user.role !== "Admin" && (!user.linkedClients || user.linkedClients.length === 0)) {
           console.log("No linkedClients found → redirecting to /company-choice");
@@ -65,8 +73,8 @@ const Login = () => {
       <div className="bg-white p-20 rounded-xl shadow-lg w-full max-w-md mx-auto">
         {isNoAccessRedirect && (
           <Alert
-            message="Authentication Required"
-            description="You need to be logged in to access that project. Please sign in below or create an account."
+            message="Sign In Required"
+            description="You need to be signed in to access that content. Please sign in below or create an account, and you'll be redirected to your requested page."
             type="info"
             showIcon
             className="mb-6"

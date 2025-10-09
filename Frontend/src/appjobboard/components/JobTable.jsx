@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useContext, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useContext, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Switch, FormControlLabel, Checkbox, alpha, styled } from '@mui/material';
 import {
   useReactTable,
@@ -16,6 +17,9 @@ import Avatar from '@/shared/Avatar';
 import { useMonthGrouping } from '@/appjobboard/hooks/useMonthGrouping';
 import useAxiosSecure from '@/hooks/AxiosSecure/useAxiosSecure';
 import { useAutoSave } from '@/appjobboard/hooks/useAutoSave';
+import MonthFilterTabs, { getFilteredDataByTab } from '@/shared/components/MonthFilterTabs';
+import { Z_INDEX, COMPONENT_Z_INDEX } from '@/shared/styles/zIndexManager';
+import ZIndexDebugger from '@/shared/styles/ZIndexDebugger';
 
 // Custom styled switch with your primary green color
 const GreenSwitch = styled(Switch)(({ theme }) => ({
@@ -89,6 +93,11 @@ export default function JobTable({
   // Local data state for inline edits and live updates
   const [data, setData] = useState(jobs);
   
+  // Tooltip state for help icon
+  const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+  const [helpTooltipPosition, setHelpTooltipPosition] = useState({ top: 0, left: 0 });
+  const helpIconRef = useRef(null);
+  
   // Auto-save functionality
   const {
     queueChange,
@@ -100,10 +109,12 @@ export default function JobTable({
     pendingProjects
   } = useAutoSave(async (projectId, changes) => {
     try {
+      console.log(`🚀 Sending update to backend for project ${projectId}:`, changes);
       await axiosSecure.patch(`/projects/update/${projectId}`, changes);
+      console.log(`✅ Successfully updated project ${projectId} in database`);
       return true;
     } catch (error) {
-      console.error('Failed to save project:', error);
+      console.error('❌ Failed to save project:', error);
       throw error;
     }
   });
@@ -124,6 +135,22 @@ export default function JobTable({
     setData(jobs);
   }, [jobs]);
   
+  // Help tooltip mouse handlers
+  const handleHelpMouseEnter = () => {
+    if (helpIconRef.current) {
+      const rect = helpIconRef.current.getBoundingClientRect();
+      setHelpTooltipPosition({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX + (rect.width / 2)
+      });
+      setShowHelpTooltip(true);
+    }
+  };
+
+  const handleHelpMouseLeave = () => {
+    setShowHelpTooltip(false);
+  };
+  
   // ══════════════════════════════════════════════════════════════════
   // 🎯 CORE STATE MANAGEMENT
   // ══════════════════════════════════════════════════════════════════
@@ -131,12 +158,18 @@ export default function JobTable({
   // Excel-like cell selection state
   const [cellSelectionMode, setCellSelectionMode] = useState(false);
   
+  // InvoiceLine column visibility toggle (Admin only)
+  const [showInvoiceLine, setShowInvoiceLine] = useState(false);
+  
   // Advanced cell selection state (from reference file)
   const [selectedCells, setSelectedCells] = useState(new Set());
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState(null);
   const [selectionMode, setSelectionMode] = useState('cell'); // 'cell' or 'column'
   const [isResizing, setIsResizing] = useState(false); // Track column resizing state
+  
+  // Row highlighting state - for manual Project Number click highlighting
+  const [highlightedRowId, setHighlightedRowId] = useState(null);
   
   // Simple freeze panes state - like Excel with localStorage persistence
   const [frozenColumns, setFrozenColumns] = useState(() => {
@@ -154,6 +187,8 @@ export default function JobTable({
       projectNumber: true, // Always frozen (like Excel A column)
       name: false,
       client: false,
+      estimators: false,
+      status: false,
     };
   });
 
@@ -203,13 +238,11 @@ export default function JobTable({
   const isAdminRole = user?.role === 'admin' || user?.role === 'Admin' || user?.role === 'administrator';
   const userEstimatorId = user?._id;
 
-  // ── Month filtering state - KISS & DRY with hook ─────────────────
+  // ── Month filtering state - using reusable MonthFilterTabs component ─────────────────
   const [activeTab, setActiveTab] = useState('all'); // Will be updated to current month on mount
   const [selectedOlderMonth, setSelectedOlderMonth] = useState(null);
-  const [showOlderDropdown, setShowOlderDropdown] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
 
-  // Use the monthly hook for clean month organization
+  // Use the monthly hook for month data (shared with MonthFilterTabs)
   const { 
     allMonths, 
     recentMonths, 
@@ -218,29 +251,32 @@ export default function JobTable({
     totalJobCount 
   } = useMonthGrouping(data);
 
-  // Set default to current month on component mount
+  // Set default tab based on user role
   useEffect(() => {
-    // Get current month ID in "YY-MM Mon" format
-    const currentDate = new Date();
-    const shortYear = String(currentDate.getFullYear()).slice(-2);
-    const monthNum = String(currentDate.getMonth() + 1).padStart(2, '0');
-    const monthName = currentDate.toLocaleDateString('en-US', { month: 'short' });
-    const currentMonthId = `${shortYear}-${monthNum} ${monthName}`;
-    
-    // Check if current month exists in the data
-    const currentMonthData = getMonthById(currentMonthId);
-    if (currentMonthData && currentMonthData.count > 0) {
-      setActiveTab(currentMonthId);
+    if (user?.role) {
+      const isAdmin = user.role === 'admin' || user.role === 'Admin' || user.role === 'administrator';
+      
+      if (isAdmin) {
+        // Admin: Default to current month (if available), otherwise 'all'
+        if (recentMonths.length > 0) {
+          const currentDate = new Date();
+          const currentMonthKey = `${String(currentDate.getFullYear()).slice(-2)}-${String(currentDate.getMonth() + 1).padStart(2, '0')} ${currentDate.toLocaleDateString('en-US', { month: 'short' })}`;
+          const currentMonth = recentMonths.find(month => month.id === currentMonthKey);
+          setActiveTab(currentMonth ? currentMonth.id : 'all');
+        } else {
+          // No month data available, default to 'all' for admin
+          setActiveTab('all');
+        }
+      } else {
+        // All other roles: Default to Most Recent (lastN)
+        setActiveTab('lastN');
+      }
     }
-    // If current month has no data, stay with 'all'
-  }, [getMonthById]);
+  }, [user?.role, recentMonths.length]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showOlderDropdown && !event.target.closest('.dropdown-container')) {
-        setShowOlderDropdown(false);
-      }
       // Apply filter and close dropdown when clicking outside (Excel behavior)
       if (activeFilterColumn && !event.target.closest('.filter-dropdown-container')) {
         // Apply the staged filter before closing (like Excel)
@@ -257,87 +293,21 @@ export default function JobTable({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showOlderDropdown, activeFilterColumn, filterStaged]);
+  }, [activeFilterColumn, filterStaged]);
 
-  // Handle dropdown positioning like a navigation menu
-  const handleDropdownToggle = (event) => {
-    if (!showOlderDropdown) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX
-      });
-    }
-    setShowOlderDropdown(!showOlderDropdown);
-  };
-
-  // Generate clean tab structure using hook data
-  const tabData = useMemo(() => {
-    const tabs = [];
-
-    // 1. All tab
-    tabs.push({
-      id: 'all',
-      label: 'All',
-      count: totalJobCount,
-      jobs: jobs // Use original jobs array (already sorted by parent)
-    });
-
-    // 2. Older dropdown tab
-    const olderTotalCount = olderMonths.reduce((sum, month) => sum + month.count, 0);
-    tabs.push({
-      id: 'older',
-      label: 'Older',
-      count: olderTotalCount,
-      isDropdown: true,
-      dropdownOptions: olderMonths,
-      jobs: olderMonths.flatMap(month => month.jobs)
-    });
-
-    // 3. Add selected older month as separate tab if selected (next to Older)
-    if (selectedOlderMonth) {
-      const selectedMonthData = getMonthById(selectedOlderMonth);
-      if (selectedMonthData) {
-        tabs.push({
-          id: selectedOlderMonth,
-          label: selectedOlderMonth,
-          count: selectedMonthData.count,
-          jobs: selectedMonthData.jobs,
-          isSelectedOlder: true
-        });
-      }
-    }
-
-    // 4. Recent 3 months in correct order: 2 months ago, last month, this month
-    const orderedRecentMonths = [...recentMonths].reverse(); // Reverse to get oldest to newest
-    orderedRecentMonths.forEach(month => {
-      tabs.push({
-        id: month.id,
-        label: month.label,
-        count: month.count,
-        jobs: month.jobs
-      });
-    });
-
-    return tabs;
-  }, [data, totalJobCount, olderMonths, recentMonths, selectedOlderMonth, getMonthById]);
-
-  // Get filtered data based on all filters
+  // Get filtered data based on month tab and search - simplified since MonthFilterTabs handles month logic
   const filteredData = useMemo(() => {
-    // Start with jobs from the active tab
-    let filtered = [];
-    
-    // 1. Filter by month tab using our new tab structure
-    const activeTabData = tabData.find(tab => tab.id === activeTab);
-    
-    if (activeTabData && activeTabData.jobs) {
-      filtered = [...activeTabData.jobs];
-    } else {
-      // Fallback - if tab not found, show all jobs
-      filtered = [...data];
+    // Start with all data - month filtering is handled by MonthFilterTabs component
+    let filtered = data;
+
+    // Find the matching month data based on activeTab
+    if (activeTab !== 'all') {
+      // Find month data from the grouping hook
+      const monthData = [...recentMonths, ...olderMonths].find(month => month.id === activeTab);
+      filtered = monthData ? monthData.jobs : data;
     }
 
-    // 2. Apply search filter
+    // Apply search filter
     if (debouncedSearchQuery.trim()) {
       const query = debouncedSearchQuery.toLowerCase();
       filtered = filtered.filter(item => {
@@ -366,18 +336,16 @@ export default function JobTable({
       });
     }
 
-    // 3. Role-based filtering is now handled at the data source level in JobBoard.jsx
-
     return filtered;
-  }, [tabData, activeTab, data, debouncedSearchQuery]);
+  }, [data, activeTab, recentMonths, olderMonths, debouncedSearchQuery]);
 
   // ══════════════════════════════════════════════════════════════════
   // 🎛️ ACTION HANDLERS
   // ══════════════════════════════════════════════════════════════════
   
-  // Clear all filters (except month tab - acts like Excel tabs)
+  // Clear all filters (except month tab and search - acts like Excel tabs)
   const handleClearAllFilters = useCallback(() => {
-    setSearchQuery('');
+    // Preserve search query - only clear header filters
     // Don't reset activeTab - month tabs should act like Excel tabs
     
     // Clear column filters (estimator filtering is now handled at data level)
@@ -421,6 +389,12 @@ export default function JobTable({
       [columnKey]: !prev[columnKey]
     }));
   };
+
+  // Handle save all with row highlight clearing
+  const handleSaveAll = useCallback(() => {
+    setHighlightedRowId(null); // Clear manual row highlighting when save is triggered
+    saveAll();
+  }, [saveAll]);
 
   // ── Excel-like Cell Selection Handlers ─────────────────────────────────────────────
   const getCellId = (rowIndex, colIndex) => `${rowIndex}-${colIndex}`;
@@ -565,9 +539,15 @@ export default function JobTable({
       {
         activeFilterColumn,
         handleFilterDropdown
-      }
+      },
+      // Row highlighting handlers for manual click highlighting
+      {
+        highlightedRowId,
+        setHighlightedRowId
+      },
+      showInvoiceLine // Pass InvoiceLine column visibility toggle
     );
-  }, [updateRow, editable, exchangeRate, config, clients, estimators, openSendModal, user?.role, user?._id, activeFilterColumn, handleFilterDropdown]);
+  }, [updateRow, editable, exchangeRate, config, clients, estimators, openSendModal, user?.role, user?._id, activeFilterColumn, handleFilterDropdown, highlightedRowId, setHighlightedRowId, showInvoiceLine]);
 
   // Apply freeze panes to columns (pure TanStack way - from checkpoint)
   const columns = useMemo(() => {
@@ -612,6 +592,34 @@ export default function JobTable({
             freezable: true,
             frozen: frozenColumns.client,
             onToggleFreeze: () => toggleFreeze('client')
+          }
+        };
+      }
+
+      // Estimators column - freezable with pin button
+      if (col.id === 'estimators') {
+        return {
+          ...col,
+          meta: { 
+            ...col.meta, 
+            sticky: frozenColumns.estimators ? 'left' : undefined,
+            freezable: true,
+            frozen: frozenColumns.estimators,
+            onToggleFreeze: () => toggleFreeze('estimators')
+          }
+        };
+      }
+
+      // Status column - freezable with pin button
+      if (col.accessorKey === 'status') {
+        return {
+          ...col,
+          meta: { 
+            ...col.meta, 
+            sticky: frozenColumns.status ? 'left' : undefined,
+            freezable: true,
+            frozen: frozenColumns.status,
+            onToggleFreeze: () => toggleFreeze('status')
           }
         };
       }
@@ -830,6 +838,12 @@ export default function JobTable({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Development Z-Index Debugger */}
+      <ZIndexDebugger 
+        componentName="JobTable"
+        componentZIndexConfig={COMPONENT_Z_INDEX.JOB_TABLE}
+      />
+      
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* 🎛️ TOP CONTROLS BAR - BEAUTIFUL STYLING */}
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -893,6 +907,33 @@ export default function JobTable({
               />
             </div>
 
+            {/* Invoice Line Toggle - Admin Only */}
+            {user?.role === "Admin" && (
+              <div className="flex items-center gap-2 px-3 py-2">
+                <FormControlLabel
+                  control={
+                    <GreenSwitch
+                      checked={showInvoiceLine}
+                      onChange={(event) => {
+                        setShowInvoiceLine(event.target.checked);
+                      }}
+                    />
+                  }
+                  label="Invoice Line"
+                  labelPlacement="end"
+                  sx={{
+                    margin: 0,
+                    '& .MuiFormControlLabel-label': {
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#374151',
+                      marginLeft: '8px',
+                    },
+                  }}
+                />
+              </div>
+            )}
+
             {/* Selection Counter */}
             {cellSelectionMode && selectedCells.size > 0 && (
               <div className="flex items-center px-3 py-2">
@@ -913,7 +954,7 @@ export default function JobTable({
                 
                 {/* Save Button */}
                 <button
-                  onClick={saveAll}
+                  onClick={handleSaveAll}
                   disabled={isAutoSaving}
                   className="flex items-center gap-2 px-2 py-1 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   title={`Save ${pendingProjectsCount} pending changes`}
@@ -925,16 +966,8 @@ export default function JobTable({
             )}
           </div>
 
-          {/* Right side - Project count and role indicator */}
+          {/* Right side - Role indicator only */}
           <div className="flex items-center gap-4">
-            {/* Project count */}
-            <div className="text-sm text-gray-600 whitespace-nowrap">
-              <strong>{filteredData.length} projects</strong>
-              {activeTab !== 'all' && (
-                <span className="ml-1 text-blue-600">({tabData.find(t => t.id === activeTab)?.label})</span>
-              )}
-            </div>
-
             {/* Role indicator - Only show in development mode */}
             {process.env.NODE_ENV === 'development' && isEstimatorRole && !isAdminRole && (
               <div className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200">
@@ -950,78 +983,25 @@ export default function JobTable({
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* 📅 MONTH FILTER TABS - PRODUCTION STYLING */}
+        {/* 📅 MONTH FILTER TABS - Reusable Component */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <div className="flex items-center justify-between relative">
-          <div className="flex overflow-x-auto">
-            {tabData.map(tab => (
-              <div key={tab.id} className="relative">
-                {tab.isDropdown ? (
-                  // Dropdown for "Older" tab
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={handleDropdownToggle}
-                      className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex items-center ${
-                        activeTab === tab.id || tab.dropdownOptions?.some(opt => opt.id === activeTab)
-                          ? 'border-blue-500 text-blue-600 bg-blue-50'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      {tab.label}
-                      <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                        activeTab === tab.id || tab.dropdownOptions?.some(opt => opt.id === activeTab)
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-600'
-                      }`}>
-                        {tab.count}
-                      </span>
-                      <svg className={`ml-1 w-3 h-3 transition-transform ${showOlderDropdown ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  // Regular tab (including selected older month tabs)
-                  <div className="relative">
-                    <button
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                        activeTab === tab.id
-                          ? 'border-blue-500 text-blue-600 bg-blue-50'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } ${
-                        tab.isSelectedOlder 
-                          ? 'pr-8' 
-                          : ''
-                      }`}
-                    >
-                      {tab.label}
-                      <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                        activeTab === tab.id
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-600'
-                      }`}>
-                        {tab.count}
-                      </span>
-                    </button>
-                    {tab.isSelectedOlder && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedOlderMonth(null);
-                          setActiveTab('all');
-                        }}
-                        className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 w-4 h-4 flex items-center justify-center z-10"
-                        title="Remove this month tab"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <MonthFilterTabs
+            projects={data}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            selectedOlderMonth={selectedOlderMonth}
+            onOlderMonthSelect={setSelectedOlderMonth}
+            onOlderMonthRemove={() => setSelectedOlderMonth(null)}
+            lastNConfig={{ 
+              enabled: true, 
+              limit: 30, 
+              label: "Most Recent" 
+            }}
+            userRole={user?.role}
+            showProjectCount={true}
+            projectCount={filteredData.length}
+          />
           
           <div className="flex items-center space-x-3 px-4 py-2">
             {/* Search Input */}
@@ -1044,17 +1024,9 @@ export default function JobTable({
             <div className="flex items-center space-x-2">
               <label className="text-sm text-gray-600 font-medium">Zoom:</label>
               <select 
-                className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="text-sm border border-gray-300 h-[32px] rounded-lg px-2 py-0 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 align-middle leading-none"
                 value={internalZoomLevel}
                 onChange={(e) => handleZoomChange(Number(e.target.value))}
-                title="JobBoard Interactions:
-• Click cell to edit
-• CTRL+C to copy selection  
-• CTRL+S to save all changes
-• Click and drag to select cells
-• Resize columns by dragging headers
-• Use filters to narrow results
-• Sort by clicking column headers"
               >
                 <option value="50">50%</option>
                 <option value="60">60%</option>
@@ -1067,17 +1039,12 @@ export default function JobTable({
                 <option value="150">150%</option>
               </select>
               <span 
-                className="text-xs text-gray-500 cursor-help"
-                title="JobBoard Interactions:
-• Click cell to edit
-• CTRL+C to copy selection  
-• CTRL+S to save all changes
-• Click and drag to select cells
-• Resize columns by dragging headers
-• Use filters to narrow results
-• Sort by clicking column headers"
+                ref={helpIconRef}
+                className="text-lg text-gray-500 cursor-help border rounded-lg border-gray-300 h-[32px] w-[32px] flex items-center justify-center"
+                onMouseEnter={handleHelpMouseEnter}
+                onMouseLeave={handleHelpMouseLeave}
               >
-                ℹ️
+               💡
               </span>
             </div>
           </div>
@@ -1116,7 +1083,7 @@ export default function JobTable({
                         className={`
                           px-2 py-1 text-left font-medium text-sm relative transition-all duration-150 text-white sticky top-0
                           ${isSelected && cellSelectionMode ? 'cell-selected-header' : 'bg-green-600 table-header-normal'}
-                          ${isSticky ? 'z-[70] table-header-sticky' : 'z-20'}
+                          ${isSticky ? `${COMPONENT_Z_INDEX.JOB_TABLE.TABLE_HEADER} table-header-sticky` : `${Z_INDEX.STICKY_HEADER}`}
                           hover:bg-green-700 transition-colors
                           ${cellSelectionMode ? 'cursor-pointer' : ''}
                         `}
@@ -1169,12 +1136,23 @@ export default function JobTable({
                   selectedCells.has(getCellId(rowIndex, colIndex))
                 );
                 
+                // Check if this row has pending changes (auto yellow highlight)
+                const hasUnsavedChanges = pendingProjects.includes(row.original._id);
+                
+                // Check if this row is manually highlighted (Project Number clicked)
+                const isManuallyHighlighted = highlightedRowId === row.id;
+                
                 return (
                   <tr 
                     key={row.id}
                     className={`
                       border-b border-gray-100 transition-colors
-                      ${hasSelectedCell ? 'bg-transparent' : (rowIndex % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50')}
+                      ${hasUnsavedChanges || isManuallyHighlighted
+                        ? 'bg-yellow-200 hover:bg-yellow-300' 
+                        : hasSelectedCell 
+                        ? 'bg-transparent' 
+                        : (rowIndex % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50 hover:bg-blue-50')
+                      }
                     `}
                   >
                   {row.getVisibleCells().map((cell, colIndex) => {
@@ -1189,9 +1167,13 @@ export default function JobTable({
                         key={cell.id}
                         className={`
                           px-2 py-1 text-sm transition-all duration-150
-                          ${isSticky ? 'sticky z-[50]' : 'relative z-10'}
+                          ${isSticky ? `sticky ${COMPONENT_Z_INDEX.JOB_TABLE.STICKY_COLUMNS}` : 
+                            isSelected && cellSelectionMode ? 
+                              `relative ${COMPONENT_Z_INDEX.JOB_TABLE.SELECTED_CELL}` : 
+                              `relative ${Z_INDEX.CONTENT}`
+                          }
                           ${isSelected && cellSelectionMode ? 
-                            'cell-selected bg-green-100 border-2 border-green-500 z-[60]' : 
+                            'cell-selected bg-green-100 border-2 border-green-500' : 
                             'border border-gray-200 bg-inherit'
                           }
                           ${cellSelectionMode ? 'cursor-pointer hover:bg-gray-100' : ''}
@@ -1229,51 +1211,6 @@ export default function JobTable({
         </div>
       </div>
       
-      {/* Portal-style Dropdown Menu - Like Navigation Dropdown */}
-      {showOlderDropdown && (
-        <div 
-          className="fixed bg-white border border-gray-200 rounded-lg shadow-xl z-200 min-w-[200px] max-h-[400px] overflow-y-auto pointer-events-auto"
-          style={{
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          {tabData.find(tab => tab.isDropdown)?.dropdownOptions?.map((option, index) => (
-            <div
-              key={option.id}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                setSelectedOlderMonth(option.id);
-                setActiveTab(option.id);
-                setShowOlderDropdown(false);
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center justify-between transition-colors pointer-events-auto cursor-pointer ${
-                selectedOlderMonth === option.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-              } ${index === 0 ? 'rounded-t-lg' : ''} ${index === tabData.find(tab => tab.isDropdown)?.dropdownOptions?.length - 1 ? 'rounded-b-lg' : ''}`}
-              style={{ zIndex: 99999, position: 'relative' }}
-            >
-              <span className="font-medium">{option.label}</span>
-              <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                selectedOlderMonth === option.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}>
-                {option.count}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* 🎯 FILTER DROPDOWN - RENDERED AT TOP LEVEL FOR PROPER Z-INDEX */}
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -1298,7 +1235,7 @@ export default function JobTable({
 
         return (
           <div
-            className="filter-dropdown-container fixed z-[240] bg-white border rounded shadow-lg p-2"
+            className={`filter-dropdown-container fixed ${COMPONENT_Z_INDEX.JOB_TABLE.FILTER_DROPDOWN} bg-white border rounded shadow-lg p-2`}
             style={{
               top: filterDropdownPosition.top,
               left: filterDropdownPosition.left,
@@ -1312,6 +1249,36 @@ export default function JobTable({
               className="mb-2 w-full text-left text-xs text-blue-600 hover:underline"
             >
               Clear All
+            </button>
+
+            {/* Select All */}
+            <button
+              onClick={() => {
+                // Get all available options including __BLANK__ if it exists
+                let allOptions = Array.from(uniq.keys());
+                const isOptionalColumn = ['PlanType', 'clients', 'estimators', 'posting_date', 'due_date', 'DateCompleted', 'Comments', 'ARTInvNumber', 'InvoiceLine', 'FlashingSet'].includes(column.id);
+                
+                if (isOptionalColumn) {
+                  // Check if __BLANK__ should be included
+                  const emptyKeys = Array.from(uniq.keys()).filter(key => 
+                    key === null || key === undefined || key === '' || 
+                    (typeof key === 'string' && key.trim() === '') ||
+                    key === '__BLANK__'
+                  );
+                  
+                  if (emptyKeys.length > 0 || column.id.includes('date')) {
+                    allOptions = allOptions.filter(key => !emptyKeys.includes(key) || key === '__BLANK__');
+                    if (!allOptions.includes('__BLANK__')) {
+                      allOptions.push('__BLANK__');
+                    }
+                  }
+                }
+                
+                setStaged(allOptions);
+              }}
+              className="mb-2 w-full text-left text-xs text-green-600 hover:underline"
+            >
+              Select All
             </button>
 
             {/* Search box */}
@@ -1519,6 +1486,51 @@ export default function JobTable({
           </div>
         );
       })()}
+      
+      {/* Portal-rendered help tooltip */}
+      {showHelpTooltip && createPortal(
+        <div 
+          className={`fixed ${COMPONENT_Z_INDEX.JOB_TABLE.HELP_TOOLTIP} p-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg pointer-events-none`}
+          style={{
+            top: `${helpTooltipPosition.top}px`,
+            left: `${helpTooltipPosition.left}px`,
+            transform: 'translateX(-50%)',
+            width: '300px',
+            maxWidth: '300px',
+            whiteSpace: 'normal',
+            wordWrap: 'break-word',
+            lineHeight: '1.4'
+          }}
+        >
+          <div className="font-semibold underline mb-2">JobBoard Interactions:</div>
+          <div className="space-y-1">
+            <div>• Resize columns by dragging headers</div>
+            <div>• Use filters to narrow results</div>
+            <div>• Sort by clicking column headers</div>
+            <div>• Click cell to edit</div>
+            <div className="font-semibold underline mb-2">Cell Selection Mode:</div>
+            <div>• Click and drag to select cells</div>
+            <div>• CTRL+C to copy selection</div>
+            <div className="font-semibold underline mb-2">Universal:</div>
+            <div>• CTRL+S to save all changes</div>
+            <div>• Click Project# to highlight row (5s)</div>
+
+
+          </div>
+          {/* Tooltip arrow */}
+          <div 
+            className="absolute bottom-full left-1/2 transform -translate-x-1/2"
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: '6px solid transparent',
+              borderRight: '6px solid transparent',
+              borderBottom: '6px solid rgb(17 24 39)' // gray-900
+            }}
+          />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

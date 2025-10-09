@@ -9,6 +9,7 @@ import Swal from '@/shared/swalConfig';
 //import Swal from "sweetalert2";
 import axios from "axios";
 import AddressInput from "../components/AddressInput";
+import { normalizeProjectNameWithProperCase } from '../utils/projectNameNormalizer';
 
 
 const AddNewProjects = () => {
@@ -121,7 +122,7 @@ useEffect(() => {
     setLoading(true);
 
     const form = e.target;
-    const name = form.name.value.trim() || "Untitled Project";
+    const name = normalizeProjectNameWithProperCase(form.name.value.trim() || "Untitled Project");
     const due_date_raw = form.due_date?.value || "";
     const due_date     = due_date_raw
       ? new Date(due_date_raw).toISOString().slice(0, 10)

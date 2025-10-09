@@ -6,6 +6,7 @@ import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import { basePlanTypes } from "@/shared/planTypes";
 import Avatar from "@/shared/Avatar";
 import EstimateCompleteTemplate from "../../templates/jobboard/EstimateComplete.js";
+import { showLoadingSpinner } from "@/shared/components/LoadingSpinner";
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -15,6 +16,7 @@ const { TextArea } = Input;
  * @param {boolean} isVisible - Modal visibility state
  * @param {function} onClose - Function to close modal
  * @param {object} project - Project data
+ * @param {function} updateRow - Function to update table row instantly
  * @param {boolean} previewMode - If true, renders without Modal wrapper for preview
  * @param {function} onFormChange - Callback for form changes in preview mode
  * @param {array} mockClients - Mock client data for preview mode
@@ -24,6 +26,7 @@ const EstimateCompleteModal = ({
   isVisible, 
   onClose, 
   project, 
+  updateRow,
   previewMode = false, 
   onFormChange,
   mockClients = [],
@@ -42,8 +45,10 @@ const EstimateCompleteModal = ({
   useEffect(() => {
     if (isVisible) {
       console.log('[EstimateCompleteModal] is open');
+      console.log('[DEBUG] Project ID being used:', project?._id);
+      console.log('[DEBUG] Full project object:', project);
     }
-  }, [isVisible]);
+  }, [isVisible, project]);
 
   // Load linked clients when modal opens
   useEffect(() => {
@@ -53,11 +58,13 @@ const EstimateCompleteModal = ({
       console.log('[DEBUG] project.qty:', project.qty);
       console.log('[DEBUG] project.PlanType:', project.PlanType);
       console.log('[DEBUG] All project keys:', Object.keys(project));
+      console.log('[DEBUG] previewMode:', previewMode);
       
       loadLinkedClients();
       
-      // Only set initial form values once to prevent resetting user input
-      if (!initialValuesSet.current) {
+      // In preview mode, always update form values when project changes
+      // In live mode, only set initial form values once to prevent resetting user input
+      if (previewMode || !initialValuesSet.current) {
         // Get the plan type UOM and transform it for UI display
         const planType = basePlanTypes.find(type => type.label === project.PlanType);
         const planTypeUOM = planType ? planType.uom : '';
@@ -67,8 +74,9 @@ const EstimateCompleteModal = ({
         
         let estimateDescription;
         if (isManualPrice) {
-          // For manual price, use a more flexible format
-          estimateDescription = "roof estimate with material quantities and measurements";
+          // For manual price, show "1x $[amount] Manual Price" format
+          const amount = project.Qty || 0; // Use Qty as the dollar amount for Manual Price
+          estimateDescription = `1x $${amount} Manual Price`;
         } else if (project.Qty) { // Check chargeable qty instead of estimator qty
           // Transform UOM for UI display
           const getDisplayUOM = (uom, quantity) => {
@@ -92,12 +100,16 @@ const EstimateCompleteModal = ({
           planType: project.PlanType || 'Standard'
         };
         
-        console.log('[DEBUG] Setting initial form values:', formData);
+        console.log('[DEBUG] Setting form values (previewMode=' + previewMode + '):', formData);
         form.setFieldsValue(formData);
-        initialValuesSet.current = true;
+        
+        // Only set the flag in live mode to prevent resetting user input
+        if (!previewMode) {
+          initialValuesSet.current = true;
+        }
       }
     }
-  }, [isVisible, project, form]);
+  }, [isVisible, project, form, previewMode]);
 
   const loadLinkedClients = async () => {
     try {
@@ -115,6 +127,27 @@ const EstimateCompleteModal = ({
         const clientResponses = await Promise.all(clientPromises);
         const clientData = clientResponses.map(response => response.data.client);
         setClients(clientData);
+      } else {
+        // Fallback: Load all clients when no linkedClients exist
+        console.log('[DEBUG] No linked clients found, loading all clients as fallback');
+        const response = await axiosSecure.get('/clients');
+        
+        // Handle different response formats
+        let clientsData = [];
+        if (Array.isArray(response.data)) {
+          // Direct array response
+          clientsData = response.data;
+        } else if (response.data && response.data.clients && Array.isArray(response.data.clients)) {
+          // Nested object response
+          clientsData = response.data.clients;
+        }
+        
+        if (clientsData.length > 0) {
+          setClients(clientsData);
+          console.log(`[DEBUG] Loaded ${clientsData.length} clients as fallback`);
+        } else {
+          console.log('[DEBUG] No clients found in response');
+        }
       }
     } catch (error) {
       console.error("Error loading clients:", error);
@@ -280,6 +313,14 @@ const EstimateCompleteModal = ({
   };
 
   const handleSendEmail = async (values) => {
+    // Create loading spinner for email sending
+    const emailSpinner = showLoadingSpinner('Sending estimate email...', {
+      subtitle: `To: ${values.clientEmail}`,
+      progressText: 'Preparing email',
+      showProgress: true,
+      backgroundColor: 'rgba(0, 0, 0, 0.85)'
+    });
+
     try {
       setLoading(true);
 
@@ -287,25 +328,36 @@ const EstimateCompleteModal = ({
       const selectedPlanType = basePlanTypes.find(type => type.label === values.planType);
       let estimateDescription = 'estimate';
       
-      if (values.qty && selectedPlanType) {
+      if (selectedPlanType) {
         const { label, uom } = selectedPlanType;
         
-        if (uom === 'ea') {
-          // For "ea" UOM: "[QTY]x [label]"
-          estimateDescription = `${values.qty}x ${label}`;
-        } else if (uom === 'hr') {
-          // For "hr" UOM: "[QTY] hr [label]"
-          const hourText = values.qty === 1 ? 'hr' : 'hrs';
-          estimateDescription = `${values.qty} ${hourText} ${label}`;
-        } else {
-          // Fallback for other UOMs or empty UOM
-          estimateDescription = `${values.qty}x ${label}`;
+        // Check if this is Manual Price (no UOM or Manual Price label)
+        if (label === 'Manual Price' || !uom) {
+          // For Manual Price: "1x $[amount] Manual Price"
+          const amount = values.qty || project.Qty || 0;
+          estimateDescription = `1x $${amount} Manual Price`;
+        } else if (values.qty) {
+          if (uom === 'ea') {
+            // For "ea" UOM: "[QTY]x [label]"
+            estimateDescription = `${values.qty}x ${label}`;
+          } else if (uom === 'hr') {
+            // For "hr" UOM: "[QTY] hr [label]"
+            const hourText = values.qty === 1 ? 'hr' : 'hrs';
+            estimateDescription = `${values.qty} ${hourText} ${label}`;
+          } else {
+            // Fallback for other UOMs
+            estimateDescription = `${values.qty}x ${label}`;
+          }
         }
       }
 
+      // Update spinner progress
+      emailSpinner.setProgress(25);
+      emailSpinner.setTitle('Generating email template...');
+
       const emailData = {
-        clientEmail: values.clientEmail,
-        clientName: values.clientName,
+        contactEmail: values.clientEmail,  // Backend expects contactEmail
+        contactName: values.clientName,    // Backend expects contactName
         projectAddress: values.projectAddress,
         estimateDescription: estimateDescription,
         qty: values.qty,
@@ -329,6 +381,11 @@ const EstimateCompleteModal = ({
 
       const emailTemplate = EstimateCompleteTemplate(templateData);
       
+      // Update spinner progress
+      emailSpinner.setProgress(50);
+      emailSpinner.setTitle('Sending email...');
+      emailSpinner.setSubtitle('Delivering to client');
+
       // Send complete template to backend
       const emailPayload = {
         ...emailData,
@@ -343,14 +400,56 @@ const EstimateCompleteModal = ({
       const response = await axiosSecure.post(`/projects/send-estimate/${project._id}`, emailPayload);
 
       if (response.data.success) {
+        // Update spinner progress
+        emailSpinner.setProgress(80);
+        emailSpinner.setTitle('Email sent! Updating status...');
+        
+        // Update estimate status to 'Sent' after successful email send
+        try {
+          const statusUpdateResponse = await axiosSecure.patch(`/projects/update/${project._id}`, {
+            jobBoardStatus: 'Sent'
+          });
+          
+          if (statusUpdateResponse.data.success) {
+            console.log('[DEBUG] Estimate status updated to "Sent"');
+            
+            // The JobBoard table will refresh automatically via its auto-save system
+            // No need to manually update the UI state here
+          } else {
+            console.warn('[DEBUG] Failed to update estimate status:', statusUpdateResponse.data.message);
+          }
+        } catch (statusError) {
+          console.error('[DEBUG] Error updating estimate status:', statusError);
+          // Don't fail the whole operation if status update fails
+        }
+
+        // Complete the loading
+        emailSpinner.complete();
+        emailSpinner.setTitle('Estimate sent successfully!');
+        emailSpinner.setSubtitle(`Delivered to ${values.clientEmail}`);
+        
+        // Small delay before destroying
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        emailSpinner.destroy();
+
         message.success("Estimate complete email sent successfully!");
         form.resetFields();
         initialValuesSet.current = false; // Reset flag so values can be set again next time
         onClose();
       } else {
+        // Show error
+        emailSpinner.error('Failed to send email');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        emailSpinner.destroy();
+        
         message.error(response.data.message || "Failed to send email");
       }
     } catch (error) {
+      // Show error state
+      emailSpinner.error('Email sending failed');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      emailSpinner.destroy();
+      
       console.error("Error sending estimate email:", error);
       console.error("Error response data:", error.response?.data);
       
@@ -433,7 +532,7 @@ const EstimateCompleteModal = ({
       {/* Project Info Banner */}
       <div className="mb-5 p-3 bg-green-50 rounded-md border border-green-200">
         <p className="mb-0 text-green-900 text-sm">
-          <strong>Project:</strong> {project?.name || 'Project Name'} (#{project?.ProjectNumber || 'N/A'})
+          <strong>Project:</strong> {project?.name || 'Project Name'} (#{project?.projectNumber || 'N/A'})
         </p>
         <p className="mb-0 text-gray-600 text-xs mt-1">
           This will send a professional email with a secure link for the client to view estimate details.
@@ -548,16 +647,33 @@ const EstimateCompleteModal = ({
 
         {/* Client Email */}
         <Form.Item
-          label="Client Email"
+          label="Client Email(s)"
           name="clientEmail"
           rules={[
             { required: true, message: "Client email is required" },
-            { type: "email", message: "Please enter a valid email address" }
+            { 
+              validator: (_, value) => {
+                if (!value) return Promise.resolve();
+                
+                // Split by comma and validate each email
+                const emails = value.split(',').map(email => email.trim()).filter(email => email);
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                
+                for (const email of emails) {
+                  if (!emailRegex.test(email)) {
+                    return Promise.reject(new Error(`"${email}" is not a valid email address`));
+                  }
+                }
+                
+                return Promise.resolve();
+              }
+            }
           ]}
+          help="Use commas to separate multiple emails: email1@domain.com, email2@domain.com"
         >
           <Input
             prefix={<MailOutlined />}
-            placeholder="client@example.com"
+            placeholder="client@example.com, sales@company.com"
             size="large"
           />
         </Form.Item>
@@ -629,9 +745,40 @@ const EstimateCompleteModal = ({
         </Form.Item>
         </div>
 
-        {/* Memo Field for Optional Add-ins */}
+        {/* Estimate Notes Field - TODO: Key will be updated to 'estimateNotes' in future */}
         <Form.Item
-          label="Optional Add-ins / Memo"
+          label={
+            <div className="flex items-center gap-2">
+              <span>Estimate Notes: (optional)</span>
+              {/* Color selection dots - TODO: Wire up functionality in future */}
+              <div className="flex gap-1 ml-2">
+                <button
+                  type="button"
+                  className="w-4 h-4 rounded-full bg-black border-2 border-gray-300 hover:border-gray-500 transition-colors"
+                  title="Black text"
+                  onClick={(e) => e.preventDefault()}
+                />
+                <button
+                  type="button"
+                  className="w-4 h-4 rounded-full bg-red-500 border-2 border-gray-300 hover:border-gray-500 transition-colors"
+                  title="Red text"
+                  onClick={(e) => e.preventDefault()}
+                />
+                <button
+                  type="button"
+                  className="w-4 h-4 rounded-full bg-green-500 border-2 border-gray-300 hover:border-gray-500 transition-colors"
+                  title="Green text"
+                  onClick={(e) => e.preventDefault()}
+                />
+                <button
+                  type="button"
+                  className="w-4 h-4 rounded-full bg-blue-500 border-2 border-gray-300 hover:border-gray-500 transition-colors"
+                  title="Blue text"
+                  onClick={(e) => e.preventDefault()}
+                />
+              </div>
+            </div>
+          }
           name="memo"
           help="Add special notes, add-ins, or additional details (HTML compatible)"
         >
@@ -643,9 +790,9 @@ const EstimateCompleteModal = ({
           />
         </Form.Item>
 
-        {/* Optional Personal Message */}
+        {/* Reply to Original Email Field - TODO: Key will be updated to 'emailReply' in future */}
         <Form.Item
-          label="Optional Message"
+          label="Reply to original email: (Optional)"
           name="optionalBody"
           help="Add a personal message, special notes, or reply to client conversation (optional)"
         >

@@ -27,6 +27,7 @@ const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const clientRoutes = require('./routes/clientRoutes');
 const permissionRoutes = require('./routes/permissionRoutes');
+const linkingCodeRoutes = require('./routes/linkingCodeRoutes');
 const errorHandler = require("./routes/errorHandler");
 const fileRoutes = require("./features/fileManager/routes/fileRoutes");
 
@@ -161,6 +162,7 @@ app.use("/api/users", userRoutes);        // Now: /api/users, /api/users/get-use
 app.use("/api/projects", projectRoutes);  // Now: /api/projects
 app.use('/api/clients', clientRoutes);   // Now: /api/clients
 app.use('/api/permissions', permissionRoutes); // Now: /api/permissions
+app.use('/api/linking', linkingCodeRoutes); // Now: /api/linking/check-email, /api/linking/request-linking-code
 app.use("/api/files", fileRoutes);        // Now: /api/files
 
 

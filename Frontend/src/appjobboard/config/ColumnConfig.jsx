@@ -2,6 +2,23 @@ import React, { useState, useRef, useEffect } from 'react';
 import { IconExpandBox, IconCollapseBox, IconUp, IconDown } from '@/shared/IconSet';
 import Avatar from '@/shared/Avatar';
 
+// Helper function to get display names for avatar columns
+function getDisplayName(value, meta, columnId) {
+  if (!value || !meta) return value?.toString() || '';
+  
+  if (columnId === 'clients' && meta.clientsList) {
+    const client = meta.clientsList.find(c => c._id === value);
+    return client ? (client.company || client.name || '') : value.toString();
+  }
+  
+  if (columnId === 'estimators' && meta.estimatorsList) {
+    const estimator = meta.estimatorsList.find(e => e._id === value);
+    return estimator ? `${estimator.firstName || ''} ${estimator.lastName || ''}`.trim() || estimator.email || '' : value.toString();
+  }
+  
+  return value?.toString() || '';
+}
+
 
 export function FilterSortHeader({ column, label, isSticky, stickyPosition, stickyOffset, table, filterHandlers }) {
   // Keep track of staged filter selections
@@ -163,6 +180,36 @@ export function FilterSortHeader({ column, label, isSticky, stickyPosition, stic
             Clear All
           </button>
 
+          {/* Select All */}
+          <button
+            onClick={() => {
+              // Get all available options including __BLANK__ if it exists
+              let allOptions = Array.from(uniq.keys());
+              const isOptionalColumn = ['PlanType', 'clients', 'estimators', 'posting_date', 'due_date', 'DateCompleted', 'Comments', 'ARTInvNumber', 'InvoiceLine', 'FlashingSet'].includes(column.id);
+              
+              if (isOptionalColumn) {
+                // Check if __BLANK__ should be included
+                const emptyKeys = Array.from(uniq.keys()).filter(key => 
+                  key === null || key === undefined || key === '' || 
+                  (typeof key === 'string' && key.trim() === '') ||
+                  key === '__BLANK__'
+                );
+                
+                if (emptyKeys.length > 0 || column.id.includes('date')) {
+                  allOptions = allOptions.filter(key => !emptyKeys.includes(key) || key === '__BLANK__');
+                  if (!allOptions.includes('__BLANK__')) {
+                    allOptions.push('__BLANK__');
+                  }
+                }
+              }
+              
+              setStaged(allOptions);
+            }}
+            className="mb-2 w-full text-left text-xs text-green-600 hover:underline"
+          >
+            Select All
+          </button>
+
           {/* Search box */}
           <input
             type="text"
@@ -251,11 +298,24 @@ export function FilterSortHeader({ column, label, isSticky, stickyPosition, stic
         }
         return val != null && val.toString().toLowerCase().includes(filterSearch.toLowerCase());
       })
-      // Sort so that __BLANK__ always appears at the bottom
+      // Sort alphabetically, but keep __BLANK__ at the bottom
       .sort((a, b) => {
         if (a === '__BLANK__') return 1; // Move __BLANK__ to end
         if (b === '__BLANK__') return -1; // Keep __BLANK__ at end
-        return 0; // Keep original order for other items
+        
+        // Convert to strings for comparison
+        const aStr = a?.toString() || '';
+        const bStr = b?.toString() || '';
+        
+        // For avatar columns, get the display name for sorting
+        if (isAvatarColumn && column.meta) {
+          const aDisplay = getDisplayName(a, column.meta, column.id);
+          const bDisplay = getDisplayName(b, column.meta, column.id);
+          return aDisplay.localeCompare(bDisplay, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        
+        // Standard alphabetical sort for other columns
+        return aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' });
       })
       .map((value, index) => {
         const isSelected = staged.includes(value);

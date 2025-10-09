@@ -15,7 +15,7 @@ import { useFolderManager } from "@/FileManager/hooks/useFolderManager";
 import FolderPanelWrapper from "@/FileManager/shared/FolderPanelWrapper";
 import EstimateCompleteModal from "@/features/emails/modals/jobboard/EstimateCompleteModal";
 import ScopeRequestDropZone from "../components/ScopeRequestDropZone";
-import { normalizeProjectName as normalizeProjectNameUtil } from '../utils/projectNameNormalizer';
+import { normalizeProjectName as normalizeProjectNameUtil, normalizeProjectNameWithProperCase } from '../utils/projectNameNormalizer';
 
 // Constants
 const DEFAULT_USER_ROLE = "User";
@@ -165,13 +165,13 @@ const ProjectsView = () => {
   }, []);
 
   /**
-   * Normalizes project name using the comprehensive utility function
+   * Normalizes project name using the comprehensive utility function with proper case
    * @param {string} name - Project name to normalize
-   * @returns {string} - Normalized project name
+   * @returns {string} - Normalized project name with proper case
    */
   const normalizeProjectName = useCallback((name) => {
     if (typeof name !== "string") return "";
-    return normalizeProjectNameUtil(name);
+    return normalizeProjectNameWithProperCase(name);
   }, []);
 
   /**
@@ -535,6 +535,20 @@ const ProjectsView = () => {
   // Effect: Fetch project data on mount
   useEffect(() => {
     fetchProjectData();
+    
+    // Clear any preserved URL since user has successfully accessed a project page
+    // This prevents the preserved URL from being used on subsequent logins
+    // Note: Only clear if user is accessing normally (not through a preserved URL redirect)
+    const currentUrl = window.location.pathname + window.location.search;
+    const preservedUrl = localStorage.getItem('redirectAfterLogin');
+    
+    if (preservedUrl && preservedUrl === currentUrl) {
+      // User just got redirected here via preserved URL - clear it now
+      localStorage.removeItem('redirectAfterLogin');
+      console.log("Cleared preserved URL after successful redirect:", preservedUrl);
+    }
+    // If preservedUrl exists but doesn't match current URL, leave it alone 
+    // (user might have navigated elsewhere and still need the preserved URL)
   }, [fetchProjectData]);
 
   return (

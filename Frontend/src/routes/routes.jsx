@@ -1,38 +1,59 @@
 import { createBrowserRouter } from "react-router-dom";
+import { lazy, Suspense } from "react";
 // ─── Layouts & Route Guards ─────────────────────────────────────────────────
 import User from "../Layout/User";
 import AdminRoutes from "./AdminRoutes";
 import PrivateRoutes from "./PrivateRoutes";
-// ─── Authentication & Public Pages ────────────────────────────────────────────
+// ─── Authentication & Public Pages (Keep synchronous for fast initial load) ────────────────────────────────────────────
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 import ResetPassword from "../pages/ResetPassword";
 import NotFound from "../pages/404NotFound";
 import Forbidden from "../pages/403Forbidden";
-// ─── Onboarding & Utilities ────────────────────────────────────────────────────
+// ─── Onboarding & Utilities (Keep small utilities synchronous) ────────────────────────────────────────────────────
 import RootRedirect from "../pages/RootRedirect";
 import NavBarPreview from "../pages/NavBarPreview";
 import IconGallery from "../pages/IconGallery";
-// ─── User-Scoped Pages ─────────────────────────────────────────────────────────
-import Profile from "../pages/Profile";
-import CompanyChoice from "../pages/CompanyChoice";
-import CompanyProfile from "../pages/CompanyProfile";
-import Templates from "../pages/Templates";
-import JobBoard from "../pages/JobBoard";
-// ─── Admin-Scoped Pages ────────────────────────────────────────────────────────
-import AllClientsTable from "../pages/AllClientsTable";
-import AllProjects       from "../pages/AllProjects";
-import UnifiedProjectsView from "../pages/UnifiedProjectsView"; // New unified view
-import AddNewProjects    from "../pages/AddNewProjects";
-import AssignedProjects  from "../pages/AssignedProjects";
-import ProjectsView      from "../pages/ProjectsView";
-import ProjectNoAccess   from "../pages/ProjectNoAccess";
-import ReadOnlyProjectView from "../pages/ReadOnlyProjectView";
-import UserManagement    from "../pages/UserManagement";
-import LiveFolderSyncTest from "../pages/LiveFolderSyncTest";
-// ─── (Legacy / Unused) ─────────────────────────────────────────────────────────
-// import UserTable from "../pages/UserTable";
-// import UserTableDetails from "../components/UserTableDetails";
+
+// ─── Lazy Load Heavy Components ─────────────────────────────────────────────────
+const Profile = lazy(() => import("../pages/Profile"));
+const CompanyChoice = lazy(() => import("../pages/CompanyChoice"));
+const CompanyProfile = lazy(() => import("../pages/CompanyProfile"));
+const Templates = lazy(() => import("../pages/Templates"));
+const JobBoard = lazy(() => import("../pages/JobBoard"));
+const AllClientsTable = lazy(() => import("../pages/AllClientsTable"));
+const AllProjects = lazy(() => import("../pages/AllProjects"));
+const UnifiedProjectsView = lazy(() => import("../pages/UnifiedProjectsView"));
+const AddNewProjects = lazy(() => import("../pages/AddNewProjects"));
+const AssignedProjects = lazy(() => import("../pages/AssignedProjects"));
+const ProjectsView = lazy(() => import("../pages/ProjectsView"));
+const ProjectNoAccess = lazy(() => import("../pages/ProjectNoAccess"));
+const ReadOnlyProjectView = lazy(() => import("../pages/ReadOnlyProjectView"));
+const UserManagement = lazy(() => import("../pages/UserManagement"));
+const LiveFolderSyncTest = lazy(() => import("../pages/LiveFolderSyncTest"));
+const Invoices = lazy(() => import("../pages/InvoiceFeed"));
+const Invoicing = lazy(() => import("../pages/Invoicing"));
+
+// ─── Legal & Policy Pages ──────────────────────────────────────────────────────
+const TermsOfServicePage = lazy(() => import("../pages/TermsOfServicePage"));
+const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
+
+// ─── QuickBooks Integration ────────────────────────────────────────────────────
+const QuickBooksCallback = lazy(() => import("../Integrations/quickbooks/components").then(module => ({ default: module.QuickBooksCallback })));
+
+// ─── Loading Component ─────────────────────────────────────────────────────────
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+  </div>
+);
+
+// ─── Suspense Wrapper ─────────────────────────────────────────────────────────
+const withSuspense = (Component) => (props) => (
+  <Suspense fallback={<LoadingSpinner />}>
+    <Component {...props} />
+  </Suspense>
+);
 
 export const router = createBrowserRouter([
   {
@@ -76,7 +97,7 @@ export const router = createBrowserRouter([
         path: "/profile",
         element: (
           <PrivateRoutes>
-            <Profile />
+            {withSuspense(Profile)()}
           </PrivateRoutes>
         ),
         handle: { title: "Profile" },
@@ -85,7 +106,7 @@ export const router = createBrowserRouter([
         path: "/company-choice",
         element: (
           <PrivateRoutes>
-            <CompanyChoice />
+            {withSuspense(CompanyChoice)()}
           </PrivateRoutes>
         ),
         handle: { title: "Choose Company" },
@@ -94,7 +115,7 @@ export const router = createBrowserRouter([
         path: "/company-profile",
         element: (
           <PrivateRoutes>
-            <CompanyProfile />
+            {withSuspense(CompanyProfile)()}
           </PrivateRoutes>
         ),
         handle: { title: "Company Profile" },
@@ -103,7 +124,7 @@ export const router = createBrowserRouter([
         path: "/templates",
         element: (
           <AdminRoutes>
-            <Templates />
+            {withSuspense(Templates)()}
           </AdminRoutes>
         ),
         handle: { title: "Email Templates" },
@@ -112,10 +133,30 @@ export const router = createBrowserRouter([
         path: "/job-board",
         element: (
           <PrivateRoutes>
-            <JobBoard />
+            {withSuspense(JobBoard)()}
           </PrivateRoutes>
         ),
         handle: { title: "Job Board" },
+      },
+
+      // ─── Invoicing & Financial Management ──────────────────────────────────────
+      {
+        path: "/invoices",
+        element: (
+          <PrivateRoutes>
+            {withSuspense(Invoices)()}
+          </PrivateRoutes>
+        ),
+        handle: { title: "Invoices" },
+      },
+      {
+        path: "/invoicing",
+        element: (
+          <PrivateRoutes>
+            {withSuspense(Invoicing)()}
+          </PrivateRoutes>
+        ),
+        handle: { title: "Create Invoice" },
       },
 
       // ─── Admin-Scoped Pages ────────────────────────────────────────────────────
@@ -123,7 +164,7 @@ export const router = createBrowserRouter([
         path: "/clients",
         element: (
           <AdminRoutes>
-            <AllClientsTable />
+            {withSuspense(AllClientsTable)()}
           </AdminRoutes>
         ),
         handle: { title: "All Clients" },
@@ -132,7 +173,7 @@ export const router = createBrowserRouter([
         path: "/user-management",
         element: (
           <AdminRoutes>
-            <UserManagement />
+            {withSuspense(UserManagement)()}
           </AdminRoutes>
         ),
         handle: { title: "User Management" },
@@ -141,7 +182,7 @@ export const router = createBrowserRouter([
         path: "/projects",
         element: (
           <PrivateRoutes>
-            <UnifiedProjectsView />
+            {withSuspense(UnifiedProjectsView)()}
           </PrivateRoutes>
         ),
         handle: { title: "Projects" },
@@ -150,7 +191,7 @@ export const router = createBrowserRouter([
         path: "/addNewProject",
         element: (
           <PrivateRoutes>
-            <AddNewProjects />
+            {withSuspense(AddNewProjects)()}
           </PrivateRoutes>
         ),
         handle: { title: "Add New Project" },
@@ -159,7 +200,7 @@ export const router = createBrowserRouter([
         path: "/assignedProjects/:id",
         element: (
           <AdminRoutes>
-            <AssignedProjects />
+            {withSuspense(AssignedProjects)()}
           </AdminRoutes>
         ),
         handle: { title: "Assigned Projects" },
@@ -168,14 +209,14 @@ export const router = createBrowserRouter([
         path: "/project/:alias",
         element: (
           <PrivateRoutes>
-            <ProjectsView />
+            {withSuspense(ProjectsView)()}
           </PrivateRoutes>
         ),
         handle: { title: "Project Details" },
       },
       {
         path: "/project/noaccess",
-        element: <ProjectNoAccess />,
+        element: <Suspense fallback={<LoadingSpinner />}><ProjectNoAccess /></Suspense>,
         handle: { title: "Project Access Required" },
       },
 
@@ -195,18 +236,37 @@ export const router = createBrowserRouter([
   // ─── Public Routes (Outside User Layout) ──────────────────────────────────────
   {
     path: "/socket-test",
-    element: <LiveFolderSyncTest />,
+    element: <Suspense fallback={<LoadingSpinner />}><LiveFolderSyncTest /></Suspense>,
     handle: { title: "Live Folder Sync Test" },
   },
   {
     path: "/project/view/:token",
-    element: <ReadOnlyProjectView />,
+    element: <Suspense fallback={<LoadingSpinner />}><ReadOnlyProjectView /></Suspense>,
     handle: { title: "Project View" },
   },
   {
     path: "/navbar-preview",  
     element: <NavBarPreview />,
     handle: { title: "NavBar Preview" },
+  },
+
+  // ─── Legal & Policy Pages (Public for QuickBooks) ────────────────────────────
+  {
+    path: "/terms-of-service",
+    element: <Suspense fallback={<LoadingSpinner />}><TermsOfServicePage /></Suspense>,
+    handle: { title: "Terms of Service" },
+  },
+  {
+    path: "/privacy-policy",
+    element: <Suspense fallback={<LoadingSpinner />}><PrivacyPolicyPage /></Suspense>,
+    handle: { title: "Privacy Policy" },
+  },
+
+  // ─── QuickBooks Integration ────────────────────────────────────────────────────
+  {
+    path: "/quickbooks/callback",
+    element: <Suspense fallback={<LoadingSpinner />}><QuickBooksCallback /></Suspense>,
+    handle: { title: "QuickBooks Connection" },
   },
 
   // ─── Authentication & Public Pages ────────────────────────────────────────────
@@ -232,4 +292,8 @@ export const router = createBrowserRouter([
     element: <NotFound />,
     handle: { title: "404 Not Found" },
   },
-]);
+], {
+  future: {
+    v7_startTransition: true,
+  },
+});

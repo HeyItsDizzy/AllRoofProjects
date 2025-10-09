@@ -1,0 +1,80 @@
+{
+    "folders": [
+        {
+            "name": "📱 Project Manager",
+            "path": "."
+        },
+        {
+            "name": "🤖 Rusty_AI Mailer (VPS)",
+            "uri": "ssh://my-vps/root/rusty_ai"
+        },
+        {
+            "name": "📂 .FM (Live VPS Files)",
+            "path": "Y:/.FM"
+        },
+        {
+            "path": "../recovered-files"
+        },
+        {
+            "name": "(Mounted LiveBackend)",
+            "path": "Y:/"
+        }
+    ],
+    "settings": {
+        "files.exclude": {
+            "Backend/**": true,
+            "**/node_modules": true,
+            "**/.git": true,
+            "**/.DS_Store": true,
+            "**/Thumbs.db": true,
+            "**/.archive*/**": true,
+            "**/temp/**": true,
+            "**/tmp/**": true,
+            "**/build/**": true,
+            "**/dist/**": true,
+            "**/coverage/**": true,
+            "**/.nyc_output/**": true
+        },
+        "search.exclude": {
+            "**/node_modules": true,
+            "Backend/**": true,
+            "**/.git": true,
+            "**/logs/**": true,
+            "**/.archive*/**": true,
+            "**/temp/**": true,
+            "**/tmp/**": true,
+            "**/build/**": true,
+            "**/dist/**": true,
+            "**/coverage/**": true,
+            "**/AU/2025/01. Jan/**": true,
+            "**/AU/2025/02. Feb/**": true,
+            "**/AU/2025/04. Apr/**": true,
+            "**/AU/2025/10. Oct/**": true,
+            "**/AU/2025/11. Nov/**": true,
+            "**/AU/2025/12. Dec/**": true
+        },
+        "files.watcherExclude": {
+            "**/node_modules/**": true,
+            "Backend/**": true,
+            "**/.git/**": true,
+            "**/logs/**": true,
+            "**/.archive*/**": true,
+            "**/temp/**": true,
+            "**/tmp/**": true,
+            "**/build/**": true,
+            "**/dist/**": true
+        },
+        "explorer.compactFolders": false,
+        "explorer.sortOrder": "type",
+        "CodeGPT.apiKey": "CodeGPT Plus Beta",
+        "sshfs.configs": [
+            {
+                "name": "my-vps",
+                "host": "145.223.23.243",
+                "username": "root",
+                "password": "Roofquotes4all#",
+                "root": "/root/rusty_ai/imap"
+            }
+        ]
+    }
+}

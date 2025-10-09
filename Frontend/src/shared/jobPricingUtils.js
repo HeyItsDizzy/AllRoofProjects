@@ -1,6 +1,27 @@
 import { planTypes } from '@/shared/planPricing'; // enriched with tiers, FX, COL, etc.
 
 /**
+ * Calculates the safe EstQty value to prevent accidental high estimator pay.
+ * For Manual Price: returns the lower of Qty or calculated PriceEach to avoid errors
+ * For other plan types: returns the Qty value as normal
+ */
+export function calculateSafeEstQty(row, qty) {
+  const { PlanType = '' } = row;
+  
+  // For Manual Price: Use the lower value to prevent high EstQty values
+  if (PlanType === "Manual Price") {
+    // Calculate the actual price using the same logic as the PriceEach column
+    const calculatedPrice = calculateAUD(row, planTypes);
+    const priceEach = parseFloat(calculatedPrice) || 0;
+    return Math.min(qty, priceEach);
+  }
+  
+  // For all other plan types: use Qty as normal
+  return qty;
+}
+
+
+/**
  * Calculates Est Cost (AUD) based on PlanType and EstInv flag.
  * Pulls from planPricing enriched tier structure.
  * Currently using Gold tier for all clients.

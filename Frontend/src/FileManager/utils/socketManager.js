@@ -23,9 +23,11 @@ class SocketManager {
       
       // Use local development proxy for socket connections to avoid CORS/mixed content issues
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      // In production, try to connect through the same domain to avoid CORS/firewall issues
       const socketUrl = isLocalhost 
         ? window.location.origin  // Use current origin for Vite proxy (http://localhost:5173)
-        : 'wss://projects.allrooftakeoffs.com.au:5001';  // Direct production connection
+        : window.location.origin;  // Use same origin in production (requires nginx proxy)
       
       console.log(`🔌 SocketManager: Connecting to ${socketUrl} (Localhost: ${isLocalhost})`);
       
@@ -34,7 +36,10 @@ class SocketManager {
         timeout: 20000,
         forceNew: false,
         path: '/socket.io/',
-        ...(isLocalhost ? {} : { secure: true }) // Only set secure for production
+        ...(isLocalhost ? {} : { 
+          secure: true,
+          rejectUnauthorized: false  // Allow self-signed certificates if needed
+        })
       });
 
       socket.on('connect', () => {

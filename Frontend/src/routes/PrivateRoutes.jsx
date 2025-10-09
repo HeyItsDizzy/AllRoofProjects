@@ -18,14 +18,23 @@ const PrivateRoutes = ({ children }) => {
     );
   }
 
-  // 2) Once auth is ready, if there's no user, check for project URL access
+  // 2) Once auth is ready, if there's no user, redirect to login with intended URL
   if (!user) {
-    // If trying to access a project URL, redirect to friendly no-access page
-    if (location.pathname.startsWith('/project/') && location.pathname !== '/project/noaccess') {
-      return <Navigate to="/project/noaccess" replace />;
+    // Store the intended URL in localStorage for retrieval after login
+    // Only store URLs that require authentication (not login/register pages)
+    if (location.pathname !== '/login' && location.pathname !== '/register') {
+      // Only store direct project links and other protected content
+      // Don't store general navigation like /projects, /profile etc. to avoid UX confusion
+      if (location.pathname.startsWith('/project/') || 
+          location.pathname.startsWith('/addNewProject') ||
+          location.pathname.startsWith('/clients') ||
+          location.pathname.startsWith('/user-management')) {
+        localStorage.setItem('redirectAfterLogin', location.pathname + location.search);
+        console.log("Stored redirect URL for authentication:", location.pathname + location.search);
+      }
     }
     
-    // Otherwise, redirect to login
+    // Always redirect to login for authentication
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

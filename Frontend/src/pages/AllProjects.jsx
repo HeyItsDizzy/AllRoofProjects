@@ -8,8 +8,50 @@ import { IconSearch } from "@/shared/IconSet.jsx";
 import AssignClient from "../components/AssignClient";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
+import { subscribeToProjectDataUpdates } from "@/utils/ProjectDataSync";
+import { useRenderTimer, useRenderWarning } from "@/hooks/usePerformance";
+
+// CSS-in-JS for layout shift prevention
+const layoutShiftStyles = `
+  .contain-layout {
+    contain: layout style;
+  }
+  
+  .contain-style {
+    contain: style;
+  }
+  
+  .contain-intrinsic-size {
+    contain-intrinsic-size: auto 36px;
+  }
+  
+  /* Prevent layout shifts in search and filter containers */
+  .stable-search-container {
+    min-height: 48px;
+    contain: layout style;
+  }
+  
+  .stable-filter-container {
+    min-height: 34px;
+    contain: style;
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = layoutShiftStyles;
+  if (!document.head.querySelector('style[data-layout-shift-prevention]')) {
+    styleElement.setAttribute('data-layout-shift-prevention', 'true');
+    document.head.appendChild(styleElement);
+  }
+}
 
 const AllProjects = () => {
+  // Add performance monitoring
+  useRenderTimer('AllProjects', 10); // Warn if render >10ms
+  useRenderWarning('AllProjects', 5); // Warn if >5 renders/second
+  
   const [projects, setProjects] = useState([]); // Holds all projects
   const [users, setUsers] = useState([]); // Holds users for assignment (future feature)
   const [clients, setClients] = useState([]); // Holds clients for assignment
@@ -91,6 +133,23 @@ const AllProjects = () => {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  // 🔄 Listen for project data updates from other components (e.g., JobBoard)
+  useEffect(() => {
+    const unsubscribe = subscribeToProjectDataUpdates((updateEvent) => {
+      console.log('🔄 AllProjects received data update notification:', updateEvent);
+      
+      // Only refresh if the update is from a different component
+      if (updateEvent.source !== 'AllProjects') {
+        console.log('📋 Refreshing AllProjects data due to external update from:', updateEvent.source);
+        fetchProjects();
+      } else {
+        console.log('⏭️ Skipping refresh - update originated from AllProjects');
+      }
+    });
+
+    return unsubscribe; // Cleanup listener on unmount
+  }, [fetchProjects]);
 
   // Fetch user details based on linked users with optimized error handling
   const fetchUserDetails = useCallback(async () => {
@@ -292,7 +351,8 @@ const AllProjects = () => {
 
   const handleStatusChange = useCallback(async (projectId, newStatus) => {
     try {
-      const response = await axiosSecure.patch(`/projects/update-status/${projectId}`, { 
+      console.log('AllProjects: Updating project status:', { projectId, newStatus });
+      const response = await axiosSecure.patch(`/projects/update/${projectId}`, { 
         status: newStatus 
       });
 
@@ -385,11 +445,11 @@ const AllProjects = () => {
 
   // AllProjects.jsx Return
   return (
-    <div className="min-h-screen">
-      {/* Search & Filter Section */}
-      <div className="w-full mx-auto my-6 flex flex-col md:flex-row md:justify-between items-center gap-4">
-        <div className="relative flex-1 max-w-[450px] w-full">
-          <IconSearch className="absolute top-[11px] left-2" />
+    <div className="min-h-screen contain-layout">
+      {/* Search & Filter Section - Fixed dimensions to prevent layout shifts */}
+      <div className="w-full mx-auto my-6 flex flex-col md:flex-row md:justify-between items-center gap-4 contain-style min-h-[48px]">
+        <div className="relative flex-1 max-w-[450px] w-full min-h-[36px] contain-intrinsic-size">
+          <IconSearch className="absolute top-[11px] left-2 z-10" />
           <input
             type="text"
             placeholder="Search by name, address, client, project ID, dates, status, or user..."
@@ -398,12 +458,12 @@ const AllProjects = () => {
             onChange={handleSearchChange}
           />
         </div>
-        {/* Filter Buttons */}
-        <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white">
+        {/* Filter Buttons - Fixed dimensions */}
+        <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white min-h-[34px] contain-style">
           {["All Projects", "Open Projects", "Create New"].map((label) => (
             <button
               key={label}
-              className={`px-4 py-1 rounded-full transition-colors duration-300 ${
+              className={`px-4 py-1 rounded-full transition-colors duration-300 min-w-[80px] ${
                 activeButton === label ? "bg-secondary text-white" : "bg-transparent text-textGray"
               }`}
               onClick={() => handleProjectTabClick(label)}
@@ -414,22 +474,24 @@ const AllProjects = () => {
         </div>
       </div>
 
-      {/* Project Table */}
-      <ProjectTable
-        projects={filteredProjects || []}
-        setProjects={setProjects}
-        userData={userData}
-        clients={clients}
-        openAssignUser={openAssignUserModal}
-        openAssignClient={openAssignClientModal}
-        handleSort={handleSort}
-        sortColumn={sortColumn}
-        sortOrder={sortOrder}
-        handleFilterChange={handleFilterChange}
-        filters={filters}
-        handleStatusChange={handleStatusChange}
-        loading={loading}
-      />
+      {/* Project Table - Stable container */}
+      <div className="contain-layout">
+        <ProjectTable
+          projects={filteredProjects || []}
+          setProjects={setProjects}
+          userData={userData}
+          clients={clients}
+          openAssignUser={openAssignUserModal}
+          openAssignClient={openAssignClientModal}
+          handleSort={handleSort}
+          sortColumn={sortColumn}
+          sortOrder={sortOrder}
+          handleFilterChange={handleFilterChange}
+          filters={filters}
+          handleStatusChange={handleStatusChange}
+          loading={loading}
+        />
+      </div>
 
       {/* Assign Client Modal */}
       {isClientModalVisible && selectedClientProject && (

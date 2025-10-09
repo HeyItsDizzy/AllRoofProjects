@@ -1,9 +1,9 @@
 // src/pages/AllClientsTable.jsx
 import React, { useEffect, useState } from "react";
 import { IconSearch, IconSync, IconEdit, IconSave } from "@/shared/IconSet.jsx";
-import { MdClose as IconClose } from "react-icons/md";
+import { MdClose as IconClose, MdDelete as IconDelete } from "react-icons/md";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
-import { Button, message, Input } from "antd";
+import { Button, message, Input, Modal } from "antd";
 import AssignUser from "../components/AssignUser";
 import AddressInput from "../components/AddressInput";
 import { Link } from "react-router-dom";
@@ -21,6 +21,8 @@ export default function AllClientsTable() {
   const [clients, setClients]               = useState([]);
   const [users, setUsers]                   = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [loading, setLoading]               = useState(false);
+  const [clientCounts, setClientCounts]     = useState({ all: 0, recent: 0 });
 
   // store codes by clientId
   const [userCodes, setUserCodes]   = useState({});
@@ -30,11 +32,28 @@ export default function AllClientsTable() {
   const [editingClient, setEditingClient] = useState(null);
   const [editValues, setEditValues] = useState({});
 
+  // Add new client modal state
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [newClientData, setNewClientData] = useState({
+    name: "",
+    mainContact: {
+      name: "",
+      phone: "",
+      email: "",
+    },
+    billingAddress: null
+  });
+  const [creatingClient, setCreatingClient] = useState(false);
+
   const axiosSecure = useAxiosSecure();
 
   // Fetch clients (debounced)
   useEffect(() => {
     const fetchClients = async () => {
+      if (!search && activeButton === "All Clients") {
+        setLoading(true);
+      }
+      
       try {
         const res = await axiosSecure.get("/clients", {
           params: { search, recent: activeButton === "New Clients" },
@@ -77,6 +96,8 @@ export default function AllClientsTable() {
        // ────────────────────────────────────────────────────────────────
       } catch {
         setClients([]);
+      } finally {
+        setLoading(false);
       }
     };
     const t = setTimeout(fetchClients, 500);
@@ -141,7 +162,8 @@ export default function AllClientsTable() {
         : (client.address && Object.keys(client.address).length > 0) 
           ? client.address 
           : null,
-      // Use mainContact for phone and email, fallback to direct fields
+      // Use mainContact for name, phone and email, fallback to direct fields
+      name: client.mainContact?.name || "",
       phone: client.mainContact?.phone || client.phone || "",
       email: client.mainContact?.email || client.email || "",
     });
@@ -157,12 +179,12 @@ export default function AllClientsTable() {
   const saveClientChanges = async (clientId) => {
     try {
       const updateData = {
-        // Update mainContact for phone and email
+        // Update mainContact for name, phone and email
         mainContact: {
+          name: editValues.name,
           phone: editValues.phone,
           email: editValues.email,
           // Preserve existing mainContact fields
-          name: clients.find(c => c._id === clientId)?.mainContact?.name || "",
           accountsEmail: editValues.email, // Usually same as email
         }
       };
@@ -194,6 +216,7 @@ export default function AllClientsTable() {
                 ...(updateData.billingAddress && { billingAddress: updateData.billingAddress }),
                 mainContact: {
                   ...client.mainContact,
+                  name: editValues.name,
                   phone: editValues.phone,
                   email: editValues.email,
                   accountsEmail: editValues.email,
@@ -212,6 +235,152 @@ export default function AllClientsTable() {
     }
   };
 
+  // Delete client function with confirmation
+  const deleteClient = async (clientId, clientName) => {
+    Modal.confirm({
+      title: 'Delete Client - Permanent Action',
+      content: (
+        <div className="space-y-3">
+          <p>Are you sure you want to <strong>permanently delete</strong> "{clientName}"?</p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
+            <p className="font-medium text-yellow-800 mb-2">⚠️ This will also:</p>
+            <ul className="list-disc list-inside text-yellow-700 space-y-1">
+              <li>Remove this client from all associated projects</li>
+              <li>Unlink all users from this client</li>
+              <li>Clear company assignments for affected users</li>
+              <li>Delete all client data permanently</li>
+            </ul>
+          </div>
+          <p className="text-red-600 font-medium">This action cannot be undone!</p>
+        </div>
+      ),
+      okText: 'Yes, Delete Permanently',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      width: 500,
+      onOk: async () => {
+        try {
+          const response = await axiosSecure.delete(`/clients/${clientId}`);
+          
+          // Show detailed success message with cleanup summary
+          if (response.data.cleanupSummary) {
+            const summary = response.data.cleanupSummary;
+            message.success({
+              content: (
+                <div>
+                  <div className="font-medium">Client deleted successfully!</div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    Cleaned up {summary.totalOperations} database operations affecting {summary.projectsAffected} projects and {summary.usersAffected} users.
+                  </div>
+                </div>
+              ),
+              duration: 6
+            });
+          } else {
+            message.success("Client deleted successfully!");
+          }
+          
+          // Remove client from local state
+          setClients(prev => prev.filter(client => client._id !== clientId));
+          
+          // Clear editing state if this client was being edited
+          if (editingClient === clientId) {
+            setEditingClient(null);
+            setEditValues({});
+          }
+          
+          // Clear any cached codes for this client
+          setUserCodes(prev => {
+            const newCodes = { ...prev };
+            delete newCodes[clientId];
+            return newCodes;
+          });
+          setAdminCodes(prev => {
+            const newCodes = { ...prev };
+            delete newCodes[clientId];
+            return newCodes;
+          });
+          
+        } catch (err) {
+          console.error("Failed to delete client:", err);
+          const errorMessage = err.response?.data?.message || "Failed to delete client. Please try again.";
+          message.error({
+            content: errorMessage,
+            duration: 8
+          });
+        }
+      }
+    });
+  };
+
+  // Create new client function
+  const createNewClient = async () => {
+    // Validate required fields
+    if (!newClientData.name.trim()) {
+      message.error("Client name is required");
+      return;
+    }
+    
+    if (newClientData.mainContact.email && !/\S+@\S+\.\S+/.test(newClientData.mainContact.email)) {
+      message.error("Please enter a valid email address");
+      return;
+    }
+
+    setCreatingClient(true);
+    try {
+      
+      const clientData = {
+        name: newClientData.name,
+        username: newClientData.name, // Use name as username fallback
+        mainContact: {
+          name: newClientData.mainContact.name,
+          phone: newClientData.mainContact.phone,
+          email: newClientData.mainContact.email,
+          accountsEmail: newClientData.mainContact.email
+        }
+      };
+
+      // Only add billing address if it has data
+      if (newClientData.billingAddress && Object.keys(newClientData.billingAddress).length > 0) {
+        if (newClientData.billingAddress.region && newClientData.billingAddress.country) {
+          clientData.billingAddress = newClientData.billingAddress;
+        } else if (newClientData.billingAddress.full_address || newClientData.billingAddress.line1) {
+          // Set defaults for required fields if missing
+          clientData.billingAddress = {
+            ...newClientData.billingAddress,
+            region: newClientData.billingAddress.region || "Unknown",
+            country: newClientData.billingAddress.country || "Unknown"
+          };
+        }
+      }
+
+      const response = await axiosSecure.post("/clients", clientData);
+      
+      // Add the new client to the local state
+      setClients(prev => [response.data, ...prev]);
+      
+      // Reset modal state
+      setShowAddClientModal(false);
+      setNewClientData({
+        name: "",
+        mainContact: {
+          name: "",
+          phone: "",
+          email: "",
+        },
+        billingAddress: null
+      });
+      
+      message.success("Client created successfully!");
+    } catch (err) {
+      console.error("Failed to create client:", err);
+      const errorMessage = err.response?.data?.message || "Failed to create client. Please try again.";
+      message.error(errorMessage);
+    } finally {
+      setCreatingClient(false);
+    }
+  };
+
   return (
     <div className="min-h-screen">
       {/* Search & Tabs */}
@@ -220,43 +389,83 @@ export default function AllClientsTable() {
           <IconSearch className="absolute top-[11px] left-2" />
           <input
             type="text"
-            className="pl-10 h-9 rounded-md placeholder:text-medium"
+            className="pl-10 h-9 rounded-md placeholder:text-medium border border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary"
             placeholder="Search clients by name, address, phone, or email"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {clients.length > 0 && !loading && (
+            <div className="text-xs text-gray-500 mt-1">
+              {search ? `${clients.length} result${clients.length !== 1 ? 's' : ''}` : `${clients.length} client${clients.length !== 1 ? 's' : ''} total`}
+            </div>
+          )}
         </div>
-        <div className="flex gap-4 py-1 px-1 text-medium text-textGray rounded-full bg-white w-fit">
-          {["All Clients", "New Clients"].map(label => (
-            <button
-              key={label}
-              className={`px-4 py-1 rounded-full transition-colors duration-300 ${
-                activeButton === label
-                  ? "bg-secondary text-white"
-                  : "bg-transparent text-textGray"
-              }`}
-              onClick={() => setActiveButton(label)}
-            >
-              {label}
-            </button>
-          ))}
+        
+        <div className="flex items-center gap-4">
+          <div className="flex gap-2 py-1 px-2 text-sm font-medium text-textGray rounded-lg bg-gray-50 border w-fit">
+            {[
+              { key: "All Clients", label: "All Clients" },
+              { key: "New Clients", label: "Recent Clients" }
+            ].map(item => (
+              <button
+                key={item.key}
+                className={`px-4 py-2 rounded-md transition-all duration-300 whitespace-nowrap ${
+                  activeButton === item.key
+                    ? "bg-primary text-white shadow-sm font-semibold"
+                    : "bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                }`}
+                onClick={() => setActiveButton(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          
+          <Button
+            type="primary"
+            onClick={() => setShowAddClientModal(true)}
+            className="bg-primary hover:bg-primary-dark border-primary hover:border-primary-dark"
+          >
+            + Add New Client
+          </Button>
         </div>
       </div>
 
       {/* Clients Table */}
       <div className="overflow-x-auto bg-white p-4 rounded-md">
-        <table className="w-full min-w-[1200px] table-fixed">
-          <thead>
-            <tr className="text-left h-10 bg-primary-10 text-medium">
-              <td className="pl-2 w-[16%] overflow-hidden truncate">Client</td>
-              <td className="w-[23%]">Address</td>
-              <td className="w-[18%]">Contact</td>
-              <td className="text-center w-[8%]">Assigned Projects</td>
-              <td className="text-center w-[12%]">User Linking Code</td>
-              <td className="text-center w-[12%]">Admin Linking Code</td>
-              <td className="text-center w-[11%]">Actions</td>
-            </tr>
-          </thead>
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="flex items-center gap-2 text-gray-500">
+              <div className="w-5 h-5 border-2 border-gray-300 border-t-primary rounded-full animate-spin"></div>
+              Loading clients...
+            </div>
+          </div>
+        ) : clients.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <div className="text-4xl mb-4">📋</div>
+            <h3 className="text-lg font-medium mb-2">No clients found</h3>
+            <p className="text-sm">
+              {search ? 
+                `No clients match your search "${search}"` : 
+                activeButton === "New Clients" ? 
+                  "No recent clients to display" : 
+                  "Get started by adding your first client"
+              }
+            </p>
+          </div>
+        ) : (
+          <table className="w-full min-w-[1200px] table-fixed">
+            <thead>
+              <tr className="text-left h-10 bg-primary-10 text-medium">
+                <td className="pl-2 w-[16%] overflow-hidden truncate">Client</td>
+                <td className="w-[23%]">Address</td>
+                <td className="w-[18%]">Contact</td>
+                <td className="text-center w-[8%]">Assigned Projects</td>
+                <td className="text-center w-[12%]">User Linking Code</td>
+                <td className="text-center w-[12%]">Admin Linking Code</td>
+                <td className="text-center w-[11%]">Actions</td>
+              </tr>
+            </thead>
           <tbody>{clients.map(client => {
             const name = client.name || client.username || "";
             const initials = name
@@ -301,10 +510,16 @@ export default function AllClientsTable() {
                   )}
                 </td>
 
-                {/* Contact (Phone + Email) - Editable, stacked */}
+                {/* Contact (Name + Phone + Email) - Editable, stacked */}
                 <td className="py-2">
                   {isEditing ? (
                     <div className="w-full space-y-2">
+                      <Input
+                        value={editValues.name}
+                        onChange={(e) => setEditValues(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="Contact name"
+                        size="small"
+                      />
                       <Input
                         value={editValues.phone}
                         onChange={(e) => setEditValues(prev => ({ ...prev, phone: e.target.value }))}
@@ -321,6 +536,16 @@ export default function AllClientsTable() {
                     </div>
                   ) : (
                     <div className="w-full space-y-1">
+                      {(client.mainContact?.name || client.name) && (
+                        <div className="flex items-center gap-1 text-sm">
+                          <svg className="w-3 h-3 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span className="truncate text-gray-700 font-medium">
+                            {client.mainContact?.name || client.name || "—"}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1 text-sm">
                         <svg className="w-3 h-3 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -421,10 +646,19 @@ export default function AllClientsTable() {
                           type="link"
                           size="small"
                           onClick={cancelEditing}
-                          className="text-red-600 hover:text-red-800 p-1"
+                          className="text-gray-600 hover:text-gray-800 p-1"
                           title="Cancel editing"
                         >
                           <IconClose className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => deleteClient(client._id, client.name || client.username || "this client")}
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Delete client"
+                        >
+                          <IconDelete className="w-4 h-4" />
                         </Button>
                       </div>
                     ) : (
@@ -456,6 +690,7 @@ export default function AllClientsTable() {
             })}
           </tbody>
         </table>
+        )}
       </div>
 
       {/* AssignUser Modal */}
@@ -468,6 +703,105 @@ export default function AllClientsTable() {
           updateClientUsers={updateClientUsers}
         />
       )}
+
+      {/* Add New Client Modal */}
+      <Modal
+        title="Add New Client"
+        open={showAddClientModal}
+        onOk={createNewClient}
+        onCancel={() => {
+          if (!creatingClient) {
+            setShowAddClientModal(false);
+            setNewClientData({
+              name: "",
+              mainContact: {
+                name: "",
+                phone: "",
+                email: "",
+              },
+              billingAddress: null
+            });
+          }
+        }}
+        okText={creatingClient ? "Creating..." : "Create Client"}
+        cancelText="Cancel"
+        confirmLoading={creatingClient}
+        cancelButtonProps={{ disabled: creatingClient }}
+        width={600}
+        maskClosable={!creatingClient}
+      >
+        <div className="space-y-4 py-4">
+          {/* Client Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Client/Company Name *
+            </label>
+            <Input
+              value={newClientData.name}
+              onChange={(e) => setNewClientData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter client or company name"
+              size="large"
+              disabled={creatingClient}
+              maxLength={100}
+            />
+          </div>
+
+          {/* Main Contact Information */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Main Contact
+            </label>
+            <div className="space-y-3">
+              <Input
+                value={newClientData.mainContact.name}
+                onChange={(e) => setNewClientData(prev => ({ 
+                  ...prev, 
+                  mainContact: { ...prev.mainContact, name: e.target.value }
+                }))}
+                placeholder="Contact person name"
+                size="large"
+                disabled={creatingClient}
+              />
+              <Input
+                value={newClientData.mainContact.phone}
+                onChange={(e) => setNewClientData(prev => ({ 
+                  ...prev, 
+                  mainContact: { ...prev.mainContact, phone: e.target.value }
+                }))}
+                placeholder="Phone number"
+                size="large"
+                disabled={creatingClient}
+              />
+              <Input
+                value={newClientData.mainContact.email}
+                onChange={(e) => setNewClientData(prev => ({ 
+                  ...prev, 
+                  mainContact: { ...prev.mainContact, email: e.target.value }
+                }))}
+                placeholder="Email address"
+                type="email"
+                size="large"
+                disabled={creatingClient}
+              />
+            </div>
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Billing Address (Optional)
+            </label>
+            <AddressInput
+              location={newClientData.billingAddress}
+              setLocation={(newAddress) => setNewClientData(prev => ({ 
+                ...prev, 
+                billingAddress: newAddress
+              }))}
+              disabled={creatingClient}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
