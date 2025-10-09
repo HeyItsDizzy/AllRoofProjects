@@ -27,7 +27,8 @@ const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const clientRoutes = require('./routes/clientRoutes');
 const permissionRoutes = require('./routes/permissionRoutes');
-const linkingCodeRoutes = require('./routes/linkingCodeRoutes');
+const quickbooksRoutes = require('./routes/quickbooksRoutes');
+const linkingRoutes = require('./routes/linkingRoutes');
 const errorHandler = require("./routes/errorHandler");
 const fileRoutes = require("./features/fileManager/routes/fileRoutes");
 
@@ -157,13 +158,24 @@ app.get("/api/version", versionInfo);
 app.use("/api", checkVersion());
 
 // Register public routes
+console.log('🔧 Registering routes...');
 app.use("/api", generalRoutes);           // Now: /api/login, /api/register, etc.
+console.log('✅ generalRoutes registered');
 app.use("/api/users", userRoutes);        // Now: /api/users, /api/users/get-users, etc.
+console.log('✅ userRoutes registered');
 app.use("/api/projects", projectRoutes);  // Now: /api/projects
+console.log('✅ projectRoutes registered');
 app.use('/api/clients', clientRoutes);   // Now: /api/clients
+console.log('✅ clientRoutes registered');
 app.use('/api/permissions', permissionRoutes); // Now: /api/permissions
-app.use('/api/linking', linkingCodeRoutes); // Now: /api/linking/check-email, /api/linking/request-linking-code
+console.log('✅ permissionRoutes registered');
+app.use('/api/quickbooks', quickbooksRoutes); // Now: /api/quickbooks
+console.log('✅ quickbooksRoutes registered');
+app.use('/api/linking', linkingRoutes);   // Now: /api/linking
+console.log('✅ linkingRoutes registered');
 app.use("/api/files", fileRoutes);        // Now: /api/files
+console.log('✅ fileRoutes registered');
+console.log('🎉 All routes registered successfully!');
 
 
 

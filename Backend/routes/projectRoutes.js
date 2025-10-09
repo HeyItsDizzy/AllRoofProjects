@@ -10,7 +10,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { getProjectDiskPath } = require("../features/fileManager/services/pathUtils");
 const { logDeprecation, logBug, logWarning } = require("../utils/logger");
-const { normalizeProjectName, normalizeProjectNameWithProperCase } = require("../utils/projectNameNormalizer");
+const { normalizeProjectName } = require("../utils/projectNameNormalizer");
 
 // Load API keys for service authentication
 let apiKeys = {};
@@ -231,102 +231,6 @@ router.patch("/assignUser/:projectId", authenticateToken(), async (req, res) => 
   }
 });
 
-// ✅ Route to update project status
-router.patch("/update-status/:projectId", authenticateToken(), async (req, res) => {
-  try {
-    const projectId = req.params.projectId;
-    const { status } = req.body;
-
-    if (!status) {
-      return res.status(400).json({ success: false, message: "Status is required" });
-    }
-
-    const collection = await projectsCollection();
-    const result = await collection.updateOne(
-      { _id: new ObjectId(projectId) },
-      { $set: { status } }
-    );
-
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ success: false, message: "Project not found or status unchanged" });
-    }
-
-    res.json({ success: true, message: "Status updated successfully" });
-  } catch (error) {
-    console.error("Error updating project status:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
-// ✅ Route to update JobBoard-specific project fields
-router.patch("/update-jobboard/:projectId", authenticateToken(), async (req, res) => {
-  try {
-    const projectId = req.params.projectId;
-    const jobData = req.body;
-
-    if (!ObjectId.isValid(projectId)) {
-      return res.status(400).json({ success: false, message: "Invalid Project ID." });
-    }
-
-    const collection = await projectsCollection();
-
-    const result = await collection.updateOne(
-      { _id: new ObjectId(projectId) },
-      { $set: { jobBoardData: jobData } }
-    );
-
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ success: false, message: "Project not found or no changes made." });
-    }
-
-    res.json({ success: true, message: "Job Board data updated successfully." });
-  } catch (error) {
-    console.error("❌ Error updating Job Board data:", error);
-    res.status(500).json({ success: false, message: "Failed to update Job Board fields.", error: error.message });
-  }
-});
-
-// ✅ Route to update JobBoard status specifically (Feature #31 - Dual Status System)
-router.patch("/update-jobboard-status/:projectId", authenticateToken(), async (req, res) => {
-  try {
-    const projectId = req.params.projectId;
-    const { jobBoardStatus, status } = req.body;
-
-    if (!ObjectId.isValid(projectId)) {
-      return res.status(400).json({ success: false, message: "Invalid Project ID." });
-    }
-
-    if (!jobBoardStatus) {
-      return res.status(400).json({ success: false, message: "JobBoard status is required" });
-    }
-
-    const collection = await projectsCollection();
-
-    // Build update object - update both jobBoardStatus and regular status if provided
-    const updateFields = { jobBoardStatus };
-    if (status) {
-      updateFields.status = status;
-    }
-
-    const result = await collection.updateOne(
-      { _id: new ObjectId(projectId) },
-      { $set: updateFields }
-    );
-
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ success: false, message: "Project not found or status unchanged" });
-    }
-
-    const statusInfo = status ? ` and status to "${status}"` : '';
-    console.log(`🎯 JobBoard status updated to "${jobBoardStatus}"${statusInfo} for project ${projectId}`);
-    res.json({ success: true, message: "JobBoard status updated successfully" });
-  } catch (error) {
-    console.error("Error updating JobBoard status:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
-
 // ✅ Route to update specific project fields
 router.patch("/update/:id", authenticateToken(), async (req, res) => {
   try {
@@ -339,7 +243,7 @@ router.patch("/update/:id", authenticateToken(), async (req, res) => {
 
     // Normalize project name if it exists in the updates
     if (updates.name && typeof updates.name === 'string') {
-      updates.name = normalizeProjectNameWithProperCase(updates.name);
+      updates.name = normalizeProjectName(updates.name);
     }
 
     const collection = await projectsCollection();
@@ -796,14 +700,6 @@ router.post("/addProject", authenticateTokenOrApiKey("create_project"), async (r
   try {
     console.log("📩 Received Project Data:", req.body);
 
-    // Validate required fields
-    if (!req.body.name || req.body.name.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Project name is required"
-      });
-    }
-
     const collection = await projectsCollection();
     const projectNumber = await generateProjectNumber(collection);
 
@@ -812,19 +708,18 @@ router.post("/addProject", authenticateTokenOrApiKey("create_project"), async (r
     const linkedUsers   = req.body.linkedUsers   || [];
 
     const newProject = {
-      name: normalizeProjectNameWithProperCase(req.body.name || ""),
-      location: req.body.location || "Address to be confirmed",
-      due_date: req.body.due_date || new Date(Date.now() + 7*24*60*60*1000).toISOString(),
-      posting_date: req.body.posting_date || new Date().toISOString(),
+      name: req.body.name,
+      location: req.body.location,
+      due_date: req.body.due_date,
+      posting_date: req.body.posting_date,
       linkedClients,           // ← include this
       linkedUsers,
-      description: req.body.description || "No description provided",
+      description: req.body.description,
       subTotal: req.body.subTotal || 0,
       total:   req.body.total    || 0,
       gst:     req.body.gst      || 0,
       status:  req.body.status   || "New Lead",
       projectNumber,
-      metadata: req.body.metadata || {}
     };
 
     // 2) Insert the project
@@ -1644,20 +1539,7 @@ router.post("/send-estimate/:id", authenticateToken(), async (req, res) => {
 
     const result = await emailService.sendEstimateComplete(contactEmail, emailData);
 
-    // 🆕 FEATURE #31: Update JobBoard status to "Sent" while keeping project status as "Estimate Complete"
-    // This creates dual status system - JobBoard shows "Sent", Projects page shows "Estimate Complete"
-    const updateResult = await collection.updateOne(
-      { _id: new ObjectId(projectId) },
-      { 
-        $set: { 
-          jobBoardStatus: "Sent",
-          estimateSentDate: new Date()
-        }
-      }
-    );
-
     console.log(`📧 Estimate complete email sent for project ${projectId} to ${contactEmail}`);
-    console.log(`🎯 JobBoard status updated to "Sent" for project ${projectId}`);
 
     res.json({
       success: true,
@@ -1665,8 +1547,7 @@ router.post("/send-estimate/:id", authenticateToken(), async (req, res) => {
       data: {
         messageId: result.messageId,
         recipient: contactEmail,
-        projectId,
-        statusUpdated: updateResult.modifiedCount > 0
+        projectId
       }
     });
 

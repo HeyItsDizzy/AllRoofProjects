@@ -1,9 +1,6 @@
 /**
  * Company Invitation Email Template
- * Prof                        <img src="${headerLogoUrl}" 
-                             alt="${company} Logo" 
-                             height="120"
-                             style="max-width: 300px; max-height: 120px; width: auto; height: 120px; display: block; border-radius: 8px;">onal email template for inviting users to join companies
+ * Professional email template for inviting users to join companies
  */
 
 /**
@@ -54,7 +51,7 @@ const companyInvitation = (data) => {
                         <img src="${headerLogoUrl}" 
                              alt="${company} Logo" 
                              height="120"
-                             style="max-width: 300px; max-height: 120px; width: auto; height: 120px; display: block; border-radius: 8px;">>
+                             style="max-width: 300px; max-height: 120px; width: auto; height: 120px; display: block; border-radius: 8px;">
                       </td>
                     </tr>
                     <tr>

@@ -1,79 +1,174 @@
-# 🏗️ AllRoof Project Manager
+# All Roof Projects - Project Management System
 
-> **Professional project management system for AllRoof takeoffs and client management**
+A comprehensive project management system for roofing contractors built with React frontend and Node.js backend.
 
-## 🚀 Quick Start
+## 🏗️ Architecture
 
-### **First Time Setup:**
-```bash
-# 1. Configure git (one time only)
-.scripts\git-setup.bat
-
-# 2. Deploy your project
-.scripts\deploy-project.bat
-# Choose option 3 (Deploy Both)
-```
-
-### **Daily Development:**
-```bash
-# Quick deployments
-.scripts\quick-deploy-backend.bat     # Backend only
-.scripts\quick-deploy-frontend.bat    # Frontend only
-
-# Full deployment with menu
-.scripts\deploy-project.bat
-```
+- **Frontend**: React + Vite + TailwindCSS
+- **Backend**: Node.js + Express + MySQL
+- **Authentication**: JWT
+- **Real-time**: Socket.io
+- **Deployment**: PM2 + Nginx
 
 ## 📁 Project Structure
 
 ```
-ProjectManagerApp/
-├── .scripts/           # All deployment and setup scripts
-├── Backend/            # Node.js/Express API server
-├── Frontend/           # React/Vite client application
-└── README.md          # This file
+├── Frontend/          # React application
+│   ├── src/
+│   │   ├── components/    # Reusable components
+│   │   ├── pages/         # Page components
+│   │   ├── hooks/         # Custom hooks
+│   │   ├── shared/        # Shared utilities
+│   │   └── styles/        # CSS and styling
+│   └── package.json
+│
+├── Backend/           # Node.js API server
+│   ├── routes/            # API endpoints
+│   ├── middleware/        # Express middleware
+│   ├── config/           # Configuration files
+│   ├── features/         # Feature modules
+│   ├── services/         # Business logic
+│   └── package.json
+│
+└── README.md
 ```
 
-## 🔧 Scripts Overview
+## 🚀 Quick Start
 
-| Script | Purpose |
-|--------|---------|
-| `deploy-project.bat` | Interactive deployment (Backend/Frontend/Both) |
-| `quick-deploy-backend.bat` | Fast Backend deployment |
-| `quick-deploy-frontend.bat` | Fast Frontend deployment |
-| `git-setup.bat` | One-time git configuration |
+### Backend Setup
 
-## 🔒 Security Features
+1. Navigate to Backend directory:
+   ```bash
+   cd Backend
+   ```
 
-- ✅ `.FM` folder protected (client files never committed)
-- ✅ API keys and credentials excluded
-- ✅ Environment files protected
-- ✅ Automated .gitignore management
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## 🌐 Repositories
+3. Create environment file:
+   ```bash
+   cp .env.template .env
+   ```
 
-- **Backend:** https://github.com/HeyItsDizzy/AllRoofProjects-Backend
-- **Frontend:** https://github.com/HeyItsDizzy/AllRoofProjects-Frontend
+4. Configure your `.env` file with database and other credentials
 
-> Each component is a separate, self-contained repository
+5. Start the server:
+   ```bash
+   npm run dev          # Development
+   npm start            # Production with PM2
+   ```
 
-## 🏗️ VPS Integration
+### Frontend Setup
 
-- **Backend VPS:** `/root/ART/ProjectManagerApp/Backend`
-- **Local Development:** `c:\Coding\AllRoofsWebApps\ProjectManagerApp\`
-- **VPS Mount:** `Y:\Backend` (live backend access)
+1. Navigate to Frontend directory:
+   ```bash
+   cd Frontend
+   ```
 
-## 💡 Development Workflow
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-1. **Make changes** to Backend and/or Frontend
-2. **Test locally** to ensure everything works
-3. **Deploy** using the scripts in `.scripts` folder
-4. **Monitor** VPS for successful deployment
+3. Create environment file:
+   ```bash
+   cp .env.template .env
+   ```
 
----
+4. Configure your `.env` file with API endpoints
 
-### 🎯 **Ready to Deploy?**
+5. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-Run: `.scripts\deploy-project.bat` and choose your deployment option!
+## 🔧 Features
 
-*For detailed documentation, see the guides in each component folder.*
+- **Project Management**: Create, track, and manage roofing projects
+- **User Management**: Role-based access (Admin, Estimator, User)
+- **Month Filtering**: Advanced filtering by months and date ranges
+- **Client Management**: Link projects to clients
+- **Real-time Updates**: Live updates across users
+- **Responsive Design**: Mobile-friendly interface
+- **Performance Optimized**: Virtual scrolling for large datasets
+
+## 🛠️ Technologies
+
+### Frontend
+- React 18
+- Vite
+- TailwindCSS
+- React Router DOM
+- Axios
+- Socket.io Client
+- React Window (Virtual Scrolling)
+- TanStack Table
+
+### Backend
+- Node.js
+- Express.js
+- MySQL
+- Socket.io
+- JWT Authentication
+- PM2 Process Manager
+- Multer (File Uploads)
+
+## 📝 API Documentation
+
+The backend provides RESTful APIs for:
+
+- `/api/auth/*` - Authentication endpoints
+- `/api/projects/*` - Project management
+- `/api/users/*` - User management  
+- `/api/clients/*` - Client management
+- `/api/uploads/*` - File handling
+
+## 🔒 Security
+
+- JWT-based authentication
+- Role-based authorization
+- SQL injection protection
+- CORS configuration
+- Input validation and sanitization
+
+## 🚀 Deployment
+
+### Production Backend
+```bash
+cd Backend
+npm install --production
+pm2 start ecosystem.config.js
+```
+
+### Production Frontend
+```bash
+cd Frontend
+npm run build
+# Serve build files with nginx or your preferred web server
+```
+
+## 📊 Performance
+
+- Virtual scrolling for large datasets
+- Optimized database queries
+- Lazy loading components
+- Debounced search functionality
+- Efficient state management
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is proprietary software for All Roof Takeoffs.
+
+## 🆘 Support
+
+For support, contact the development team or create an issue in this repository.

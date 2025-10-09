@@ -66,8 +66,16 @@ router.post("/register", async (req, res) => {
       throw new Error("All fields (firstName, lastName, email, phone, password) are required.");
     }
 
+    // Normalize email to lowercase for case-insensitive handling
+    const normalizedEmail = email.toLowerCase().trim();
+
     const collection = await userCollection();
-    const isEmailExist = await collection.findOne({ email });
+    
+    // Check for existing email case-insensitively
+    const isEmailExist = await collection.findOne({ 
+      email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    
     if (isEmailExist) {
       throw new Error("This email is already in use.");
     }
@@ -79,7 +87,7 @@ router.post("/register", async (req, res) => {
       name: fullName,
       firstName,
       lastName,
-      email,
+      email: normalizedEmail, // Store email in lowercase
       phone,
       displayPhone,
       password: hashedPassword,
@@ -112,8 +120,16 @@ router.post("/login", async (req, res) => {
   console.log("Login route hit with data:", req.body);
 
   try {
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const collection = await userCollection();
-    const user = await collection.findOne({ email });
+    
+    // Find user with case-insensitive email matching
+    const user = await collection.findOne({ 
+      email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    
     console.log("Fetched user:", user);
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -144,8 +160,16 @@ router.post("/login", async (req, res) => {
 router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;
   try {
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const collection = await userCollection();
-    const user = await collection.findOne({ email });
+    
+    // Find user with case-insensitive email matching
+    const user = await collection.findOne({ 
+      email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    
     if (!user) {
       // Always return success to avoid enumeration
       return res.json({ success: true });
@@ -156,7 +180,7 @@ router.post("/forgot-password", async (req, res) => {
     const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     await collection.updateOne(
-      { email },
+      { _id: user._id }, // Use _id instead of email for update
       { $set: { resetCode, resetCodeExpiry } }
     );
 
@@ -183,9 +207,12 @@ router.post("/forgot-password", async (req, res) => {
 router.post("/verify-reset-code", async (req, res) => {
   const { email, code } = req.body;
   try {
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const collection = await userCollection();
     const user = await collection.findOne({
-      email,
+      email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
       resetCode: code,
       resetCodeExpiry: { $gt: new Date() }
     });
@@ -212,9 +239,12 @@ router.post("/reset-password", async (req, res) => {
       throw new Error("Email, code, and newPassword are required.");
     }
 
+    // Normalize email to lowercase for case-insensitive matching
+    const normalizedEmail = email.toLowerCase().trim();
+
     const collection = await userCollection();
     const user = await collection.findOne({
-      email,
+      email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
       resetCode: code,
       resetCodeExpiry: { $gt: new Date() }
     });
@@ -225,7 +255,7 @@ router.post("/reset-password", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(newPassword, Number(process.env.BCRYPT_SALT_ROUND));
     await collection.updateOne(
-      { email },
+      { _id: user._id }, // Use _id instead of email for update
       {
         $set: { password: hashedPassword, resetCode: null, resetCodeExpiry: null }
       }

@@ -1,4 +1,4 @@
-// routes/clientRoutes.js
+  // routes/clientRoutes.js
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
@@ -1289,10 +1289,10 @@ router.delete('/:clientId', authenticateToken(), async (req, res, next) => {
     const finalProjectCleanup = await projectCollectionRef.updateMany(
       { $or: [
         { linkedClients: clientId },
-        { linkedClients: new ObjectId(clientId) }
+        { linkedClients: new mongoose.Types.ObjectId(clientId) }
       ]},
       { $pull: { 
-        linkedClients: { $in: [clientId, new ObjectId(clientId)] }
+        linkedClients: { $in: [clientId, new mongoose.Types.ObjectId(clientId)] }
       }}
     );
     
@@ -1300,22 +1300,22 @@ router.delete('/:clientId', authenticateToken(), async (req, res, next) => {
     const finalUserCleanup = await User.updateMany(
       { $or: [
         { linkedClients: clientId },
-        { linkedClients: new ObjectId(clientId) }
+        { linkedClients: new mongoose.Types.ObjectId(clientId) }
       ]},
       { $pull: { 
-        linkedClients: { $in: [clientId, new ObjectId(clientId)] }
+        linkedClients: { $in: [clientId, new mongoose.Types.ObjectId(clientId)] }
       }}
     );
     
     console.log(`✅ [DELETE] Final sweep completed - Projects: ${finalProjectCleanup.modifiedCount}, Users: ${finalUserCleanup.modifiedCount}`);
 
-    // 8. Finally, delete the client document
+    // 7. Finally, delete the client document
     console.log(`🗑️ [DELETE] Deleting client document...`);
     await Client.findByIdAndDelete(clientId);
     cleanupResults.clientDeleted = true;
     console.log(`✅ [DELETE] Client document deleted successfully`);
 
-    // 9. Log comprehensive cleanup summary
+    // 8. Log comprehensive cleanup summary
     console.log(`🎯 [DELETE COMPLETE] Cleanup Summary:
       - Client "${client.name}" deleted: ✅
       - Projects updated (linkedClients removed): ${cleanupResults.projectsUpdated}
