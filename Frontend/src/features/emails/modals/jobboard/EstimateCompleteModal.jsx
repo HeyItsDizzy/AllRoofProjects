@@ -38,8 +38,17 @@ const EstimateCompleteModal = ({
   const [selectedClient, setSelectedClient] = useState(null);
   const [linkedUsers, setLinkedUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [textColor, setTextColor] = useState('#374151'); // Default color
   const axiosSecure = useAxiosSecure();
   const initialValuesSet = useRef(false); // Track if initial values have been set
+
+  // Color options for text styling
+  const colorOptions = [
+    { name: 'Black/Default', color: '#374151', bgColor: '#374151' },
+    { name: 'Red', color: '#DC2626', bgColor: '#DC2626' },
+    { name: 'ART Green', color: '#009245', bgColor: '#009245' },
+    { name: 'Blue', color: '#2563EB', bgColor: '#2563EB' }
+  ];
 
   // Debug log when modal opens
   useEffect(() => {
@@ -364,6 +373,7 @@ const EstimateCompleteModal = ({
         planType: values.planType,
         optionalBody: values.optionalBody,
         memo: values.memo,
+        textColor: textColor, // Add text color for email styling
         companyLogoUrl: null // TODO: Add company logo support
       };
 
@@ -375,6 +385,7 @@ const EstimateCompleteModal = ({
         estimateDescription: estimateDescription,
         optionalBody: values.optionalBody,
         memo: values.memo,
+        textColor: textColor, // Add text color for template rendering
         companyLogoUrl: null,
         projectViewUrl: `${import.meta.env.VITE_FRONTEND_URL || 'https://projects.allrooftakeoffs.com.au'}/project/${project.alias}` // Use alias for direct project URL
       };
@@ -745,48 +756,57 @@ const EstimateCompleteModal = ({
         </Form.Item>
         </div>
 
-        {/* Estimate Notes Field - TODO: Key will be updated to 'estimateNotes' in future */}
+        {/* Estimate Notes Field with Color Selector */}
         <Form.Item
           label={
             <div className="flex items-center gap-2">
               <span>Estimate Notes: (optional)</span>
-              {/* Color selection dots - TODO: Wire up functionality in future */}
-              <div className="flex gap-1 ml-2">
-                <button
-                  type="button"
-                  className="w-4 h-4 rounded-full bg-black border-2 border-gray-300 hover:border-gray-500 transition-colors"
-                  title="Black text"
-                  onClick={(e) => e.preventDefault()}
-                />
-                <button
-                  type="button"
-                  className="w-4 h-4 rounded-full bg-red-500 border-2 border-gray-300 hover:border-gray-500 transition-colors"
-                  title="Red text"
-                  onClick={(e) => e.preventDefault()}
-                />
-                <button
-                  type="button"
-                  className="w-4 h-4 rounded-full bg-green-500 border-2 border-gray-300 hover:border-gray-500 transition-colors"
-                  title="Green text"
-                  onClick={(e) => e.preventDefault()}
-                />
-                <button
-                  type="button"
-                  className="w-4 h-4 rounded-full bg-blue-500 border-2 border-gray-300 hover:border-gray-500 transition-colors"
-                  title="Blue text"
-                  onClick={(e) => e.preventDefault()}
-                />
-              </div>
             </div>
           }
           name="memo"
           help="Add special notes, add-ins, or additional details (HTML compatible)"
         >
+          {/* Color Selector */}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-sm text-gray-600">Text Color:</span>
+            {colorOptions.map((option) => (
+              <button
+                key={option.name}
+                type="button"
+                onClick={() => setTextColor(option.color)}
+                className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 ${
+                  textColor === option.color 
+                    ? 'border-gray-800 shadow-md' 
+                    : 'border-gray-300 hover:border-gray-500'
+                }`}
+                style={{ backgroundColor: option.bgColor }}
+                title={option.name}
+              />
+            ))}
+            
+            {/* Reset/Clear Color Button */}
+            <button
+              type="button"
+              onClick={() => setTextColor('#374151')} // Reset to default
+              className="w-6 h-6 rounded-full border-2 border-gray-300 hover:border-gray-500 transition-all hover:scale-110 flex items-center justify-center bg-white"
+              title="Reset to Default Color"
+            >
+              <span className="text-xs text-gray-500">✕</span>
+            </button>
+          </div>
+          
           <TextArea
             placeholder="Additional items, special requests, or notes..."
             rows={3}
             maxLength={1000}
             showCount
+            style={{ color: textColor }}
+            onChange={(e) => {
+              // Ensure the form field is updated
+              form.setFieldsValue({ memo: e.target.value });
+              // Trigger form change handler manually
+              handleFormValuesChange({ memo: e.target.value }, { ...form.getFieldsValue(), memo: e.target.value });
+            }}
           />
         </Form.Item>
 

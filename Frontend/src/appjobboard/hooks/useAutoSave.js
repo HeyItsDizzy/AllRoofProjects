@@ -2,37 +2,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 const AUTOSAVE_DELAY = 2000; // 2 seconds delay after last change
+const AUTOSAVE_ENABLED = false; // 🔴 DISABLED: Auto-save turned off (use manual save button)
 
 export function useAutoSave(onSave, onAfterSave = null) {
   const [pendingChanges, setPendingChanges] = useState(new Map());
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const timeoutRefs = useRef(new Map());
-
-  // Queue a change for a specific project
-  const queueChange = useCallback((projectId, field, value) => {
-    setPendingChanges(prev => {
-      const newMap = new Map(prev);
-      const projectChanges = newMap.get(projectId) || {};
-      newMap.set(projectId, {
-        ...projectChanges,
-        [field]: value,
-        _lastModified: Date.now()
-      });
-      return newMap;
-    });
-
-    // Clear existing timeout for this project
-    if (timeoutRefs.current.has(projectId)) {
-      clearTimeout(timeoutRefs.current.get(projectId));
-    }
-
-    // Set new timeout for auto-save
-    const timeoutId = setTimeout(async () => {
-      await saveProject(projectId);
-    }, AUTOSAVE_DELAY);
-
-    timeoutRefs.current.set(projectId, timeoutId);
-  }, []);
+  const saveProjectRef = useRef(null);
 
   // Save a specific project's changes
   const saveProject = useCallback(async (projectId) => {
@@ -68,6 +44,44 @@ export function useAutoSave(onSave, onAfterSave = null) {
       setIsAutoSaving(false);
     }
   }, [pendingChanges, onSave, onAfterSave]);
+
+  // Store saveProject in ref for timeout access
+  useEffect(() => {
+    saveProjectRef.current = saveProject;
+  }, [saveProject]);
+
+  // Queue a change for a specific project
+  const queueChange = useCallback((projectId, field, value) => {
+    setPendingChanges(prev => {
+      const newMap = new Map(prev);
+      const projectChanges = newMap.get(projectId) || {};
+      newMap.set(projectId, {
+        ...projectChanges,
+        [field]: value,
+        _lastModified: Date.now()
+      });
+      return newMap;
+    });
+
+    // 🔴 AUTO-SAVE DISABLED - Skip timeout logic
+    if (!AUTOSAVE_ENABLED) {
+      return; // Don't set up auto-save timers
+    }
+
+    // Clear existing timeout for this project
+    if (timeoutRefs.current.has(projectId)) {
+      clearTimeout(timeoutRefs.current.get(projectId));
+    }
+
+    // Set new timeout for auto-save
+    const timeoutId = setTimeout(async () => {
+      if (saveProjectRef.current) {
+        await saveProjectRef.current(projectId);
+      }
+    }, AUTOSAVE_DELAY);
+
+    timeoutRefs.current.set(projectId, timeoutId);
+  }, []);
 
   // Save all pending changes immediately
   const saveAll = useCallback(async () => {

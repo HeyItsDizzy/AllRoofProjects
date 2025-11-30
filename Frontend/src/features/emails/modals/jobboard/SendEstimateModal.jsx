@@ -21,7 +21,16 @@ const SendEstimateModal = ({ isVisible, onClose, project }) => {
   const [clients, setClients] = useState([]);
   const [sendToLinkedClient, setSendToLinkedClient] = useState(true);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [textColor, setTextColor] = useState('#374151'); // Default black/gray color
   const axiosSecure = useAxiosSecure();
+
+  // Color options for text styling - matching your exact requirements
+  const colorOptions = [
+    { name: 'Black/Default', color: '#374151', bgColor: '#374151' }, // Black/Default Gray
+    { name: 'Red', color: '#DC2626', bgColor: '#DC2626' },
+    { name: 'ART Green', color: '#009245', bgColor: '#009245' }, // Primary ART Green
+    { name: 'Blue', color: '#2563EB', bgColor: '#2563EB' },
+  ];
 
   // Debug log when modal opens
   useEffect(() => {
@@ -98,6 +107,7 @@ const SendEstimateModal = ({ isVisible, onClose, project }) => {
           projectAddress: project?.location?.address || project?.name,
           estimateDescription: `${values.estimateQty} - ${values.planType}`,
           optionalBody: values.optionalBody,
+          textColor: textColor, // Add text color for email template
           companyLogoUrl: null // TODO: Add company logo support
         };
       } else {
@@ -114,6 +124,7 @@ const SendEstimateModal = ({ isVisible, onClose, project }) => {
           projectAddress: project?.location?.address || project?.name,
           estimateDescription: `${values.estimateQty} - ${values.planType}`,
           optionalBody: values.optionalBody,
+          textColor: textColor, // Add text color for email template
           companyLogoUrl: null // TODO: Add company logo support
         };
       }
@@ -357,11 +368,41 @@ const SendEstimateModal = ({ isVisible, onClose, project }) => {
           name="optionalBody"
           help="Add a personal message, special notes, or reply to client conversation (optional)"
         >
+          {/* Color Selector */}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-sm text-gray-600">Text Color:</span>
+            {colorOptions.map((option) => (
+              <button
+                key={option.name}
+                type="button"
+                onClick={() => setTextColor(option.color)}
+                className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 ${
+                  textColor === option.color 
+                    ? 'border-gray-800 shadow-md' 
+                    : 'border-gray-300 hover:border-gray-500'
+                }`}
+                style={{ backgroundColor: option.bgColor }}
+                title={option.name}
+              />
+            ))}
+            
+            {/* Reset/Clear Color Button */}
+            <button
+              type="button"
+              onClick={() => setTextColor('#374151')} // Reset to default
+              className="w-6 h-6 rounded-full border-2 border-gray-300 hover:border-gray-500 transition-all hover:scale-110 flex items-center justify-center bg-white"
+              title="Reset to Default Color"
+            >
+              <span className="text-xs text-gray-500">✕</span>
+            </button>
+          </div>
+          
           <TextArea
             placeholder="Hi John, as discussed, here's your roof estimate. Please note the premium materials as requested..."
             rows={4}
             maxLength={500}
             showCount
+            style={{ color: textColor }}
           />
         </Form.Item>
 

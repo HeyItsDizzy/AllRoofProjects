@@ -1,6 +1,7 @@
 // useFolderManager.js
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import useAxiosSecure from "../../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosFile from "../../hooks/AxiosFile/useAxiosFile";
 import { message } from "antd";
 import buildNestedTree from "../utils/buildNestedTree";
 import { isAllowed } from "../shared/permissions";
@@ -18,12 +19,15 @@ function showMessage(type, content) {
 
 export const useFolderManager = (projectId, userRole = "user", refreshKey = 0, onFileChange = null) => {
   const axiosSecure = useAxiosSecure();
+  const axiosFile = useAxiosFile(); // Use file-specific axios for file operations
 
   const [folderTree, setFolderTree] = useState({});
   const [selectedPath, setSelectedPath] = useState("."); // default to project root
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [meta, setMeta] = useState(null);
+
+  // Removed project fetch since meta file contains all needed info
 
   // 📁 Fetch folders from disk
   const fetchFolders = useCallback(async () => {
@@ -32,13 +36,13 @@ export const useFolderManager = (projectId, userRole = "user", refreshKey = 0, o
     try {
       setLoadingFolders(true);
 
-      const res = await axiosSecure.get(`/files/${projectId}/folder-tree`);
+      const res = await axiosFile.get(`/files/${projectId}/folder-tree`);
       const flatTree = res.data || {};
 
       let metaData = null;
 
       try {
-        const metaRes = await axiosSecure.get(`/files/${projectId}/meta`);
+        const metaRes = await axiosFile.get(`/files/${projectId}/meta`);
         metaData = metaRes.data || null;
       } catch (err) {
         console.warn("⚠️ Failed to fetch /meta directly, will fallback to folderTree['.'].__meta:", err?.message);
@@ -53,7 +57,7 @@ export const useFolderManager = (projectId, userRole = "user", refreshKey = 0, o
         console.log("👀 Flattened folders (DEV):", allPaths);
       }*/
 
-        console.log("🙅‍♂️ Filtering folders using isAllowed() for role:", userRole);
+        // console.log("🙅‍♂️ Filtering folders using isAllowed() for role:", userRole);
 
       const cleanedPaths = allPaths.map((p) =>
         p
@@ -100,14 +104,14 @@ if (!metaData && filteredTree["."]?.__meta) {
     } finally {
       setLoadingFolders(false);
     }
-  }, [projectId, axiosSecure, userRole]);
+  }, [projectId, axiosFile, userRole]);
 
-  // ✅ Call only once per projectId change
+  // ✅ Call folders when projectId changes
   useEffect(() => {
     if (projectId) {
       fetchFolders();
     }
-  }, [projectId, refreshKey]); // ✅ now reacts to refreshKey
+  }, [projectId, refreshKey, fetchFolders]);
 
   // Live sync will be initialized after folder functions are defined
 
@@ -369,12 +373,29 @@ const addGhostFolderToPath = useCallback(
   const processedEventsRef = useRef(new Set());
   const addGhostFolderRef = useRef(addGhostFolderToPath);
   const removeTempFolderRef = useRef(removeTempFolder);
+  const fetchFoldersRef = useRef(fetchFolders);
+  
+  // Compute project display name from meta data (simplified)
+  const projectDisplayName = useMemo(() => {
+    // Try different meta field combinations
+    if (meta?.projectName) return meta.projectName;
+    if (meta?.projectNumber && meta?.projectName) return `${meta.projectNumber} - ${meta.projectName}`;
+    if (meta?.project_name) return meta.project_name;
+    if (meta?.projectNumber && meta?.name) return `${meta.projectNumber} - ${meta.name}`;
+    if (meta?.project_number && meta?.project_name) return `${meta.project_number} - ${meta.project_name}`;
+    if (meta?.number && meta?.name) return `${meta.number} - ${meta.name}`;
+    if (meta?.name) return meta.name;
+    
+    // Fallback to project ID
+    return `Project ${projectId?.slice(-8) || 'Unknown'}`;
+  }, [meta, projectId]);
   
   // Update refs when functions change
   useEffect(() => {
     addGhostFolderRef.current = addGhostFolderToPath;
     removeTempFolderRef.current = removeTempFolder;
-  }, [addGhostFolderToPath, removeTempFolder]);
+    fetchFoldersRef.current = fetchFolders;
+  }, [addGhostFolderToPath, removeTempFolder, fetchFolders]);
   
   const handleLiveFolderChange = useCallback((changeData) => {
     console.log('🔄 Live folder change detected:', changeData);
@@ -442,10 +463,11 @@ const addGhostFolderToPath = useCallback(
       // Remove the folder from UI using ghost system
       removeTempFolderRef.current(folderName, parentPath);
     }
-  }, [fetchFolders]); // Include fetchFolders in dependencies
+  }, [onFileChange]); // Remove fetchFolders dependency - use ref instead
 
   const { isConnected: isLiveSyncConnected, notifyFolderChange } = useLiveFolderSync({
     projectId,
+    projectName: projectDisplayName,
     onFolderChange: handleLiveFolderChange,
     enabled: true // Re-enabled with ghost folder integration
   });

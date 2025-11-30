@@ -493,7 +493,177 @@ router.put("/:projectId/folders/:folderPath(*)", async (req, res) => {
 // Additional folder management routes - delegated to controllers
 router.put("/:projectId/folders/:folderId", renameFolder);  // ID-based folder rename
 router.get("/:projectId/folders", getFolders);              // Get all folders for project
-router.get("/:projectId/folder-tree", getFolderTree);       // Get hierarchical folder structure
+
+/**
+ * GET /:projectId/folder-tree
+ * Get hierarchical folder structure for project
+ * PROXY TO LIVE SERVER in development mode
+ */
+router.get("/:projectId/folder-tree", async (req, res) => {
+  const { projectId } = req.params;
+  
+  try {
+    console.log(`🔍 [FOLDER-TREE] Request for project: ${projectId}`);
+    
+    // Validate projectId format
+    if (!ObjectId.isValid(projectId)) {
+      console.error(`❌ [FOLDER-TREE] Invalid ObjectId format: ${projectId}`);
+      return res.status(400).json({ 
+        error: "Invalid project ID format",
+        projectId: projectId
+      });
+    }
+
+    // Check if we should proxy to live server (development mode)
+    const fileApiBaseUrl = process.env.FILE_API_BASE_URL;
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    
+    if (isDevelopment && fileApiBaseUrl) {
+      console.log(`🔄 [FOLDER-TREE] Proxying to live server: ${fileApiBaseUrl}`);
+      
+      try {
+        const axios = require('axios');
+        const liveResponse = await axios.get(
+          `${fileApiBaseUrl}/files/${projectId}/folder-tree`,
+          {
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'ProjectManager-Dev-Proxy'
+            }
+          }
+        );
+        
+        console.log(`✅ [FOLDER-TREE] Successfully proxied from live server`);
+        return res.status(200).json(liveResponse.data);
+        
+      } catch (proxyErr) {
+        console.warn(`⚠️ [FOLDER-TREE] Live server proxy failed, falling back to local:`, proxyErr.message);
+        // Fall through to local implementation
+      }
+    }
+    
+    // Build folder tree using local service (fallback or production)
+    console.log(`🔨 [FOLDER-TREE] Building local folder tree for: ${projectId}`);
+    const folderTree = await buildFolderTreeFromDisk(projectId);
+    
+    console.log(`✅ [FOLDER-TREE] Successfully built tree with ${Object.keys(folderTree).length} top-level items`);
+    
+    res.status(200).json(folderTree);
+    
+  } catch (err) {
+    console.error("🔥 [FOLDER-TREE] Error loading folder tree:", err);
+    console.error("🔥 [FOLDER-TREE] Error stack:", err.stack);
+    
+    res.status(500).json({ 
+      error: "Failed to load folder tree",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      projectId: projectId
+    });
+  }
+});
+
+/**
+ * GET /:projectId/meta
+ * Get project meta.json file contents
+ * PROXY TO LIVE SERVER in development mode
+ */
+router.get("/:projectId/meta", async (req, res) => {
+  const { projectId } = req.params;
+  const region = req.query.region || "AU";
+  
+  try {
+    console.log(`🔍 [META] Request for project meta: ${projectId}, region: ${region}`);
+    
+    // Check if we should proxy to live server (development mode)
+    const fileApiBaseUrl = process.env.FILE_API_BASE_URL;
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    
+    if (isDevelopment && fileApiBaseUrl) {
+      console.log(`🔄 [META] Proxying to live server: ${fileApiBaseUrl}`);
+      
+      try {
+        const axios = require('axios');
+        const liveResponse = await axios.get(
+          `${fileApiBaseUrl}/files/${projectId}/meta`,
+          {
+            timeout: 10000,
+            params: { region },
+            headers: {
+              'User-Agent': 'ProjectManager-Dev-Proxy'
+            }
+          }
+        );
+        
+        console.log(`✅ [META] Successfully proxied from live server`);
+        return res.status(200).json(liveResponse.data);
+        
+      } catch (proxyErr) {
+        console.warn(`⚠️ [META] Live server proxy failed, falling back to local:`, proxyErr.message);
+        // Fall through to local implementation
+      }
+    }
+    
+    // Validate project exists (for local fallback)
+    const collection = await projectsCollection();
+    const project = await collection.findOne({ _id: new ObjectId(projectId) });
+    
+    if (!project) {
+      console.error(`❌ [META] Project not found: ${projectId}`);
+      return res.status(404).json({ error: "Project not found" });
+    }
+    
+    // Get project path and meta.json path
+    const projectPath = getProjectDiskPath(project, "", region);
+    const metaPath = path.join(projectPath, ".meta.json");
+    
+    console.log(`📁 [META] Looking for meta.json at: ${metaPath}`);
+    
+    if (!fs.existsSync(metaPath)) {
+      console.warn(`⚠️ [META] .meta.json not found, creating default at: ${metaPath}`);
+      
+      // Ensure directory exists
+      fs.mkdirSync(projectPath, { recursive: true });
+      
+      // Create default meta.json
+      const defaultMeta = { 
+        projectId: project._id,
+        projectName: project.name || "Unknown Project",
+        projectNumber: project.projectNumber,
+        region: region,
+        created: new Date().toISOString(),
+        lastUpdated: new Date().toISOString()
+      };
+      
+      fs.writeFileSync(metaPath, JSON.stringify(defaultMeta, null, 2));
+      
+      console.log(`✅ [META] Created default meta.json for project: ${projectId}`);
+      return res.status(200).json(defaultMeta);
+    }
+    
+    // Read existing meta.json
+    try {
+      const raw = fs.readFileSync(metaPath, "utf-8");
+      const meta = JSON.parse(raw);
+      
+      console.log(`✅ [META] Successfully loaded meta.json for project: ${projectId}`);
+      return res.status(200).json(meta);
+      
+    } catch (jsonErr) {
+      console.error(`🔥 [META] Failed to parse .meta.json:`, jsonErr.message);
+      return res.status(500).json({ 
+        error: "Invalid meta.json format",
+        details: process.env.NODE_ENV === 'development' ? jsonErr.message : undefined
+      });
+    }
+    
+  } catch (err) {
+    console.error("🔥 [META] Unexpected error loading meta.json:", err);
+    return res.status(500).json({ 
+      error: "Internal server error",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
 
 // File management routes - delegated to controllers  
 router.post("/:projectId/upload", uploadFiles);             // Upload files to project

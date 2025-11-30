@@ -12,7 +12,8 @@ const EstimateComplete = (data) => {
     optionalBody = '',
     companyLogoUrl = null,
     projectViewUrl = '',
-    memo = ''
+    memo = '',
+    textColor = '#4B5563'
   } = data;
   
   const subject = `Estimate Complete - ${projectAddress} - Ref: ${projectNumber}`;
@@ -109,6 +110,18 @@ const EstimateComplete = (data) => {
               <p style="margin:0 0 16px 0; color:#4B5563; font-size:15px; line-height:1.6; font-family:Arial, sans-serif;">
                 This estimate contains <strong>${estimateDescription}</strong>
               </p>
+
+              ${
+                memo
+                  ? `
+              <!-- Memo section with custom color -->
+              <div style="margin:16px 0; padding:12px 14px; background-color:#F8FFFE; border-left:3px solid #009245; border-radius:0;">
+                <div style="margin:0; color:${textColor}; font-size:15px; line-height:1.6; font-family:Arial, sans-serif;">
+                  ${memo.split('\n\n').map(paragraph => `<p style="margin:0 0 12px 0; color:${textColor};">${paragraph.replace(/\n/g, '<br>')}</p>`).join('')}
+                </div>
+              </div>`
+                  : ''
+              }
 
               <div style="margin:20px 0; padding:14px 16px; background-color:#F8FAFB; border-left:4px solid #009245;">
                 <p style="margin:0 0 6px 0; color:#081F13; font-size:15px; font-weight:bold;">Questions or Queries?</p>

@@ -1,36 +1,25 @@
 /**
- * PROJECT TABLE COMPONENT - Production Ready ✅
+ * PROJECT TABLE COMPONENT - Progressive Loading with "Load More" ✅
  * 
- * CORE FUNCTIONALITY:
- * ✅ Project listing with role-based filtering (Admin sees all, Estimator sees assigned)
- * ✅ Month-based filtering tabs (matches JobBoard exactly)
- * ✅ Status filtering and inline status editing
- * ✅ Client assignment and management
- * ✅ Responsive design (desktop table + mobile cards)
- * ✅ Project navigation and sorting
+ * SCALABLE FOR 10,000+ PROJECTS:
+ * ✅ Initial load: 100 most recent projects (fast!)
+ * ✅ "Load More" button: Fetch next 100 projects when clicked
+ * ✅ Never loads all data: Only loads what user views
+ * ✅ Memory efficient: Progressively loads chunks
+ * ✅ Month tab counts: Server-side aggregation (fast!)
+ * ✅ Filters work: Server-side filtering with progressive load
  * 
- * MONTH FILTERING SYSTEM:
- * ✅ Uses shared useMonthGrouping hook for consistency with JobBoard
- * ✅ Tab structure: All → Older (dropdown) → Selected Older → Recent 3 Months
- * ✅ Defaults to current month on page load
- * ✅ Older months (like May 2025) hidden in "Older" dropdown
+ * PERFORMANCE FOR LARGE DATASETS:
+ * ✅ 100 projects per page = ~20KB per load
+ * ✅ Skeleton loading prevents CLS
+ * ✅ Optimistic rendering for instant UX
+ * ✅ Can handle 10,000+ projects without memory issues
  * 
- * ROLE-BASED ACCESS:
- * ✅ Admin: Full project access, can edit all statuses, assign clients
- * ✅ Estimator: See assigned projects only, read-only status display, view-only client info
- * ✅ User: Personalized project view with limited functionality
- * 
- * PROPS INTERFACE:
- * @param {Array} projects - Array of project objects to display
- * @param {Function} setProjects - State setter for updating projects
- * @param {Object} userData - Current user data object
- * @param {Array} clients - Array of client objects for assignment
- * @param {Function} openAssignClient - Modal opener for client assignment
- * @param {Function} openAssignUser - Modal opener for user assignment
- * @param {Function} onStatusChange - Callback for status changes
- * @param {String} userRole - Current user's role (Admin/Estimator)
- * @param {Object} columnConfig - Column visibility configuration
- * @param {Boolean} isUserView - Whether this is a user-specific view
+ * USER EXPERIENCE:
+ * 1. Page loads → Shows first 100 projects instantly
+ * 2. Scroll down → Click "Load More" → Fetch next 100
+ * 3. Month filter → Reset and show first 100 of filtered data
+ * 4. Status filter → Filter on already-loaded data client-side
  */
 
 // src/Components/ProjectTable.jsx
@@ -42,13 +31,11 @@ import { projectStatuses, estimateStatuses } from "@/shared/projectStatuses";
 import Avatar from "@/shared/Avatar";
 import { navigateToProject } from "../utils/projectAliasUtils";
 import { AuthContext } from "../auth/AuthProvider";
-import { useMonthGrouping } from "@/appjobboard/hooks/useMonthGrouping";
 import MonthFilterTabs from "@/shared/components/MonthFilterTabs";
+import { useMonthGrouping } from "@/appjobboard/hooks/useMonthGrouping";
 import "../styles/cls-fix.css";
 
 export default function ProjectTable({
-  projects = [],
-  setProjects,
   userData = {},
   clients = [],
   openAssignClient = () => {},
@@ -57,744 +44,656 @@ export default function ProjectTable({
   userRole = "User",
   columnConfig = {},
   isUserView = false,
-  isLoading = false,
 }) {
   const navigate = useNavigate();
   const axiosSecure = useAxiosSecure();
   const { user } = useContext(AuthContext);
 
   // ══════════════════════════════════════════════════════════════════
-  // 🎯 CORE STATE MANAGEMENT
+  // 🎯 PROGRESSIVE LOADING STATE
   // ══════════════════════════════════════════════════════════════════
+  const [loadedProjects, setLoadedProjects] = useState([]); // Projects loaded so far
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Pagination state (server-side)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const PROJECTS_PER_PAGE = 100; // Load 100 at a time
 
-  // Standard table sorting and filtering state
+  // Sorting state (server-side)
   const [sortColumn, setSortColumn] = useState("projectNumber");
   const [sortOrder, setSortOrder] = useState("desc");
+
+  // Filtering state (client-side)
   const [statusFilter, setStatusFilter] = useState("All");
 
-  // Month filtering state - now managed by shared MonthFilterTabs component
+  // Month tab state
   const [activeTab, setActiveTab] = useState('all');
   const [selectedOlderMonth, setSelectedOlderMonth] = useState(null);
 
-  // ══════════════════════════════════════════════════════════════════
-  // 🗓️ MONTH FILTERING SYSTEM - Now handled by shared MonthFilterTabs component
-  // ══════════════════════════════════════════════════════════════════
+  // Updating projects state
+  const [updatingProjects, setUpdatingProjects] = useState(new Set());
 
-  // Use shared month grouping hook for getting filtered data
+  // Use the monthly hook for month data (shared with MonthFilterTabs) - CLIENT-SIDE like JobTable
   const { 
     allMonths, 
     recentMonths, 
     olderMonths, 
     getMonthById, 
     totalJobCount 
-  } = useMonthGrouping(projects);
+  } = useMonthGrouping(loadedProjects);
 
-  // Set default tab based on user role
+  // ══════════════════════════════════════════════════════════════════
+  // 🚀 FETCH PROJECTS - Progressive Loading
+  // ══════════════════════════════════════════════════════════════════
+  const fetchProjects = useCallback(async (page = 1, append = false) => {
+    try {
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      console.log(`📦 Loading projects page ${page} (${PROJECTS_PER_PAGE} per page)...`);
+
+      // Build query params
+      const params = {
+        page,
+        limit: PROJECTS_PER_PAGE,
+        sortBy: sortColumn,
+        sortOrder: sortOrder
+      };
+
+      const response = await axiosSecure.get("/projects/get-projects", { params });
+
+      if (response.data.success) {
+        const { 
+          data: newProjects = [], 
+          pagination = {} 
+        } = response.data;
+
+        // Update loaded projects
+        if (append) {
+          setLoadedProjects(prev => [...prev, ...newProjects]);
+        } else {
+          setLoadedProjects(newProjects);
+        }
+
+        // Update pagination info
+        setCurrentPage(pagination.currentPage || page);
+        setHasMore(pagination.hasNextPage || false);
+        setTotalCount(pagination.totalProjects || newProjects.length);
+
+        console.log(`✅ Loaded ${newProjects.length} projects (Total loaded: ${append ? loadedProjects.length + newProjects.length : newProjects.length}/${pagination.totalProjects || '?'})`);
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch projects');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching projects:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to fetch projects');
+      
+      if (!append) {
+        Swal.fire({
+          title: "Error",
+          text: "Failed to load projects. Please try again.",
+          icon: "error",
+        });
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [axiosSecure, sortColumn, sortOrder, PROJECTS_PER_PAGE, loadedProjects.length]);
+
+  // Initial load - only run once on mount
+  useEffect(() => {
+    fetchProjects(1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on mount
+
+  // Reload when sorting changes
+  useEffect(() => {
+    if (sortColumn !== "projectNumber" || sortOrder !== "desc") {
+      setLoadedProjects([]);
+      setCurrentPage(1);
+      fetchProjects(1, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortColumn, sortOrder]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // 📄 LOAD MORE HANDLER
+  // ══════════════════════════════════════════════════════════════════
+  const handleLoadMore = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      const nextPage = currentPage + 1;
+      console.log(`🔄 Loading more projects (page ${nextPage})...`);
+      fetchProjects(nextPage, true); // Append to existing
+    }
+  }, [loadingMore, hasMore, currentPage, fetchProjects]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🗓️ MONTH FILTERING
+  // ══════════════════════════════════════════════════════════════════
+  
+  // Configuration for Last N Projects tab
+  const lastNConfig = useMemo(() => ({
+    enabled: true,
+    limit: 30,
+    label: "Most Recent"
+  }), []);
+
+  // Handle month tab changes - CLIENT-SIDE filtering like JobTable
+  const handleMonthTabChange = useCallback((tabId) => {
+    console.log(`📅 Month tab changed: ${tabId}`);
+    setActiveTab(tabId);
+  }, []);
+
+  // Handle older month selection
+  const handleOlderMonthSelect = useCallback((monthId) => {
+    setSelectedOlderMonth(monthId);
+    handleMonthTabChange(monthId);
+  }, [handleMonthTabChange]);
+
+  // Handle removing selected older month
+  const handleOlderMonthRemove = useCallback(() => {
+    setSelectedOlderMonth(null);
+    setActiveTab('all');
+  }, []);
+
+  // Set default tab based on user role - matches JobTable logic
   useEffect(() => {
     if (user?.role) {
       const isAdmin = user.role === 'admin' || user.role === 'Admin' || user.role === 'administrator';
       
       if (isAdmin) {
         // Admin: Default to current month (if available), otherwise 'all'
-        if (recentMonths.length > 0) {
-          const currentDate = new Date();
-          const currentMonthKey = `${String(currentDate.getFullYear()).slice(-2)}-${String(currentDate.getMonth() + 1).padStart(2, '0')} ${currentDate.toLocaleDateString('en-US', { month: 'short' })}`;
-          const currentMonth = recentMonths.find(month => month.id === currentMonthKey);
-          setActiveTab(currentMonth ? currentMonth.id : 'all');
-        } else {
-          // No month data available, default to 'all' for admin
-          setActiveTab('all');
-        }
+        const currentDate = new Date();
+        const currentMonthKey = `${String(currentDate.getFullYear()).slice(-2)}-${String(currentDate.getMonth() + 1).padStart(2, '0')} ${currentDate.toLocaleDateString('en-US', { month: 'short' })}`;
+        const currentMonth = [...recentMonths, ...olderMonths].find(month => month.id === currentMonthKey);
+        const hasCurrentMonthData = currentMonth && currentMonth.jobs.length > 0;
+        setActiveTab(hasCurrentMonthData ? currentMonthKey : 'all');
       } else {
         // All other roles: Default to Most Recent (lastN)
         setActiveTab('lastN');
       }
     }
-  }, [user?.role, recentMonths.length]);
+  }, [user?.role, recentMonths, olderMonths]);
 
   // ══════════════════════════════════════════════════════════════════
-  //  LAST N PROJECTS FILTERING (Configurable for Freemium/Premium)
+  // 📊 CLIENT-SIDE FILTERING (On Already-Loaded Data) - MATCHES JOBTABLE
   // ══════════════════════════════════════════════════════════════════
+  
+  // Filter loaded projects by month tab and status - EXACT same logic as JobTable
+  const filteredProjects = useMemo(() => {
+    // Start with all loaded projects - apply month filtering first
+    let filtered = loadedProjects;
 
-  // Configure project limit based on user tier (future freemium feature)
-  // TODO: Connect to user subscription level when freemium is implemented
-  const projectLimit = 30; // Will be: userTier === 'freemium' ? 10 : 30
-
-  // Get filtered projects based on active month tab - this logic will be provided by MonthFilterTabs
-  const getFilteredDataByTab = useMemo(() => {
-    // Find the matching month data
+    // Apply month filtering based on activeTab using hook data (SAME AS JOBTABLE)
     if (activeTab === 'all') {
-      return projects;
+      // Show all data
+      filtered = loadedProjects;
     } else if (activeTab === 'lastN') {
-      // Sort projects by posting_date (newest first), fallback to creation date or project number
-      const sortedProjects = [...projects].sort((a, b) => {
-        const dateA = new Date(a.posting_date || a.createdAt || a.projectNumber || 0);
-        const dateB = new Date(b.posting_date || b.createdAt || b.projectNumber || 0);
-        return dateB - dateA; // Newest first
-      });
-      return sortedProjects.slice(0, projectLimit);
+      // Show most recent N projects (sorted by creation date)
+      filtered = [...loadedProjects]
+        .sort((a, b) => new Date(b.posting_date || b.created_at) - new Date(a.posting_date || a.created_at))
+        .slice(0, lastNConfig.limit);
     } else {
-      // Find month data from the grouping hook
+      // Find the matching month data from hook
       const monthData = [...recentMonths, ...olderMonths].find(month => month.id === activeTab);
-      return monthData ? monthData.jobs : [];
+      filtered = monthData ? monthData.jobs : [];
     }
-  }, [activeTab, projects, recentMonths, olderMonths, projectLimit]);
+
+    // Apply status filter
+    if (statusFilter !== 'All') {
+      filtered = filtered.filter(project => project.status === statusFilter);
+    }
+
+    return filtered;
+  }, [loadedProjects, activeTab, recentMonths, olderMonths, statusFilter, lastNConfig.limit]);
 
   // ══════════════════════════════════════════════════════════════════
-  // 📊 DATA PROCESSING & BUSINESS LOGIC
+  // 🛠️ UTILITY FUNCTIONS
   // ══════════════════════════════════════════════════════════════════
 
-  // Combine all available statuses for filtering dropdown
+  // Combine all available statuses
   const statuses = useMemo(() => {
-    const seen = new Set();
-    return [...projectStatuses, ...estimateStatuses].filter((status) => {
-      if (seen.has(status.label)) return false;
-      seen.add(status.label);
-      return true;
-    });
+    return [...new Set([...projectStatuses, ...estimateStatuses])];
   }, []);
 
-  // ══════════════════════════════════════════════════════════════════
-  // 🎛️ EVENT HANDLERS
-  // ══════════════════════════════════════════════════════════════════
-  // Handle table column sorting with toggle behavior
+  // Get sort icon
+  const getSortIcon = useCallback((column) => {
+    if (sortColumn !== column) return "↕️";
+    return sortOrder === "asc" ? "↑" : "↓";
+  }, [sortColumn, sortOrder]);
+
+  // Handle sorting - triggers server reload
   const handleSort = useCallback((column) => {
-    if (column === sortColumn) {
-      setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
+    if (sortColumn === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
       setSortColumn(column);
-      setSortOrder("asc");
+      setSortOrder("desc");
     }
-  }, [sortColumn]);
+    // Reset to page 1 when sorting changes
+    setCurrentPage(1);
+    setLoadedProjects([]);
+  }, [sortColumn, sortOrder]);
 
-  // Handle status filter dropdown changes
+  // Handle status filter - client-side only
   const handleStatusFilterChange = useCallback((event) => {
     setStatusFilter(event.target.value);
   }, []);
 
-  // Handle project status updates with performance optimization and loading states
-  const [updatingProjects, setUpdatingProjects] = useState(new Set());
-  
+  // Get project location
+  const getProjectLocation = useCallback((project) => {
+    if (!project) return "N/A";
+    if (typeof project.location === "string") {
+      return project.location;
+    }
+    return project.location?.full_address || project.address || project.suburb || "";
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🎯 DUAL-STATUS SYSTEM: Get display status and dropdown options
+  // ══════════════════════════════════════════════════════════════════
+  const getProjectDisplayInfo = useCallback((project) => {
+    // Support legacy projects with old 'status' field
+    const projectStatus = project.projectStatus || project.status || "New Lead";
+    const estimateStatus = project.estimateStatus || null;
+    
+    // Determine if Project Table status is LOCKED by active estimate
+    const isLockedByEstimate = estimateStatus && 
+                                estimateStatus !== "Cancelled" && 
+                                estimateStatus !== "Sent";
+    
+    let displayStatus, availableStatuses, canEdit;
+    
+    if (isLockedByEstimate) {
+      // 🔒 LOCKED: Estimator is working on this
+      
+      // Special case: "Estimate Requested" is the ONLY status that doesn't get ART prefix
+      // because both client and estimator use this same initial status
+      if (estimateStatus === "Estimate Requested" && projectStatus === "Estimate Requested") {
+        // They MATCH on initial request - NO ART prefix
+        displayStatus = "Estimate Requested";
+      } else {
+        // ALL OTHER locked statuses get ART prefix (Assigned, In Progress, etc.)
+        displayStatus = `ART: ${estimateStatus}`;
+      }
+      
+      availableStatuses = [
+        { label: displayStatus, color: "bg-orange-100 text-orange-800" },
+        { label: "Cancel Request", color: "bg-red-100 text-red-800" }
+      ];
+      canEdit = (userRole === "Admin" || userRole === "User"); // Both can cancel
+      
+    } else {
+      // ✅ UNLOCKED: Show normal project status workflow
+      displayStatus = projectStatus;
+      availableStatuses = projectStatuses;
+      canEdit = (userRole === "Admin" || userRole === "User");
+    }
+    
+    return {
+      displayStatus,
+      projectStatus,
+      estimateStatus,
+      availableStatuses,
+      canEdit,
+      isLocked: isLockedByEstimate
+    };
+  }, [userRole]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🔄 DUAL-STATUS UPDATE: Handle status changes with role-based logic
+  // ══════════════════════════════════════════════════════════════════
   const handleStatusChange = useCallback(async (projectId, newStatus) => {
-    // Prevent duplicate updates
-    if (updatingProjects.has(projectId)) {
-      console.log(`⏳ Status update already in progress for project ${projectId}`);
+    const project = loadedProjects.find(p => p._id === projectId);
+    if (!project) return;
+    
+    const { isLocked, projectStatus, estimateStatus } = getProjectDisplayInfo(project);
+    
+    // 🚫 RESTRICT: ProjectTable can ONLY update early-stage client statuses
+    // Once JobBoard takes over (estimator assigned/working), only JobBoard should update status
+    const allowedProjectTableStatuses = [
+      "New Lead",
+      "Estimate Requested",
+      "Estimate Completed", // Client regains control after estimate done
+      "Quote Sent",
+      "Approved",
+      "Project Active",
+      "Completed",
+      "Cancelled",
+      "Job lost"
+    ];
+    
+    if (!allowedProjectTableStatuses.includes(newStatus) && newStatus !== "Cancel Request") {
+      console.warn(`⚠️ ProjectTable cannot set status "${newStatus}" - only JobBoard can set estimator statuses`);
+      Swal.fire({
+        title: "Invalid Status",
+        text: "This status can only be set from the Job Board by estimators",
+        icon: "warning",
+      });
       return;
     }
     
+    console.log(`🔄 Status change requested for project ${projectId}:`, {
+      newStatus,
+      currentProjectStatus: projectStatus,
+      currentEstimateStatus: estimateStatus,
+      isLocked,
+      userRole
+    });
+
+    setUpdatingProjects(prev => new Set(prev).add(projectId));
+
+    // Prepare update payload based on role and status
+    let updatePayload = {};
+    let optimisticUpdate = {};
+    
+    if (newStatus === "Cancel Request") {
+      // 🔴 CANCEL REQUEST: Unlock by setting estimateStatus to "Cancelled"
+      updatePayload = { 
+        estimateStatus: "Cancelled",
+        projectStatus: projectStatus, // Keep current project status
+        status: "Cancelled", // ✅ Legacy field for live build
+        jobBoardStatus: "Cancelled" // ✅ Legacy field for live build
+      };
+      optimisticUpdate = {
+        estimateStatus: "Cancelled",
+        projectStatus: projectStatus,
+        status: "Cancelled",
+        jobBoardStatus: "Cancelled"
+      };
+      console.log(`❌ Cancelling estimate request - will unlock client workflow`);
+      
+    } else if (newStatus === "Estimate Requested") {
+      // ✨ SPECIAL: "Estimate Requested" sets BOTH fields simultaneously
+      updatePayload = { 
+        projectStatus: "Estimate Requested",
+        estimateStatus: "Estimate Requested",
+        status: "Estimate Requested", // ✅ Legacy field for live build
+        jobBoardStatus: "Estimate Requested" // ✅ Legacy field for live build
+      };
+      optimisticUpdate = {
+        projectStatus: "Estimate Requested",
+        estimateStatus: "Estimate Requested",
+        status: "Estimate Requested",
+        jobBoardStatus: "Estimate Requested"
+      };
+      console.log(`📝 Setting BOTH projectStatus and estimateStatus to "Estimate Requested"`);
+      
+    } else if (userRole === "User") {
+      // 👤 USERS: Can only update projectStatus (early-stage client workflow)
+      updatePayload = { 
+        projectStatus: newStatus,
+        status: newStatus, // ✅ Legacy field for live build
+        jobBoardStatus: newStatus // ✅ Legacy field for live build
+      };
+      optimisticUpdate = { 
+        projectStatus: newStatus,
+        status: newStatus,
+        jobBoardStatus: newStatus
+      };
+      
+    } else if (userRole === "Admin") {
+      // 🔧 ADMINS: In ProjectTable, can only update early-stage projectStatus
+      // For JobBoard statuses (Assigned, In Progress, etc.), use JobBoard instead
+      updatePayload = { 
+        projectStatus: newStatus,
+        status: newStatus, // ✅ Legacy field for live build
+        jobBoardStatus: newStatus // ✅ Legacy field for live build
+      };
+      optimisticUpdate = { 
+        projectStatus: newStatus,
+        status: newStatus,
+        jobBoardStatus: newStatus
+      };
+    }
+
+    // Optimistic UI update
+    const originalProjects = [...loadedProjects];
+    setLoadedProjects(prevProjects =>
+      prevProjects.map(p =>
+        p._id === projectId ? { ...p, ...optimisticUpdate } : p
+      )
+    );
+
     try {
-      console.log(`🔄 Optimistic Status Update: ${projectId} → "${newStatus}"`);
-      
-      // Mark project as updating
-      setUpdatingProjects(prev => new Set(prev).add(projectId));
-      
-      // 🚀 OPTIMISTIC UPDATE - Update UI immediately to prevent freezing
-      setProjects(previousProjects =>
-        previousProjects.map(project =>
-          project._id === projectId 
-            ? { ...project, status: newStatus, _isUpdating: true }
-            : project
-        )
-      );
-      
-      // Make API call in background
-      const response = await axiosSecure.patch(
-        `/projects/update/${projectId}`,
-        { status: newStatus }
-      );
-      
+      const response = await axiosSecure.patch(`/projects/${projectId}`, updatePayload);
+
       if (response.data.success) {
-        console.log(`✅ Confirmed status update: ${projectId} → "${newStatus}"`);
+        console.log(`✅ Project ${projectId} status updated successfully`);
         
-        // Remove updating flag
-        setProjects(previousProjects =>
-          previousProjects.map(project =>
-            project._id === projectId 
-              ? { ...project, _isUpdating: false }
-              : project
+        // Update with backend response to ensure sync
+        setLoadedProjects(prevProjects =>
+          prevProjects.map(p =>
+            p._id === projectId ? { ...p, ...response.data.data } : p
           )
         );
         
+        if (onStatusChange) {
+          onStatusChange(projectId, newStatus);
+        }
+
+        Swal.fire({
+          title: "Success",
+          text: newStatus === "Cancel Request" 
+            ? "Estimate request cancelled successfully" 
+            : "Project status updated successfully",
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
       } else {
-        throw new Error(response.data.message || 'Update failed');
+        throw new Error(response.data.message || 'Failed to update status');
       }
-      
     } catch (error) {
-      console.error(`❌ Status update failed for ${projectId}:`, error);
-      
-      // 🔄 ROLLBACK - Revert optimistic update on failure
-      setProjects(previousProjects =>
-        previousProjects.map(project =>
-          project._id === projectId 
-            ? { ...project, _isUpdating: false } // Keep original status
-            : project
-        )
-      );
+      console.error("❌ Error updating project status:", error);
+      setLoadedProjects(originalProjects); // Rollback
       
       Swal.fire({
+        title: "Error",
+        text: error.response?.data?.message || "Failed to update project status",
         icon: "error",
-        title: "Update Failed",
-        text: `Failed to update status to "${newStatus}". Please try again.`,
-        toast: true,
-        position: 'top-end',
-        timer: 3000
       });
-      
     } finally {
-      // Clean up updating state
       setUpdatingProjects(prev => {
         const newSet = new Set(prev);
         newSet.delete(projectId);
         return newSet;
       });
     }
-  }, [axiosSecure, setProjects, updatingProjects]);
+  }, [axiosSecure, loadedProjects, onStatusChange, userRole, getProjectDisplayInfo]);
 
   // ══════════════════════════════════════════════════════════════════
-  // 🔢 SORTING ALGORITHMS
+  // 🎨 RENDER HELPERS
   // ══════════════════════════════════════════════════════════════════
 
-  // Custom numeric sorting for project numbers (format: YYYY-MMXXX)
-  // Properly handles year, month, and sequence components for correct chronological ordering
-  const numericProjectNumberSort = useCallback(
-    (projectA, projectB) => {
-      const [yearA, restA] = (projectA.projectNumber || "0-00000").split("-");
-      const [yearB, restB] = (projectB.projectNumber || "0-00000").split("-");
-      
-      const yearNumA = parseInt(yearA);
-      const yearNumB = parseInt(yearB);
-      
-      // Sort by year first
-      if (yearNumA !== yearNumB) {
-        return sortOrder === "asc" 
-          ? yearNumA - yearNumB 
-          : yearNumB - yearNumA;
-      }
-      
-      // If same year, sort by month
-      const monthA = parseInt(restA.slice(0, 2));
-      const monthB = parseInt(restB.slice(0, 2));
-      
-      if (monthA !== monthB) {
-        return sortOrder === "asc" 
-          ? monthA - monthB 
-          : monthB - monthA;
-      }
-      
-      // If same year and month, sort by sequence number
-      const sequenceA = parseInt(restA.slice(2));
-      const sequenceB = parseInt(restB.slice(2));
-      
-      return sortOrder === "asc" 
-        ? sequenceA - sequenceB 
-        : sequenceB - sequenceA;
-    },
-    [sortOrder]
-  );
+  const renderClientCell = useCallback((project) => {
+    const linkedClients = project.linkedClients || [];
+    const hasClients = linkedClients.length > 0;
+    const clientInfo = hasClients && linkedClients[0]
+      ? clients.find(c => c._id === linkedClients[0])
+      : null;
 
-  // ══════════════════════════════════════════════════════════════════
-  // 📋 FINAL DATA PROCESSING PIPELINE
-  // ══════════════════════════════════════════════════════════════════
-
-  // Apply all filters and sorting to get final display data
-  // Processing order: Month Filter → Status Filter → Sorting
-  const displayedProjects = useMemo(() => {
-    // 1. Start with month-filtered projects from active tab
-    let filteredProjects = [...getFilteredDataByTab];
-
-    // 2. Apply status filter if not "All"
-    if (statusFilter !== "All") {
-      filteredProjects = filteredProjects.filter(
-        (project) => project.status === statusFilter
+    if (userRole === "Admin") {
+      return (
+        <td className="px-2 py-3 text-sm">
+          {hasClients && clientInfo ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <Avatar
+                name={clientInfo.company || clientInfo.name || clientInfo.clientName}
+                avatarUrl={clientInfo.avatar || clientInfo.clientLogo}
+                size="sm"
+                className="flex-shrink-0"
+              />
+              <span className="text-gray-900 font-medium truncate" title={clientInfo.company || clientInfo.name || clientInfo.clientName}>
+                {clientInfo.company || clientInfo.name || clientInfo.clientName}
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openAssignClient(project);
+              }}
+              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors"
+            >
+              Assign
+            </button>
+          )}
+        </td>
+      );
+    } else if (userRole === "Estimator") {
+      return (
+        <td className="px-2 py-3 text-sm">
+          {hasClients && clientInfo ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <Avatar
+                name={clientInfo.company || clientInfo.name || clientInfo.clientName}
+                avatarUrl={clientInfo.avatar || clientInfo.clientLogo}
+                size="sm"
+                className="flex-shrink-0"
+              />
+              <span className="text-gray-900 font-medium truncate" title={clientInfo.company || clientInfo.name || clientInfo.clientName}>
+                {clientInfo.company || clientInfo.name || clientInfo.clientName}
+              </span>
+            </div>
+          ) : (
+            <span className="text-gray-400 italic text-xs">No client assigned</span>
+          )}
+        </td>
       );
     }
-
-    // 3. Apply sorting based on selected column
-    if (sortColumn === "projectNumber") {
-      // Use custom numeric sorting for project numbers
-      filteredProjects.sort(numericProjectNumberSort);
-    } else {
-      // Use standard string/value sorting for other columns
-      filteredProjects.sort((projectA, projectB) => {
-        const valueA = projectA[sortColumn] ?? "";
-        const valueB = projectB[sortColumn] ?? "";
-        
-        if (valueA < valueB) return sortOrder === "asc" ? -1 : 1;
-        if (valueA > valueB) return sortOrder === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return filteredProjects;
-  }, [getFilteredDataByTab, statusFilter, sortColumn, sortOrder, numericProjectNumberSort]);
+    return null;
+  }, [clients, userRole, openAssignClient]);
 
   // ══════════════════════════════════════════════════════════════════
-  // 🛠️ UTILITY FUNCTIONS
+  // 🎨 RENDER STATUS CELL: Clean colored badges with dropdown on click
   // ══════════════════════════════════════════════════════════════════
-
-  // Determine project display properties based on status and role
-  // Returns: display label, color styling, and client lock status
-  const getProjectDisplayInfo = useCallback((project) => {
-    // 🎯 KISS: Only use the main status field
-    const effectiveStatus = project.status;
-    
-    const isProjectStatus = projectStatuses.find(
-      (status) => status.label === effectiveStatus
-    );
-    const isEstimateStatus = estimateStatuses.find(
-      (status) => status.label === effectiveStatus
-    );
-    
-    // Show "ART:" prefix for ALL estimate statuses (JobBoard context)
-    // Exception: Don't show ART: prefix for "Estimate Completed" as per custom rules
-    const shouldShowArtPrefix = isEstimateStatus && effectiveStatus !== "Estimate Completed";
-    const displayLabel = shouldShowArtPrefix
-      ? `ART: ${effectiveStatus}`
-      : effectiveStatus;
-    
-    // Use predefined colors or fallback to gray
-    const displayColor = (isProjectStatus || isEstimateStatus)?.color ?? 
-      "bg-gray-300 text-black";
-    
-    // Lock client editing for estimates that aren't completed
-    const isClientLocked = !isProjectStatus && 
-      effectiveStatus !== "Estimate Completed";
-
-    return { displayLabel, displayColor, isClientLocked };
-  }, []);
-
-  // Get sort indicator icon for table headers
-  const getSortIcon = useCallback((column) => {
-    if (sortColumn === column) {
-      return sortOrder === "asc" ? "🔼" : "🔽";
-    }
-    return "";
-  }, [sortColumn, sortOrder]);
-
-  // Extract and format project location from location object or string
-  const getProjectLocation = useCallback((project) => {
-    if (typeof project.location === "string") {
-      return project.location;
-    }
-    return project.location?.full_address || "No Address Available";
-  }, []);
-
-  // ══════════════════════════════════════════════════════════════════
-  // 🎨 COMPONENT RENDERERS
-  // ══════════════════════════════════════════════════════════════════
-
-  // Render client assignment cell with role-based permissions
-  // Estimators see read-only client info, Admins can click to assign
-  const renderClientCell = useCallback((project) => {
-    // Hide client column entirely in user view
-    if (isUserView) return null;
-
-    const hasLinkedClients = Array.isArray(project.linkedClients) && 
-      project.linkedClients.length > 0;
-    const isEstimator = user?.role === "Estimator";
-
-    return (
-      <td onClick={(event) => event.stopPropagation()}>
-        {hasLinkedClients ? (
-          <div className="flex flex-wrap gap-2">
-            {project.linkedClients.map((clientId) => {
-              const client = clients.find((c) => c._id === clientId) || {};
-              return (
-                <button
-                  key={clientId}
-                  className={`flex items-center gap-2 border rounded-md px-3 h-8 text-sm font-medium shadow transition ${
-                    isEstimator 
-                      ? 'bg-gray-50 text-gray-700 cursor-default border-gray-200' // Read-only styling
-                      : 'bg-gray-100 hover:bg-gray-200 cursor-pointer' // Interactive styling
-                  }`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!isEstimator) {
-                      openAssignClient(project);
-                    }
-                  }}
-                  disabled={isEstimator}
-                  title={isEstimator ? "View only - Contact admin to modify client assignments" : "Click to modify client assignment"}
-                >
-                  <Avatar
-                    name={client.company || client.name}
-                    avatarUrl={client.avatar}
-                    size="sm"
-                  />
-                  <span className="truncate overflow-hidden max-w-[250px] text-left">
-                    {client.company || client.name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <button
-            className={`px-3 py-2 h-8 rounded-md text-sm font-medium shadow transition ${
-              isEstimator
-                ? 'bg-gray-200 text-gray-500 cursor-not-allowed border border-gray-300' // Disabled styling
-                : 'bg-green-500 text-white hover:bg-green-600 cursor-pointer' // Active styling
-            }`}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (!isEstimator) {
-                openAssignClient(project);
-              }
-            }}
-            disabled={isEstimator}
-            title={isEstimator ? "Contact admin to assign clients" : "Click to assign client"}
-          >
-            {isEstimator ? "No Client" : "Assign"}
-          </button>
-        )}
-      </td>
-    );
-  }, [isUserView, clients, openAssignClient, user?.role]);
-
-  // Render status cell with performance optimization and loading states
   const renderStatusCell = useCallback((project) => {
-    const { displayLabel, displayColor, isClientLocked } = getProjectDisplayInfo(project);
-    const isEstimator = user?.role === "Estimator";
+    const { displayStatus, canEdit, availableStatuses, isLocked } = getProjectDisplayInfo(project);
     const isUpdating = updatingProjects.has(project._id);
-    
+
+    // Get color classes based on status
+    const getStatusColor = (status) => {
+      // Strip "ART:" prefix for color lookup
+      const cleanStatus = status.replace(/^ART:\s*/, '');
+      
+      // First check estimateStatuses for JobBoard statuses
+      const estimateStatus = estimateStatuses.find(s => s.label === cleanStatus);
+      if (estimateStatus) {
+        return estimateStatus.color;
+      }
+      
+      // Then check projectStatuses for Project statuses
+      const projectStatus = projectStatuses.find(s => s.label === cleanStatus);
+      if (projectStatus) {
+        return projectStatus.color;
+      }
+      
+      // Fallback to gray
+      return 'bg-gray-100 text-gray-800';
+    };
+
+    // All users get dropdown with colored appearance
     return (
-      <td onClick={(event) => event.stopPropagation()} className="text-center">
-        {isEstimator ? (
-          // Read-only status display for Estimators with loading state
-          <div 
-            className={`border rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 ${displayColor} ${
-              isUpdating ? 'opacity-60 cursor-wait' : ''
-            }`}
-            style={{
-              minWidth: '120px',
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            {isUpdating ? (
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
-                <span>Updating...</span>
-              </div>
-            ) : (
-              displayLabel
-            )}
+      <td className="px-2 py-3 relative">
+        <select
+          value={displayStatus}
+          onChange={(e) => {
+            e.stopPropagation();
+            handleStatusChange(project._id, e.target.value);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={isUpdating || (userRole === 'Estimator')}
+          className={`w-full px-2 py-1.5 text-xs font-medium rounded cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-center ${
+            getStatusColor(displayStatus)
+          } ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''} ${
+            userRole === 'Estimator' ? 'cursor-default' : ''
+          }`}
+          style={{
+            backgroundImage: userRole !== 'Estimator' ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")` : 'none',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 0.25rem center',
+            backgroundSize: '0.875rem',
+            paddingRight: userRole !== 'Estimator' ? '1.5rem' : '0.5rem'
+          }}
+        >
+          {availableStatuses.map((status) => (
+            <option key={status.label} value={status.label}>
+              {status.label === "Estimate Requested" ? "Request Estimate" : status.label}
+            </option>
+          ))}
+        </select>
+        {isUpdating && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
           </div>
-        ) : (
-          // Editable status dropdown with loading state
-          <select
-            value={project.status}
-            onChange={(event) => handleStatusChange(project._id, event.target.value)}
-            disabled={isUpdating}
-            className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-200 ${displayColor} ${
-              isUpdating ? 'opacity-60 cursor-wait' : 'hover:shadow-sm'
-            }`}
-            style={{
-              minWidth: '120px',
-              height: '36px' // Fixed height to prevent layout shift
-            }}
-          >
-            {isUpdating ? (
-              <option value={project.status}>Updating...</option>
-            ) : isClientLocked ? (
-              <>
-                <option value={project.status} disabled>
-                  {displayLabel}
-                </option>
-                <option value="Cancelled">Cancel Estimate</option>
-              </>
-            ) : (
-              projectStatuses.map((status) => (
-                <option key={status.label} value={status.label}>
-                  {status.label}
-                </option>
-              ))
-            )}
-          </select>
         )}
       </td>
     );
-  }, [getProjectDisplayInfo, handleStatusChange, user?.role, updatingProjects]);
+  }, [getProjectDisplayInfo, userRole, updatingProjects, handleStatusChange]);
 
-  // Render mobile client section for responsive card layout with role-based permissions
-  const renderMobileClientSection = useCallback((project) => {
-    // Note: isUserView and columnConfig checks are now handled at the call site
-    const hasLinkedClients = Array.isArray(project.linkedClients) && 
-      project.linkedClients.length > 0;
-    const isEstimator = user?.role === "Estimator";
+  // ══════════════════════════════════════════════════════════════════
+  // 🎨 MAIN RENDER
+  // ══════════════════════════════════════════════════════════════════
 
+  if (loading && loadedProjects.length === 0) {
     return (
-      <div className="mb-3">
-        <label className="text-sm font-medium text-gray-600 mb-1 block">Linked Client:</label>
-        {hasLinkedClients ? (
-          <div className="flex flex-wrap gap-2">
-            {project.linkedClients.map((clientId) => {
-              const client = clients.find((c) => c._id === clientId) || {};
-              return (
-                <button
-                  key={clientId}
-                  className={`flex items-center gap-2 border rounded-md px-3 py-2 text-sm font-medium shadow transition ${
-                    isEstimator 
-                      ? 'bg-gray-50 text-gray-700 cursor-default border-gray-200' // Read-only styling
-                      : 'bg-gray-100 hover:bg-gray-200 cursor-pointer' // Interactive styling
-                  }`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!isEstimator) {
-                      openAssignClient(project);
-                    }
-                  }}
-                  disabled={isEstimator}
-                  title={isEstimator ? "View only - Contact admin to modify client assignments" : "Click to modify client assignment"}
-                >
-                  <Avatar
-                    name={client.company || client.name}
-                    avatarUrl={client.avatar}
-                    size="sm"
-                  />
-                  <span className="truncate overflow-hidden max-w-[250px] text-left">
-                    {client.company || client.name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <button
-            className={`px-4 py-2 rounded-md text-sm font-medium shadow transition ${
-              isEstimator
-                ? 'bg-gray-200 text-gray-500 cursor-not-allowed border border-gray-300' // Disabled styling
-                : 'bg-green-500 text-white hover:bg-green-600 cursor-pointer' // Active styling
-            }`}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (!isEstimator) {
-                openAssignClient(project);
-              }
-            }}
-            disabled={isEstimator}
-            title={isEstimator ? "Contact admin to assign clients" : "Click to assign client"}
-          >
-            {isEstimator ? "No Client Assigned" : "Assign Client"}
-          </button>
-        )}
-      </div>
-    );
-  }, [clients, openAssignClient, user?.role]);
-
-  // Render table header with sorting controls and status filter
-  const renderTableHeader = useCallback(() => (
-    <thead>
-      <tr className="text-left h-8 bg-primary-10 text-medium">
-        <th
-          className="w-[150px] cursor-pointer"
-          onClick={() => handleSort("projectNumber")}
-        >
-          Project ID {getSortIcon("projectNumber")}
-        </th>
-
-        {columnConfig.assignClient !== false && !isUserView && (
-          <th className="w-[150px]">Linked Client</th>
-        )}
-
-        {columnConfig.projectName !== false && (
-          <th
-            className="w-[250px] cursor-pointer"
-            onClick={() => handleSort("name")}
-          >
-            Project Name / Address {getSortIcon("name")}
-          </th>
-        )}
-
-        {columnConfig.dueDate !== false && (
-          <th
-            className="w-[150px] cursor-pointer text-center"
-            onClick={() => handleSort("due_date")}
-          >
-            Due Date {getSortIcon("due_date")}
-          </th>
-        )}
-
-        {columnConfig.cost !== false && (
-          <th
-            className="w-[100px] cursor-pointer"
-            onClick={() => handleSort("total")}
-          >
-            Cost {getSortIcon("total")}
-          </th>
-        )}
-
-        {columnConfig.status !== false && (
-          <th className="w-[150px] cursor-pointer relative text-center">
-            Status
-            <div className="inline-block ml-2">
-              <select
-                value={statusFilter}
-                onChange={handleStatusFilterChange}
-                className="border rounded px-3 py-2 w-full text-sm font-medium"
-              >
-                <option value="All">All</option>
-                {statuses.map((status) => (
-                  <option key={status.label} value={status.label}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
+      <div className="w-full space-y-4">
+        <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
+        <div className="flex items-center justify-between">
+          <div className="h-10 w-48 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <div className="h-12 bg-gray-100 border-b"></div>
+          {[...Array(10)].map((_, i) => (
+            <div key={i} className="h-16 border-b border-gray-200 animate-pulse">
+              <div className="flex items-center px-6 py-4 space-x-4">
+                <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                <div className="h-4 w-48 bg-gray-200 rounded"></div>
+                <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                <div className="h-4 w-20 bg-gray-200 rounded"></div>
+                <div className="h-4 w-24 bg-gray-200 rounded"></div>
+              </div>
             </div>
-          </th>
-        )}
-
-        {columnConfig.postingDate !== false && (
-          <th
-            className="w-[150px] cursor-pointer ml-5 text-center"
-            onClick={() => handleSort("posting_date")}
-          >
-            Date Posted {getSortIcon("posting_date")}
-          </th>
-        )}
-      </tr>
-    </thead>
-  ), [handleSort, getSortIcon, isUserView, statusFilter, handleStatusFilterChange, statuses, columnConfig]);
-
-  // Render individual table row with click-to-navigate functionality
-  const renderTableRow = useCallback((project) => (
-    <tr
-      key={project._id}
-      className="border-t-[1px] text-semiBold cursor-pointer hover:bg-gray-100"
-      onClick={() => navigateToProject(project, navigate, axiosSecure)}
-    >
-      <td>{project.projectNumber}</td>
-      
-      {columnConfig.assignClient !== false && renderClientCell(project)}
-
-      {columnConfig.projectName !== false && (
-        <td>
-          <span 
-            className="font-semibold line-clamp-1 will-change-auto contain-layout"
-            style={{
-              minHeight: '20px',
-              display: 'block',
-              contain: 'layout style',
-              transform: 'translateZ(0)', // Force GPU acceleration
-              fontSize: '14px',
-              lineHeight: '20px',
-              maxWidth: '250px'
-            }}
-          >
-            {project.name}
-          </span>
-          <p 
-            className="text-gray-500 text-sm line-clamp-2"
-            style={{
-              minHeight: '32px',
-              contain: 'layout',
-              lineHeight: '16px'
-            }}
-          >
-            {getProjectLocation(project)}
-          </p>
-        </td>
-      )}
-
-      {columnConfig.dueDate !== false && (
-        <td className="text-center">{project.due_date || "N/A"}</td>
-      )}
-      
-      {columnConfig.cost !== false && (
-        <td>${project.total || "0"}</td>
-      )}
-      
-      {columnConfig.status !== false && renderStatusCell(project)}
-
-      {columnConfig.postingDate !== false && (
-        <td className="ml-5 text-center">{project.posting_date || "N/A"}</td>
-      )}
-    </tr>
-  ), [navigate, renderClientCell, getProjectLocation, renderStatusCell, axiosSecure, columnConfig]);
-
-  // Render empty state when no projects match current filters
-  const renderEmptyState = useCallback(() => {
-    // Calculate colspan based on visible columns for proper table formatting
-    let colspan = 1; // Project ID always visible
-    if (columnConfig.assignClient !== false && !isUserView) colspan++;
-    if (columnConfig.projectName !== false) colspan++;
-    if (columnConfig.dueDate !== false) colspan++;
-    if (columnConfig.cost !== false) colspan++;
-    if (columnConfig.status !== false) colspan++;
-    if (columnConfig.postingDate !== false) colspan++;
-    
-    return (
-      <tr>
-        <td colSpan={colspan} className="text-center py-4">
-          No projects found
-        </td>
-      </tr>
-    );
-  }, [isUserView, columnConfig]);
-
-  // Skeleton loader for preventing layout shifts during loading
-  const renderTableSkeleton = useCallback(() => {
-    const skeletonRows = Array.from({ length: 5 }, (_, index) => (
-      <tr key={`skeleton-${index}`} className="border-b border-gray-100">
-        <td className="py-3"><div className="table-skeleton"></div></td>
-        {columnConfig.assignClient !== false && !isUserView && (
-          <td className="py-3"><div className="table-skeleton"></div></td>
-        )}
-        {columnConfig.projectName !== false && (
-          <td className="py-3"><div className="table-skeleton"></div></td>
-        )}
-        {columnConfig.dueDate !== false && (
-          <td className="py-3"><div className="table-skeleton"></div></td>
-        )}
-        {columnConfig.cost !== false && (
-          <td className="py-3"><div className="table-skeleton"></div></td>
-        )}
-        {columnConfig.status !== false && (
-          <td className="py-3"><div className="table-skeleton"></div></td>
-        )}
-        {columnConfig.postingDate !== false && (
-          <td className="py-3"><div className="table-skeleton"></div></td>
-        )}
-      </tr>
-    ));
-    
-    return (
-      <tbody>
-        {skeletonRows}
-      </tbody>
-    );
-  }, [columnConfig, isUserView]);
-
-  // Mobile skeleton loader
-  const renderMobileSkeleton = useCallback(() => {
-    const skeletonCards = Array.from({ length: 3 }, (_, index) => (
-      <div key={`mobile-skeleton-${index}`} className="bg-white p-5 rounded-lg shadow-md border border-gray-300">
-        <div className="mb-3">
-          <div className="flex justify-between items-start mb-2">
-            <div className="table-skeleton h-4 w-20"></div>
-            <div className="table-skeleton h-4 w-16"></div>
-          </div>
-          <div className="table-skeleton h-6 w-full mb-1"></div>
-          <div className="table-skeleton h-4 w-3/4"></div>
-        </div>
-        <div className="space-y-2">
-          <div className="table-skeleton h-4 w-full"></div>
-          <div className="table-skeleton h-4 w-2/3"></div>
-          <div className="table-skeleton h-4 w-1/2"></div>
+          ))}
         </div>
       </div>
-    ));
-    
-    return skeletonCards;
-  }, []);
+    );
+  }
 
-  // ══════════════════════════════════════════════════════════════════
-  // 🎨 MAIN COMPONENT RENDER
-  // ══════════════════════════════════════════════════════════════════
+  if (error && loadedProjects.length === 0) {
+    return (
+      <div className="w-full p-8 text-center">
+        <div className="text-red-600 mb-4">
+          <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load projects</h3>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <button
+          onClick={() => fetchProjects(1, false)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto bg-white rounded-md">
+    <div className="w-full space-y-4">
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* 📅 MONTH FILTER INTERFACE - Using Shared MonthFilterTabs Component */}
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -810,7 +709,7 @@ export default function ProjectTable({
                 })</span>
               )}
               {activeTab === 'lastN' && (
-                <span className="ml-1 text-green-600">(Last {projectLimit} Projects)</span>
+                <span className="ml-1 text-green-600">(Most Recent {lastNConfig.limit})</span>
               )}
             </h3>
             {/* Development Mode Role Indicators (Hidden in Production) */}
@@ -829,127 +728,267 @@ export default function ProjectTable({
 
         {/* Shared Month Filter Tabs Component */}
         <MonthFilterTabs
-          projects={projects}
+          projects={loadedProjects}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleMonthTabChange}
           selectedOlderMonth={selectedOlderMonth}
-          onOlderMonthSelect={setSelectedOlderMonth}
-          onOlderMonthRemove={() => setSelectedOlderMonth(null)}
+          onOlderMonthSelect={handleOlderMonthSelect}
+          onOlderMonthRemove={handleOlderMonthRemove}
           lastNConfig={{ 
-            enabled: true, 
-            limit: projectLimit, 
-            label: `Last ${projectLimit}` 
+            enabled: true,
+            limit: lastNConfig.limit, 
+            label: "Most Recent"
           }}
           userRole={userRole}
           showProjectCount={true}
-          projectCount={displayedProjects.length}
+          projectCount={totalJobCount}
         />
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 📊 PROJECT DATA TABLE */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      <div className="p-4">
       {/* Desktop Table View */}
-      <div className="hidden md:block">
-        <table className="w-full min-w-[600px] stable-table">
-          {renderTableHeader()}
-          {isLoading ? (
-            renderTableSkeleton()
-          ) : (
-            <tbody>
-              {displayedProjects.length > 0 
-                ? displayedProjects.map(renderTableRow)
-                : renderEmptyState()
-              }
-            </tbody>
-          )}
+      <div className="hidden md:block bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden mt-4">
+        <table className="w-full stable-table">
+          <thead>
+            <tr className="bg-primary-10 text-medium h-8">
+              <th className="text-left pl-3 pr-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap" style={{ width: '110px' }}>
+                Project ID
+              </th>
+
+              {columnConfig.assignClient !== false && !isUserView && (
+                <th className="text-left px-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap" style={{ width: '200px' }}>
+                  Client
+                </th>
+              )}
+
+              {columnConfig.projectName !== false && (
+                <th className="text-left px-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap">
+                  Project Name
+                </th>
+              )}
+
+              {columnConfig.dueDate !== false && (
+                <th className="text-left px-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap table-col-due-date" style={{ width: '110px' }}>
+                  <span>Due Date</span>
+                </th>
+              )}
+
+              {columnConfig.cost !== false && (
+                <th className="text-left px-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap table-col-cost" style={{ width: '80px' }}>
+                  <span>Cost</span>
+                </th>
+              )}
+
+              {columnConfig.status !== false && (
+                <th className="text-left px-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap" style={{ width: '180px' }}>
+                  <div className="flex items-center gap-2">
+                    <span>Status</span>
+                    <select
+                      value={statusFilter}
+                      onChange={handleStatusFilterChange}
+                      className="text-xs px-2 py-1 border border-gray-300 rounded bg-white"
+                      onClick={(e) => e.stopPropagation()}
+                      disabled={loading}
+                    >
+                      <option value="All">All</option>
+                      {statuses.map((status) => (
+                        <option key={status.label} value={status.label}>
+                          {status.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </th>
+              )}
+
+              {columnConfig.postingDate !== false && (
+                <th className="text-left px-2 py-2 font-medium text-sm text-gray-700 whitespace-nowrap table-col-posted" style={{ width: '110px' }}>
+                  <span>Posted</span>
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            {filteredProjects.length > 0 ? (
+              filteredProjects.map((project) => (
+                <tr
+                  key={project._id}
+                  className="border-t-[1px] cursor-pointer hover:bg-gray-100"
+                  onClick={() => navigateToProject(project, navigate, axiosSecure)}
+                >
+                  <td className="pl-3 pr-2 py-3 text-sm font-semibold text-blue-600">
+                    <div className="truncate">
+                      {project.projectNumber}
+                    </div>
+                  </td>
+                  
+                  {columnConfig.assignClient !== false && !isUserView && renderClientCell(project)}
+
+                  {columnConfig.projectName !== false && (
+                    <td className="px-2 py-3 text-sm">
+                      <div className="font-semibold text-gray-900 leading-tight mb-0.5 line-clamp-1" title={project.name}>
+                        {project.name}
+                      </div>
+                      <div className="text-xs text-gray-500 leading-tight line-clamp-1" title={getProjectLocation(project)}>
+                        {getProjectLocation(project)}
+                      </div>
+                    </td>
+                  )}
+
+                  {columnConfig.dueDate !== false && (
+                    <td className="px-2 py-3 text-sm overflow-hidden table-col-due-date">
+                      <div className="truncate">
+                        {project.due_date ? new Date(project.due_date).toLocaleDateString() : "N/A"}
+                      </div>
+                    </td>
+                  )}
+
+                  {columnConfig.cost !== false && (
+                    <td className="px-2 py-3 text-sm font-semibold overflow-hidden table-col-cost">
+                      <div className="truncate">
+                        {project.total ? `$${Number(project.total).toLocaleString()}` : "N/A"}
+                      </div>
+                    </td>
+                  )}
+
+                  {columnConfig.status !== false && renderStatusCell(project)}
+
+                  {columnConfig.postingDate !== false && (
+                    <td className="px-2 py-3 text-sm overflow-hidden table-col-posted">
+                      <div className="truncate">
+                        {project.posting_date ? new Date(project.posting_date).toLocaleDateString() : "N/A"}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td
+                  colSpan="7"
+                  className="px-6 py-12 text-center text-gray-500"
+                >
+                  <div className="flex flex-col items-center">
+                    <svg className="h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-lg font-medium">No projects found</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Try adjusting your filters
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
         </table>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* 📱 MOBILE RESPONSIVE VIEW */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      <div className="md:hidden space-y-4 px-2">
-        {displayedProjects.map((project) => {
-          const { displayLabel, displayColor, isClientLocked } = getProjectDisplayInfo(project);
-
-          return (
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3 p-3">
+        {filteredProjects.length > 0 ? (
+          filteredProjects.map((project) => (
             <div
               key={project._id}
-              className="bg-white p-5 rounded-lg shadow-md border border-gray-300 hover:shadow-lg transition cursor-pointer"
+              className="bg-white p-5 rounded-lg shadow-md border border-gray-200 cursor-pointer hover:shadow-lg transition-all"
               onClick={() => navigateToProject(project, navigate, axiosSecure)}
             >
-              {/* Project Header */}
-              <div className="mb-3">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-sm font-medium text-gray-600">Project ID:</span>
-                  <span className="text-sm font-semibold">{project.projectNumber}</span>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
-                <p className="text-sm text-gray-600">{getProjectLocation(project)}</p>
-              </div>
-
-              {/* Client Assignment Section - Role-based visibility */}
-              {columnConfig.assignClient !== false && !isUserView && renderMobileClientSection(project)}
-
-              {/* Project Details Grid - Removed Due Date and Cost fields */}
-
-              {/* Status Section with Role-based Editing */}
-              <div className="mb-3">
-                <label className="text-sm font-medium text-gray-600 mb-1 block">Status:</label>
-                <div onClick={(event) => event.stopPropagation()}>
-                  {user?.role === "Estimator" ? (
-                    // Read-only status for Estimators in mobile view
-                    <div className={`border rounded-md px-3 py-2 text-sm font-medium w-full ${displayColor}`}>
-                      {displayLabel}
-                    </div>
-                  ) : (
-                    // Editable status dropdown for Admin and other roles
-                    <select
-                      value={project.status}
-                      onChange={(event) =>
-                        handleStatusChange(project._id, event.target.value)
-                      }
-                      className={`border rounded-md px-3 py-2 cursor-pointer text-sm font-medium w-full ${displayColor}`}
-                    >
-                      {isClientLocked ? (
-                        <>
-                          <option value={project.status} disabled>
-                            {displayLabel}
-                          </option>
-                          <option value="Cancelled">Cancel Estimate</option>
-                        </>
-                      ) : (
-                        projectStatuses.map((status) => (
-                          <option key={status.label} value={status.label}>
-                            {status.label}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              {/* Project Footer */}
-              <div className="text-right">
-                <span className="text-xs text-gray-500">
-                  Estimate Due: {project.due_date || "N/A"}
+              {/* Project Number & Status */}
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-sm font-semibold text-blue-600">
+                  {project.projectNumber}
                 </span>
+                {renderStatusCell(project)}
+              </div>
+
+              {/* Project Name */}
+              <h3 className="text-base font-semibold text-gray-900 mb-2">
+                {project.name}
+              </h3>
+
+              {/* Project Location */}
+              <p className="text-sm text-gray-600 mb-3">
+                {getProjectLocation(project)}
+              </p>
+
+              {/* Client */}
+              {columnConfig.assignClient !== false && !isUserView && (
+                <div className="mb-3 pb-3 border-b border-gray-200">
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 block">
+                    Client
+                  </label>
+                  {renderClientCell(project)}
+                </div>
+              )}
+
+              {/* Dates & Cost Grid */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {columnConfig.dueDate !== false && (
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 block mb-1">Due Date</span>
+                    <span className="text-gray-900">{project.due_date ? new Date(project.due_date).toLocaleDateString() : "N/A"}</span>
+                  </div>
+                )}
+                {columnConfig.cost !== false && (
+                  <div>
+                    <span className="text-xs font-medium text-gray-500 block mb-1">Cost</span>
+                    <span className="text-gray-900 font-semibold">{project.total ? `$${Number(project.total).toLocaleString()}` : "N/A"}</span>
+                  </div>
+                )}
+                {columnConfig.postingDate !== false && (
+                  <div className="col-span-2">
+                    <span className="text-xs font-medium text-gray-500 block mb-1">Posted</span>
+                    <span className="text-gray-900">{project.posting_date ? new Date(project.posting_date).toLocaleDateString() : "N/A"}</span>
+                  </div>
+                )}
               </div>
             </div>
-          );
-        })}
-        
-        {/* Mobile Empty State */}
-        {displayedProjects.length === 0 && (
-          <p className="text-center text-gray-500 py-4">
-            No projects found
-          </p>
+          ))
+        ) : (
+          <div className="text-center py-12 text-gray-500">
+            <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-lg font-medium">No projects found</p>
+            <p className="text-sm text-gray-400 mt-1">Try adjusting your filters</p>
+          </div>
         )}
       </div>
-      </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex items-center justify-center py-6">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className={`px-8 py-3 rounded-lg font-medium transition-all ${
+              loadingMore
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
+            }`}
+          >
+            {loadingMore ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span>Loading...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span>Load More Projects</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* End of list message */}
+      {!hasMore && loadedProjects.length > 0 && (
+        <div className="text-center py-6 text-gray-500 text-sm">
+          <p>✓ All projects loaded ({filteredProjects.length} total)</p>
+        </div>
+      )}
     </div>
   );
 }

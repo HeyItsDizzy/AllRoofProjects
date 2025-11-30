@@ -12,6 +12,7 @@ import ProjectTable from "../components/ProjectTable";
 import { projectStatuses } from "@/shared/projectStatuses";
 import { AuthContext } from "../auth/AuthProvider";
 import { subscribeToProjectDataUpdates } from "@/utils/ProjectDataSync";
+import "../styles/cls-fix.css";
 
 const UnifiedProjectsView = () => {
   // Get user context for role-based functionality
@@ -188,22 +189,21 @@ const UnifiedProjectsView = () => {
     }
   }, [axiosSecure, userRole]);
 
-  // Fetch projects
+  // Fetch projects - DISABLED: ProjectTable now handles its own data via usePaginatedProjects
   useEffect(() => {
-    // Initial fetch
-    fetchProjects();
+    // Only fetch clients and users for modals, ProjectTable handles project data
+    // fetchProjects(); // Commented out - ProjectTable uses server-side pagination
     
-    // Set up polling to refresh data every 30 seconds to sync with JobBoard changes
-    const pollInterval = setInterval(() => {
-      console.log("🔄 Refreshing UnifiedProjects data to sync with JobBoard...");
-      fetchProjects();
-    }, 30000); // 30 seconds
+    // Remove polling since ProjectTable handles its own data refresh
+    // const pollInterval = setInterval(() => {
+    //   console.log("🔄 Refreshing UnifiedProjects data to sync with JobBoard...");
+    //   fetchProjects();
+    // }, 30000);
     
-    // Cleanup interval on unmount
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [fetchProjects]);
+    // return () => {
+    //   clearInterval(pollInterval);
+    // };
+  }, []);
   
   // Fetch clients for both Admin (editing) and Estimator (viewing)
   useEffect(() => {
@@ -219,20 +219,20 @@ const UnifiedProjectsView = () => {
     }
   }, [fetchUsers, userRole]);
 
-  // 🔄 Listen for project data updates from other components (e.g., JobBoard)
+  // 🔄 Project data updates - DISABLED: ProjectTable handles its own updates
   useEffect(() => {
-    const unsubscribe = subscribeToProjectDataUpdates((updateEvent) => {
-      console.log('🔄 UnifiedProjectsView received data update notification:', updateEvent);
-      
-      // Only refresh if the update is from a different component
-      if (updateEvent.source !== 'UnifiedProjectsView') {
-        console.log('📋 Refreshing UnifiedProjectsView data due to external update...');
-        fetchProjects();
-      }
-    });
-
-    return unsubscribe; // Cleanup listener on unmount
-  }, [fetchProjects]);
+    // Remove subscription since ProjectTable handles its own real-time updates
+    // const unsubscribe = subscribeToProjectDataUpdates((updateEvent) => {
+    //   console.log('🔄 UnifiedProjectsView received data update notification:', updateEvent);
+    //   
+    //   if (updateEvent.source !== 'UnifiedProjectsView') {
+    //     console.log('📋 Refreshing UnifiedProjectsView data due to external update...');
+    //     fetchProjects();
+    //   }
+    // });
+    // 
+    // return unsubscribe;
+  }, []);
 
   // Fetch user details based on linked users with optimized error handling
   const fetchUserDetails = useCallback(async () => {
@@ -545,33 +545,6 @@ const UnifiedProjectsView = () => {
     ];
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-          <p className="text-gray-600">Loading projects...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Error: {error}</p>
-          <button
-            onClick={fetchProjects}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen">
       {/* Search & Filter Section */}
@@ -620,23 +593,16 @@ const UnifiedProjectsView = () => {
         </div>
       </div>
 
-      {/* Project Table - Match AllProjects structure exactly */}
+      {/* Project Table - Server-Side Pagination Mode */}
       <ProjectTable
-        projects={filteredProjects || []}
-        setProjects={setProjects}
         userData={userData}
         clients={clients}
         openAssignUser={openAssignUserModal}
         openAssignClient={openAssignClientModal}
-        handleSort={handleSort}
-        sortColumn={sortColumn}
-        sortOrder={sortOrder}
-        handleFilterChange={handleFilterChange}
-        filters={filters}
         onStatusChange={handleStatusChange}
         userRole={userRole}
         columnConfig={columnConfig}
-        loading={loading}
+        isUserView={userRole === "User"}
       />
 
       {/* Assign Client Modal - Match AllProjects structure */}

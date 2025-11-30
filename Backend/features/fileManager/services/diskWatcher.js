@@ -1,6 +1,7 @@
 // diskWatcher.js
 const chokidar = require("chokidar");
 const path = require("path");
+const fs = require("fs").promises;
 const { getProjectDiskPath, uploadsRoot: root } = require("./pathUtils");
 const { getProjectById } = require("./syncService");
 const debounce = require("lodash.debounce");
@@ -12,6 +13,50 @@ const listeners = new Map();
 const lastAccessTimestamps = new Map(); // projectId → Date.now()
 
 const ENABLE_WATCHERS = String(process.env.ENABLE_WATCHERS).toLowerCase() !== "false";
+
+// RecycleBin integration
+let recycleBinService = null;
+
+const initializeRecycleBin = (recycleBinInstance) => {
+  recycleBinService = recycleBinInstance;
+  console.log("📁 RecycleBin service integrated with diskWatcher");
+};
+
+// Helper function to determine project and client context from file path
+const getFileContext = async (filePath) => {
+  try {
+    // Extract project info from path structure
+    // Assuming path structure: /uploads/client_id/project_id/...
+    const relativePath = path.relative(root, filePath);
+    const pathParts = relativePath.split(path.sep);
+    
+    if (pathParts.length < 2) {
+      return null; // Not a valid project file structure
+    }
+    
+    // Try to parse client and project from path
+    // This might need adjustment based on your actual path structure
+    const potentialClientId = pathParts[0];
+    const potentialProjectId = pathParts[1];
+    
+    // Get project details to confirm validity
+    const project = await getProjectById(potentialProjectId).catch(() => null);
+    
+    if (!project) {
+      return null; // Invalid project
+    }
+    
+    return {
+      clientId: project.clientId || potentialClientId,
+      projectId: potentialProjectId,
+      project: project
+    };
+    
+  } catch (error) {
+    console.warn("Failed to determine file context:", error.message);
+    return null;
+  }
+};
 
 
 
@@ -68,7 +113,7 @@ const onDiskChange = async (projectId, callback) => {
     return;
   }
 
-  const handler = (filePath, actionType = "changed") => {
+  const handler = async (filePath, actionType = "changed") => {
     const now = new Date().toTimeString().split(" ")[0];
     lastAccessTimestamps.set(projectId, Date.now());
 
@@ -79,6 +124,47 @@ const onDiskChange = async (projectId, callback) => {
       `📣 ${now} - Disk change for project ${projectId} — file: ${strippedPath} | [${actionType}] | [${folderOrFileName}]`
     );
 
+    // Handle file deletions with RecycleBin
+    if ((actionType === "deleted" || actionType === "folder removed") && recycleBinService) {
+      try {
+        // Get file context for recycle bin
+        const fileContext = await getFileContext(filePath);
+        
+        if (fileContext) {
+          console.log(`🗑️ File deleted from disk, attempting to move to recycle bin: ${filePath}`);
+          
+          // Check if file actually exists (might have been moved to recycle bin already)
+          try {
+            await fs.access(filePath);
+            
+            // File still exists, so it was deleted by external means
+            // Move it to recycle bin
+            await recycleBinService.deleteFileToRecycleBin(filePath, {
+              clientId: fileContext.clientId,
+              projectId: fileContext.projectId,
+              userId: 'system', // System user for external deletions
+              deletedBy: 'system',
+              deletionReason: 'direct_delete',
+              deletionMethod: 'filesystem_watch'
+            });
+            
+            console.log(`✅ File moved to recycle bin: ${strippedPath}`);
+            
+          } catch (accessError) {
+            // File doesn't exist, it was already processed or deleted
+            console.log(`ℹ️ File already processed or permanently deleted: ${strippedPath}`);
+          }
+          
+        } else {
+          console.warn(`⚠️ Could not determine context for deleted file: ${filePath}`);
+        }
+        
+      } catch (error) {
+        console.error(`❌ Failed to process deletion for recycle bin: ${filePath}`, error.message);
+        // Continue with normal processing even if recycle bin fails
+      }
+    }
+
     // Compose event info for socket emit
     const eventInfo = {
       projectId,
@@ -88,6 +174,7 @@ const onDiskChange = async (projectId, callback) => {
       strippedPath,
       folderOrFileName,
       timestamp: now,
+      recycleBinProcessed: (actionType === "deleted" || actionType === "folder removed") && recycleBinService !== null
     };
     callback(eventInfo); // Notify frontend via socket
   };
@@ -135,4 +222,6 @@ module.exports = {
   watchProjectFolder,
   onDiskChange,
   stopWatchingProject,
+  initializeRecycleBin,
+  isWatching: (projectId) => watchers.has(projectId)
 };

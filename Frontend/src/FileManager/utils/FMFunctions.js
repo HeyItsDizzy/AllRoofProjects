@@ -3,7 +3,29 @@ import { message } from "antd";
 import mime from "mime";
 import Swal from '../../shared/swalConfig';
 import { createLoadingSpinner } from '../../shared/components/LoadingSpinner';
+import axios from 'axios';
 //import Swal from "sweetalert2";
+
+// Create axios instance for file management operations (dev frontend talks to dev backend)
+function createFileManagementAxios() {
+  // In development: use local backend, in production: use live backend
+  const isDevelopment = import.meta.env.MODE === 'development';
+  const baseURL = isDevelopment 
+    ? import.meta.env.VITE_API_BASE_URL          // Local backend for development
+    : import.meta.env.VITE_FILE_API_BASE_URL;    // Live backend for production
+
+  console.log("🔧 [FILE MANAGEMENT] Using", isDevelopment ? "LOCAL" : "LIVE", "backend:", baseURL);
+
+  const axiosInstance = axios.create({ baseURL });
+  
+  // Add auth token if available
+  const token = localStorage.getItem('accessToken');
+  if (token) {
+    axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  }
+
+  return axiosInstance;
+}
 
 
 
@@ -224,8 +246,13 @@ async function downloadFile({ axiosSecure, selectedPath, projectId, fileName, mo
     let baseURL;
     
     if (isDev) {
-      // Development: Use current origin (Vite will proxy /api)
-      baseURL = window.location.origin; // http://localhost:5173
+      // Development: Use FILE_API_BASE_URL to point to live server for files
+      const fileApiBaseUrl = import.meta.env.VITE_FILE_API_BASE_URL;
+      if (fileApiBaseUrl) {
+        baseURL = fileApiBaseUrl.replace('/api', ''); // Remove /api suffix if present
+      } else {
+        baseURL = window.location.origin; // Fallback to local
+      }
     } else {
       // Production: Use current origin (nginx proxies /api to backend)
       baseURL = window.location.origin; // https://projects.allrooftakeoffs.com.au
@@ -569,7 +596,10 @@ async function renameFile({ axiosSecure, projectId, filePath, existingFiles = []
 
 
   try {
-    await axiosSecure.put(
+    // Use file management axios instance like delete operation
+    const fileAxios = createFileManagementAxios();
+    
+    await fileAxios.put(
       `/files/${projectId}/files/${encodeURIComponent(normalized)}`,
       { newName }
     );

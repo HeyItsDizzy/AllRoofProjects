@@ -78,6 +78,39 @@ const ModalWrapper = ({
       sampleData.planType = formValues.planType;
     }
     
+    // JobDelayed specific fields
+    if (formValues.projectName) {
+      sampleData.projectName = formValues.projectName;
+    }
+    
+    if (formValues.delayReason) {
+      sampleData.delayReason = formValues.delayReason;
+    }
+    
+    if (formValues.delayMessage) {
+      sampleData.delayReason = formValues.delayMessage; // Use the editable message as delayReason for template
+    } else if (formValues.delayReason) {
+      sampleData.delayReason = formValues.delayReason; // Fallback to category selection
+    }
+    
+    if (formValues.newCompletionDate) {
+      // Format the date for the template preview
+      const completionDate = new Date(formValues.newCompletionDate);
+      const formattedDate = completionDate.toLocaleDateString('en-AU', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric' 
+      });
+      const dayOfWeek = completionDate.toLocaleDateString('en-AU', { weekday: 'long' });
+      
+      sampleData.newCompletionDate = formattedDate;
+      sampleData.dayOfWeek = dayOfWeek;
+    }
+    
+    if (formValues.optionalMessage) {
+      sampleData.optionalMessage = formValues.optionalMessage;
+    }
+    
     console.log('[ModalWrapper] Sample data for backend template:', sampleData);
     console.log('[ModalWrapper] ContactName and ContactEmail check:', {
       hasContactName: !!sampleData.contactName,

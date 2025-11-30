@@ -5,6 +5,7 @@ class SocketManager {
   constructor() {
     this.socket = null;
     this.subscribers = new Map(); // projectId -> callbacks
+    this.recycleBinSubscribers = new Set(); // global recycle bin callbacks
     this.isConnected = false;
     this.connectionPromise = null;
   }
@@ -83,6 +84,22 @@ class SocketManager {
         }
       });
 
+      socket.on('recycle_bin_event', (eventData) => {
+        console.log('♻️ SocketManager: Received recycle_bin_event:', eventData);
+        
+        // Notify all recycle bin subscribers
+        const recycleBinCallbacks = this.recycleBinSubscribers;
+        if (recycleBinCallbacks && recycleBinCallbacks.size > 0) {
+          recycleBinCallbacks.forEach(callback => {
+            try {
+              callback(eventData);
+            } catch (error) {
+              console.error('❌ SocketManager: Error in recycle bin callback:', error);
+            }
+          });
+        }
+      });
+
       this.socket = socket;
     });
 
@@ -101,7 +118,7 @@ class SocketManager {
     }
     
     this.subscribers.get(projectId).add(callback);
-    console.log(`👥 SocketManager: Added callback for project "${projectName}"`);
+    // console.log(`👥 SocketManager: Added callback for project "${projectName}"`);
     
     return () => this.unsubscribe(projectId, callback, projectName);
   }
@@ -129,12 +146,26 @@ class SocketManager {
       this.isConnected = false;
       this.connectionPromise = null;
       this.subscribers.clear();
+      this.recycleBinSubscribers.clear();
       console.log('🔌 SocketManager: Disconnected and cleaned up');
     }
   }
 
   getConnectionStatus() {
     return this.isConnected;
+  }
+
+  async subscribeToRecycleBin(callback) {
+    await this.connect(); // Ensure connection exists
+    this.recycleBinSubscribers.add(callback);
+    console.log('♻️ SocketManager: Subscribed to recycle bin events');
+    
+    return () => this.unsubscribeFromRecycleBin(callback);
+  }
+
+  unsubscribeFromRecycleBin(callback) {
+    this.recycleBinSubscribers.delete(callback);
+    console.log('♻️ SocketManager: Unsubscribed from recycle bin events');
   }
 }
 

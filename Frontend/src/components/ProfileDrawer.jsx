@@ -10,6 +10,8 @@ const ProfileDrawer = () => {
   const [open, setOpen] = useState(false);
   const { user, logout } = useContext(AuthContext);
   const isUser = user?.role === "User";
+  const isAdmin = user?.role === "Admin";
+  const isDev = import.meta.env.VITE_NODE_ENV === "development";
 
   const handleNavClick = (path) => {
     onClose();
@@ -157,6 +159,28 @@ const ProfileDrawer = () => {
             </button>
           </li>
         </ul>
+
+        {/* DEV SECTION - Only visible in development mode for admins */}
+        {isDev && isAdmin && (
+          <>
+            <hr className="my-4 border-gray-300" />
+            <div className="px-6">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                🔧 DEV
+              </h3>
+              <ul className="space-y-3 text-sm">
+                <li>
+                  <button
+                    onClick={() => handleNavClick("/project-selector")}
+                    className="block w-full text-left hover:underline text-secondary font-medium"
+                  >
+                    📊 Project Dashboard
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </>
+        )}
       </Drawer>
     </>
   );

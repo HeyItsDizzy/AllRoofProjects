@@ -1,6 +1,6 @@
 //AssignClient.jsx
 import { Button, Modal, Grid } from "antd";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import Swal from '@/shared/swalConfig';
 import Avatar from "@/shared/Avatar";
@@ -31,6 +31,7 @@ const AssignClient = ({ clients = [], projectId, project, closeModal, updateProj
   const [searchTerm, setSearchTerm] = useState("");
   const [multiAssignMode, setMultiAssignMode] = useState(false);
   const [linkedClients, setLinkedClients] = useState(project?.linkedClients || []);
+  const searchInputRef = useRef(null);
 
   const handleSearchChange = (e) => setSearchTerm(e.target.value);
 
@@ -108,6 +109,16 @@ const AssignClient = ({ clients = [], projectId, project, closeModal, updateProj
     };
   }, []);
 
+  // Auto-focus search input when modal opens
+  useEffect(() => {
+    if (searchInputRef.current) {
+      // Small delay to ensure modal is fully rendered
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, []);
+
 
   //AssignClient.jsx - Return Block
   return (
@@ -157,6 +168,7 @@ const AssignClient = ({ clients = [], projectId, project, closeModal, updateProj
       >
         <div className="my-4">
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search clients..."
             className="w-full p-2 mb-4 border rounded-md"

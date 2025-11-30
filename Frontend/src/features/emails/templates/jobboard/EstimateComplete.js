@@ -13,10 +13,11 @@
  * @param {string} data.projectViewUrl - Direct URL to view the project with read-only token
  * @param {string} data.optionalBody - Optional personalized message or notes (optional)
  * @param {string} data.memo - Optional memo field (optional)
+ * @param {string} data.textColor - Text color for memo content (optional, defaults to #333333)
  * @returns {string} - HTML content
  */
 const generateHTML = (data) => {
-  const { projectAddress, estimateDescription, projectNumber, contactName, projectViewUrl, optionalBody, memo } = data;
+  const { projectAddress, estimateDescription, projectNumber, contactName, projectViewUrl, optionalBody, memo, textColor = '#333333' } = data;
   
   return `
 <!DOCTYPE html>
@@ -76,8 +77,8 @@ const generateHTML = (data) => {
                 </tr>
                 ${memo ? `
                 <tr>
-                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding-bottom: 16px;">
-                    ${memo}
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: ${textColor}; padding-bottom: 16px;">
+                    ${memo.split('\n\n').map(paragraph => `<p style="margin: 0 0 16px 0; color: ${textColor};">${paragraph.replace(/\n/g, '<br>')}</p>`).join('')}
                   </td>
                 </tr>
                 ` : ''}
@@ -231,7 +232,8 @@ export const html = generateHTML({
   estimateDescription: '${estimateDescription}',
   projectViewUrl: '${projectViewUrl}',
   optionalBody: '${optionalBody}',
-  memo: '${memo}'
+  memo: '${memo}',
+  textColor: '${textColor}'
 });
 
 /**

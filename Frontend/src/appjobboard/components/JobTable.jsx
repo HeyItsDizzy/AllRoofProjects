@@ -17,9 +17,19 @@ import Avatar from '@/shared/Avatar';
 import { useMonthGrouping } from '@/appjobboard/hooks/useMonthGrouping';
 import useAxiosSecure from '@/hooks/AxiosSecure/useAxiosSecure';
 import { useAutoSave } from '@/appjobboard/hooks/useAutoSave';
-import MonthFilterTabs, { getFilteredDataByTab } from '@/shared/components/MonthFilterTabs';
+import MonthFilterTabs from '@/shared/components/MonthFilterTabs';
 import { Z_INDEX, COMPONENT_Z_INDEX } from '@/shared/styles/zIndexManager';
 import ZIndexDebugger from '@/shared/styles/ZIndexDebugger';
+import { 
+  OptimizedEditableCell, 
+  JobTableLCPCSS, 
+  useLCPMonitoring 
+} from '@/appjobboard/components/OptimizedInlineEditing';
+import { 
+  useCriticalResourcePreloader, 
+  useLazyResourceLoader, 
+  usePerformanceBudget 
+} from '@/utils/performanceOptimizations';
 
 // Custom styled switch with your primary green color
 const GreenSwitch = styled(Switch)(({ theme }) => ({
@@ -82,9 +92,30 @@ export default function JobTable({
   // Zoom integration
   zoomLevel = 100,
   onZoomChange = () => {},
+  // Admin analytics callback
+  onFilteredRowsChange = () => {},
 }) {
   const { user } = useContext(AuthContext);
   const axiosSecure = useAxiosSecure();
+  
+  // ══════════════════════════════════════════════════════════════════
+  // 🎯 PERFORMANCE MONITORING & LCP OPTIMIZATION
+  // ══════════════════════════════════════════════════════════════════
+  
+  const lcpValue = useLCPMonitoring();
+  useCriticalResourcePreloader();
+  useLazyResourceLoader();
+  usePerformanceBudget();
+  
+  // Log LCP improvements in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && lcpValue) {
+      console.log(`🚀 JobTable LCP: ${lcpValue.toFixed(2)}ms`);
+      if (lcpValue < 2500) {
+        console.log('✅ LCP Improved! Target <2.5s achieved');
+      }
+    }
+  }, [lcpValue]);
   
   // ══════════════════════════════════════════════════════════════════
   // 🎯 AUTO-SAVE FUNCTIONALITY
@@ -110,6 +141,7 @@ export default function JobTable({
   } = useAutoSave(async (projectId, changes) => {
     try {
       console.log(`🚀 Sending update to backend for project ${projectId}:`, changes);
+      // Use /update/:id endpoint for full project updates (supports all fields)
       await axiosSecure.patch(`/projects/update/${projectId}`, changes);
       console.log(`✅ Successfully updated project ${projectId} in database`);
       return true;
@@ -251,6 +283,28 @@ export default function JobTable({
     totalJobCount 
   } = useMonthGrouping(data);
 
+  // Configuration for Last N Projects tab
+  const lastNConfig = useMemo(() => ({
+    enabled: true,
+    limit: 30,
+    label: "Most Recent"
+  }), []);
+
+  // Month tab change handler 
+  const handleMonthTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+  }, []);
+
+  // Handle older month selection from dropdown
+  const handleOlderMonthSelect = useCallback((monthId) => {
+    setSelectedOlderMonth(monthId);
+  }, []);
+
+  // Handle removing selected older month tab
+  const handleOlderMonthRemove = useCallback(() => {
+    setSelectedOlderMonth(null);
+  }, []);
+
   // Set default tab based on user role
   useEffect(() => {
     if (user?.role) {
@@ -258,21 +312,17 @@ export default function JobTable({
       
       if (isAdmin) {
         // Admin: Default to current month (if available), otherwise 'all'
-        if (recentMonths.length > 0) {
-          const currentDate = new Date();
-          const currentMonthKey = `${String(currentDate.getFullYear()).slice(-2)}-${String(currentDate.getMonth() + 1).padStart(2, '0')} ${currentDate.toLocaleDateString('en-US', { month: 'short' })}`;
-          const currentMonth = recentMonths.find(month => month.id === currentMonthKey);
-          setActiveTab(currentMonth ? currentMonth.id : 'all');
-        } else {
-          // No month data available, default to 'all' for admin
-          setActiveTab('all');
-        }
+        const currentDate = new Date();
+        const currentMonthKey = `${String(currentDate.getFullYear()).slice(-2)}-${String(currentDate.getMonth() + 1).padStart(2, '0')} ${currentDate.toLocaleDateString('en-US', { month: 'short' })}`;
+        const currentMonth = [...recentMonths, ...olderMonths].find(month => month.id === currentMonthKey);
+        const hasCurrentMonthData = currentMonth && currentMonth.jobs.length > 0;
+        setActiveTab(hasCurrentMonthData ? currentMonthKey : 'all');
       } else {
         // All other roles: Default to Most Recent (lastN)
         setActiveTab('lastN');
       }
     }
-  }, [user?.role, recentMonths.length]);
+  }, [user?.role, recentMonths, olderMonths]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -295,16 +345,24 @@ export default function JobTable({
     };
   }, [activeFilterColumn, filterStaged]);
 
-  // Get filtered data based on month tab and search - simplified since MonthFilterTabs handles month logic
+  // Get filtered data based on month tab and search - using hook data
   const filteredData = useMemo(() => {
-    // Start with all data - month filtering is handled by MonthFilterTabs component
+    // Start with all data - apply month filtering
     let filtered = data;
 
-    // Find the matching month data based on activeTab
-    if (activeTab !== 'all') {
-      // Find month data from the grouping hook
+    // Apply month filtering based on activeTab using hook data
+    if (activeTab === 'all') {
+      // Show all data
+      filtered = data;
+    } else if (activeTab === 'lastN') {
+      // Show most recent N projects (sorted by creation date)
+      filtered = [...data]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, lastNConfig.limit);
+    } else {
+      // Find the matching month data from hook
       const monthData = [...recentMonths, ...olderMonths].find(month => month.id === activeTab);
-      filtered = monthData ? monthData.jobs : data;
+      filtered = monthData ? monthData.jobs : [];
     }
 
     // Apply search filter
@@ -337,7 +395,7 @@ export default function JobTable({
     }
 
     return filtered;
-  }, [data, activeTab, recentMonths, olderMonths, debouncedSearchQuery]);
+  }, [data, activeTab, recentMonths, olderMonths, debouncedSearchQuery, lastNConfig.limit]);
 
   // ══════════════════════════════════════════════════════════════════
   // 🎛️ ACTION HANDLERS
@@ -507,12 +565,12 @@ export default function JobTable({
             onBlur();
           }
         }}
-        className="w-full px-2 py-1 border border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full px-2 py-1 border border-blue-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 input-optimized"
         autoFocus
       />
     ) : (
       <div
-        className="w-full px-2 py-1 cursor-pointer hover:bg-gray-50"
+        className="w-full px-2 py-1 cursor-pointer hover:bg-gray-50 editable-cell-optimized stable-table-cell"
         onClick={() => setIsEditing(true)}
       >
         {value || '—'}
@@ -675,6 +733,13 @@ export default function JobTable({
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
   });
+
+  // Notify parent of filtered rows for admin analytics
+  useEffect(() => {
+    const filteredRows = table.getFilteredRowModel().rows;
+    const filteredData = filteredRows.map(row => row.original);
+    onFilteredRowsChange(filteredData);
+  }, [table.getFilteredRowModel().rows, onFilteredRowsChange]);
 
   // Copy functionality for selected cells (must be after table creation)
   const handleCopy = useCallback((e) => {
@@ -987,20 +1052,17 @@ export default function JobTable({
         {/* ══════════════════════════════════════════════════════════════════ */}
         <div className="flex items-center justify-between relative">
           <MonthFilterTabs
-            projects={data}
+            projects={data} // Pass actual data for client-side mode
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleMonthTabChange}
             selectedOlderMonth={selectedOlderMonth}
-            onOlderMonthSelect={setSelectedOlderMonth}
-            onOlderMonthRemove={() => setSelectedOlderMonth(null)}
-            lastNConfig={{ 
-              enabled: true, 
-              limit: 30, 
-              label: "Most Recent" 
-            }}
-            userRole={user?.role}
+            onOlderMonthSelect={handleOlderMonthSelect}
+            onOlderMonthRemove={handleOlderMonthRemove}
+            lastNConfig={lastNConfig}
+            userRole={user?.role || 'User'}
             showProjectCount={true}
             projectCount={filteredData.length}
+            serverSideMode={false}
           />
           
           <div className="flex items-center space-x-3 px-4 py-2">
@@ -1064,7 +1126,8 @@ export default function JobTable({
             height: `${10000 / internalZoomLevel}%`
           }}
         >
-          <table className="border-collapse border border-gray-300 min-w-full">
+          <table className="border-collapse border border-gray-300 min-w-full job-table-optimized job-table-critical">
+            <JobTableLCPCSS />
             {/* Header with Beautiful Green Styling + Freeze Panes */}
             <thead>
               {table.getHeaderGroups().map(headerGroup => (

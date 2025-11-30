@@ -1,16 +1,17 @@
 /**
- * MONTH FILTER TABS COMPONENT - Reusable ✅
+ * MONTH FILTER TABS COMPONENT - Server-Side Pagination Compatible ✅
  * 
  * FEATURES:
  * ✅ Month-based filtering tabs (All, Older dropdown, Recent 3 months)
  * ✅ Optional "Last N Projects" tab (configurable)
+ * ✅ Server-side pagination compatible (uses optimized hook)
  * ✅ Year-based hierarchical grouping in "Older" dropdown
  * ✅ Auto-collapse year expansion behavior
  * ✅ Responsive design with scroll on mobile
  * ✅ Consistent styling across ProjectTable and JobTable
  * 
  * PROPS:
- * @param {Array} projects - Array of project/job objects
+ * @param {Array} projects - Project data for month grouping (can be empty for server-side)
  * @param {String} activeTab - Currently active tab ID
  * @param {Function} onTabChange - Callback when tab is clicked
  * @param {String|null} selectedOlderMonth - Selected older month ID
@@ -21,11 +22,14 @@
  * @param {Number} lastNConfig.limit - Number of projects for Last N (default: 30)
  * @param {String} lastNConfig.label - Custom label for Last N tab (default: "Most Recent")
  * @param {String} userRole - User role for default tab selection
+ * @param {Boolean} showProjectCount - Whether to show project count
+ * @param {Number} projectCount - Current project count from pagination
+ * @param {Boolean} serverSideMode - Whether to use server-side pagination mode (default: auto-detect)
  */
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useMonthGrouping } from '@/appjobboard/hooks/useMonthGrouping';
-import { COMPONENT_Z_INDEX } from '@/shared/styles/zIndexManager';
+import { useMonthGrouping } from '../../appjobboard/hooks/useMonthGrouping';
+import { COMPONENT_Z_INDEX } from '../styles/zIndexManager';
 
 export default function MonthFilterTabs({
   projects = [],
@@ -35,58 +39,104 @@ export default function MonthFilterTabs({
   onOlderMonthSelect = () => {},
   onOlderMonthRemove = () => {},
   lastNConfig = { enabled: false, limit: 30, label: "Most Recent" },
-  userRole = "User"
+  userRole = "User",
+  showProjectCount = false,
+  projectCount = 0,
+  serverSideMode = null // Auto-detect based on whether projects is empty
 }) {
   // ══════════════════════════════════════════════════════════════════
   // 🎯 DROPDOWN STATE MANAGEMENT
   // ══════════════════════════════════════════════════════════════════
   const [showOlderDropdown, setShowOlderDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
-  const [expandedYear, setExpandedYear] = useState(null); // null means current year expanded
+  const [expandedYear, setExpandedYear] = useState(null);
 
   // ══════════════════════════════════════════════════════════════════
-  // 🗓️ MONTH GROUPING LOGIC
+  // 🎯 MONTH DATA GENERATION - Optimized for Server-Side Pagination
   // ══════════════════════════════════════════════════════════════════
+
+  // Auto-detect server-side mode based on projects prop
+  const isServerSideMode = serverSideMode !== null ? serverSideMode : projects.length === 0;
+
+  // Use month grouping hook - optimized for different modes
   const { 
     allMonths, 
-    recentMonths, 
-    olderMonths, 
-    getMonthById, 
-    totalJobCount 
-  } = useMonthGrouping(projects);
+    recentMonths: hookRecentMonths, 
+    olderMonths: hookOlderMonths, 
+    getMonthById 
+  } = useMonthGrouping(isServerSideMode ? [] : projects);
 
-  // ══════════════════════════════════════════════════════════════════
-  // 📅 YEAR-BASED GROUPING FOR OLDER DROPDOWN
-  // ══════════════════════════════════════════════════════════════════
-  const olderMonthsByYear = useMemo(() => {
-    if (!olderMonths.length) return {};
+  // Generate static months for server-side mode (when projects is empty)
+  const staticMonthData = useMemo(() => {
+    if (!isServerSideMode) return null;
+
+    const currentDate = new Date();
+    const recentMonths = [];
     
+    // Generate recent 3 months
+    for (let i = 0; i < 3; i++) {
+      const date = new Date(currentDate);
+      date.setMonth(date.getMonth() - i);
+      
+      const shortYear = String(date.getFullYear()).slice(-2);
+      const monthNum = String(date.getMonth() + 1).padStart(2, '0');
+      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+      const monthId = `${shortYear}-${monthNum} ${monthName}`;
+      
+      recentMonths.push({
+        id: monthId,
+        label: monthId,
+        year: date.getFullYear(),
+        month: date.getMonth(),
+        count: 0, // Server-side mode doesn't show counts
+        jobs: []
+      });
+    }
+
+    // Generate older months (previous 24 months)
+    const olderMonths = [];
+    for (let i = 3; i < 27; i++) { // 3 to 26 = 24 older months
+      const date = new Date(currentDate);
+      date.setMonth(date.getMonth() - i);
+      
+      const shortYear = String(date.getFullYear()).slice(-2);
+      const monthNum = String(date.getMonth() + 1).padStart(2, '0');
+      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+      const monthId = `${shortYear}-${monthNum} ${monthName}`;
+      
+      olderMonths.push({
+        id: monthId,
+        label: monthId,
+        year: date.getFullYear(),
+        month: date.getMonth(),
+        count: 0,
+        jobs: []
+      });
+    }
+
+    return { recentMonths, olderMonths };
+  }, [isServerSideMode]);
+
+  // Use either hook data or static data based on mode
+  const recentMonths = isServerSideMode ? (staticMonthData?.recentMonths || []) : hookRecentMonths;
+  const olderMonths = isServerSideMode ? (staticMonthData?.olderMonths || []) : hookOlderMonths;
+
+  // Generate older months grouped by year for dropdown
+  const olderMonthsByYear = useMemo(() => {
     const groupedByYear = {};
     
-    // Use the year property from the useMonthGrouping hook data
     olderMonths.forEach(month => {
-      const year = month.year; // This comes directly from useMonthGrouping hook
-      
+      const year = month.year;
       if (!groupedByYear[year]) {
         groupedByYear[year] = [];
       }
       groupedByYear[year].push(month);
     });
     
-    // Sort years in descending order (newest first: 2025, 2024, 2023...)
-    const sortedYears = Object.keys(groupedByYear)
-      .map(Number)
-      .sort((a, b) => b - a); // b - a = descending (2025, 2024, 2023...)
-    
-    const result = {};
-    sortedYears.forEach(year => {
-      result[year] = groupedByYear[year];
-    });
-    
-    return result;
+    return groupedByYear;
   }, [olderMonths]);
 
-  // Get currently expanded year (defaults to current year, but only shows if it has older months)
+  // Get currently expanded year
   const currentYear = new Date().getFullYear();
   const getExpandedYear = () => {
     if (expandedYear !== null) return expandedYear;
@@ -97,24 +147,7 @@ export default function MonthFilterTabs({
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // 🔢 LAST N PROJECTS FILTERING (if enabled)
-  // ══════════════════════════════════════════════════════════════════
-  const lastNProjects = useMemo(() => {
-    if (!lastNConfig.enabled || !projects.length) return [];
-    
-    // Sort projects by posting_date (newest first), fallback to creation date or project number
-    const sortedProjects = [...projects].sort((a, b) => {
-      const dateA = new Date(a.posting_date || a.createdAt || a.projectNumber || 0);
-      const dateB = new Date(b.posting_date || b.createdAt || b.projectNumber || 0);
-      return dateB - dateA; // Newest first
-    });
-    
-    // Take first N projects (head operation)
-    return sortedProjects.slice(0, lastNConfig.limit);
-  }, [projects, lastNConfig]);
-
-  // ══════════════════════════════════════════════════════════════════
-  // 📊 TAB DATA GENERATION
+  // � TAB DATA GENERATION - STATIC (NO DATA DEPENDENCY)
   // ══════════════════════════════════════════════════════════════════
   const tabData = useMemo(() => {
     const tabs = [];
@@ -123,31 +156,49 @@ export default function MonthFilterTabs({
     tabs.push({
       id: 'all',
       label: 'All Projects',
-      count: projects.length,
-      jobs: projects
+      isAll: true,
+      count: isServerSideMode ? projectCount : (allMonths.reduce((sum, m) => sum + m.count, 0) || 0)
     });
 
-    // 2. Older dropdown tab - aggregates all months older than recent 3
-    // Now with year-based hierarchical grouping (only expanded year shows months)
-    const olderTotalCount = olderMonths.reduce((sum, month) => sum + month.count, 0);
+    // 2. Older dropdown tab - with total count of older months
     const expandedYearValue = getExpandedYear();
     const expandedYearMonths = olderMonthsByYear[expandedYearValue] || [];
+    const olderTotalCount = isServerSideMode ? 0 : olderMonths.reduce((sum, m) => sum + m.count, 0);
     
     tabs.push({
       id: 'older',
       label: 'Older',
-      count: olderTotalCount,
       isDropdown: true,
-      dropdownOptions: expandedYearMonths, // Only show months from expanded year
-      yearGroups: olderMonthsByYear, // Full year structure for dropdown rendering
+      dropdownOptions: expandedYearMonths,
+      yearGroups: olderMonthsByYear,
       expandedYear: expandedYearValue,
-      jobs: olderMonths.flatMap(month => month.jobs)
+      count: olderTotalCount
     });
 
-    // 3. Selected older month as separate tab (when user clicks from dropdown)
-    // This creates a temporary tab next to "Older" with close button
+    // 3. Recent 3 months in chronological order (oldest to newest: 2 months ago → last month → current month)
+    [...recentMonths].reverse().forEach(month => {
+      tabs.push({
+        ...month,
+        count: isServerSideMode ? 0 : (month.count || 0) // Keep 0 for server-side, will show if showProjectCount is true
+      });
+    });
+
+    // 4. Last N Projects tab - shows most recent N projects (if enabled)
+    if (lastNConfig.enabled) {
+      const lastNCount = isServerSideMode ? projectCount : Math.min(lastNConfig.limit, (allMonths.reduce((sum, m) => sum + m.count, 0) || 0));
+      tabs.push({
+        id: 'lastN',
+        label: lastNConfig.label,
+        isLastN: true,
+        limit: lastNConfig.limit,
+        count: lastNCount
+      });
+    }
+
+    // 5. Selected older month as separate tab (when user clicks from dropdown) - AFTER Most Recent
     if (selectedOlderMonth) {
-      const selectedMonth = getMonthById(selectedOlderMonth);
+      // Find the selected month in our hook data
+      const selectedMonth = [...recentMonths, ...olderMonths].find(month => month.id === selectedOlderMonth);
       if (selectedMonth) {
         tabs.push({
           ...selectedMonth,
@@ -156,26 +207,8 @@ export default function MonthFilterTabs({
       }
     }
 
-    // 4. Recent 3 months in chronological order (2 months ago → last month → current month)
-    // Reversed because useMonthGrouping returns newest first
-    const orderedRecentMonths = [...recentMonths].reverse(); // Reverse to get oldest to newest
-    orderedRecentMonths.forEach(month => {
-      tabs.push(month);
-    });
-
-    // 5. Last N Projects tab - shows most recent N projects (if enabled)
-    // Placed at the end for easy access to recent work across all months
-    if (lastNConfig.enabled) {
-      tabs.push({
-        id: 'lastN',
-        label: lastNConfig.label,
-        count: lastNProjects.length,
-        jobs: lastNProjects
-      });
-    }
-
     return tabs;
-  }, [projects, lastNProjects, lastNConfig, recentMonths, olderMonths, selectedOlderMonth, getMonthById, olderMonthsByYear, expandedYear]);
+  }, [recentMonths, olderMonths, allMonths, olderMonthsByYear, selectedOlderMonth, lastNConfig, getExpandedYear, isServerSideMode, projectCount]);
 
   // ══════════════════════════════════════════════════════════════════
   // 🎛️ EVENT HANDLERS
@@ -245,13 +278,18 @@ export default function MonthFilterTabs({
                   }`}
                 >
                   {tab.label}
-                  <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                    activeTab === tab.id || tab.dropdownOptions?.some(opt => opt.id === activeTab)
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-600'
-                  }`}>
-                    {tab.count}
-                  </span>
+                  {(tab.count !== undefined && (
+                    tab.count > 0 || 
+                    (isServerSideMode && showProjectCount && (tab.isAll || tab.isLastN))
+                  )) && (
+                    <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
+                      activeTab === tab.id || tab.dropdownOptions?.some(opt => opt.id === activeTab)
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                   <svg className={`ml-1 w-3 h-3 transition-transform ${showOlderDropdown ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
@@ -273,13 +311,18 @@ export default function MonthFilterTabs({
                   }`}
                 >
                   {tab.label}
-                  <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
-                    activeTab === tab.id
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-600'
-                  }`}>
-                    {tab.count}
-                  </span>
+                  {(tab.count !== undefined && (
+                    tab.count > 0 || 
+                    (isServerSideMode && showProjectCount && (tab.isAll || tab.isLastN))
+                  )) && (
+                    <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
+                      activeTab === tab.id
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
                 {/* Close button for selected older month tabs */}
                 {tab.isSelectedOlder && (
@@ -345,13 +388,15 @@ export default function MonthFilterTabs({
                   <div className="flex items-center justify-between">
                     <span>{year}</span>
                     <div className="flex items-center gap-2">
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                        parseInt(year) === expandedYearValue
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-600'
-                      }`}>
-                        {months.reduce((sum, month) => sum + month.count, 0)}
-                      </span>
+                      {months.length > 0 && (
+                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                          parseInt(year) === expandedYearValue
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-600'
+                        }`}>
+                          {months.reduce((sum, month) => sum + (month.count || 0), 0)}
+                        </span>
+                      )}
                       <svg 
                         className={`w-4 h-4 transition-transform ${
                           parseInt(year) === expandedYearValue ? 'rotate-180' : ''
@@ -385,13 +430,15 @@ export default function MonthFilterTabs({
                     }}
                   >
                     <span className="font-medium pl-2">{month.label}</span>
-                    <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                      selectedOlderMonth === month.id
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}>
-                      {month.count}
-                    </span>
+                    {(month.count !== undefined && month.count > 0) && (
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                        selectedOlderMonth === month.id
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {month.count}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -403,10 +450,17 @@ export default function MonthFilterTabs({
   );
 }
 
-// Export helper function to get filtered data based on active tab
-export const getFilteredDataByTab = (tabData, activeTab, projects) => {
-  const currentTab = tabData.find(tab => tab.id === activeTab);
-  if (!currentTab) return projects;
-  
-  return currentTab.id === 'all' ? projects : currentTab.jobs || [];
+// Export helper function to get filtered data based on active tab (for client-side filtering)
+export const getFilteredDataByTab = (activeTab, allMonths, recentMonths, olderMonths, projects, lastNConfig) => {
+  if (activeTab === 'all') {
+    return projects;
+  } else if (activeTab === 'lastN') {
+    return [...projects]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, lastNConfig.limit);
+  } else {
+    // Find the matching month data
+    const monthData = [...recentMonths, ...olderMonths].find(month => month.id === activeTab);
+    return monthData ? monthData.jobs : [];
+  }
 };

@@ -2,12 +2,15 @@
 import React, { useState, useContext, useEffect, useMemo, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import JobTable from "@/appjobboard/components/JobTable";
+import AdminAnalyticsPanel from "@/appjobboard/components/AdminAnalyticsPanel";
+import EstimatorAnalyticsPanel from "@/appjobboard/components/EstimatorAnalyticsPanel";
 import { getExchangeRate } from "@/shared/jobPricingUtils";
 import { AuthContext } from "@/auth/AuthProvider";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import AssignClient from "@/components/AssignClient";
 import AssignEstimator from "@/components/AssignEstimator";
 import { EstimateCompleteModal, SendMessageModal } from "@/features/emails";
+import JobDelayedModal from "@/features/emails/modals/jobboard/JobDelayedModal";
 import { basePlanTypes } from "@/shared/planTypes";
 import { useAutoSave } from "@/appjobboard/hooks/useAutoSave";
 import { useTablePreferences } from "@/appjobboard/hooks/useTablePreferences";
@@ -25,6 +28,12 @@ const JobBoard = () => {
   // 3️⃣ State for jobs 
   const [jobs, setJobs] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
+  const [filteredJobs, setFilteredJobs] = useState([]); // Track filtered jobs for admin analytics
+
+  // Callback to receive filtered rows from JobTable
+  const handleFilteredRowsChange = useCallback((filteredData) => {
+    setFilteredJobs(filteredData);
+  }, []);
 
   // 3a️⃣ Bring in your pricing config for the table
   const [dataConfig] = useState({
@@ -37,13 +46,14 @@ const JobBoard = () => {
   const [isEstimatorModalVisible, setEstimatorModalVisible] = useState(false);
   const [isEstimateModalVisible, setEstimateModalVisible] = useState(false);
   const [isSendMessageModalVisible, setSendMessageModalVisible] = useState(false);
+  const [isJobDelayedModalVisible, setJobDelayedModalVisible] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
 
-  // 5️⃣ Exchange rate
-  const [exchangeRate, setExchangeRate] = useState(7);
+  // 5️⃣ Exchange rates (live from API)
+  const [exchangeRates, setExchangeRates] = useState({ NOK: 6.5, USD: 0.65, EUR: 0.60 });
   const handleFetchRate = async () => {
-    const rate = await getExchangeRate();
-    setExchangeRate(rate);
+    const rates = await getExchangeRate();
+    setExchangeRates(rates);
   };
 
   // 🔄 PHASE 3: ADVANCED FEATURES STATE MANAGEMENT
@@ -229,6 +239,11 @@ const JobBoard = () => {
       .catch(err => console.error("Failed to fetch estimators:", err));
   }, [axiosSecure]);
 
+// Fetch exchange rates on mount
+useEffect(() => {
+  handleFetchRate();
+}, []);
+
 // Fetch jobs and derive months (same as AllProjects)
 useEffect(() => {
   const fetchJobs = async () => {
@@ -240,6 +255,17 @@ useEffect(() => {
 
       // API returns { data: [...] }
       let payload = response.data.data || [];
+      
+      // 🔍 DEBUG: Log status fields for first 3 projects
+      if (payload.length > 0) {
+        console.log("🔍 JobBoard received projects - sample status fields:", payload.slice(0, 3).map(p => ({
+          projectNumber: p.projectNumber,
+          estimateStatus: p.estimateStatus,
+          jobBoardStatus: p.jobBoardStatus,
+          status: p.status,
+          linkedEstimators: p.linkedEstimators
+        })));
+      }
       
       console.log("📊 JobBoard Data Summary:");
       console.log("- Total projects fetched:", payload.length);
@@ -294,7 +320,11 @@ useEffect(() => {
         if (j._id === jobId) {
           // 🎯 Auto-set status to "Assigned" when estimator is assigned
           const hasEstimators = linkedEstimators && linkedEstimators.length > 0;
-          const statusUpdate = hasEstimators ? { status: 'Assigned' } : {};
+          const statusUpdate = hasEstimators ? { 
+            estimateStatus: 'Assigned',
+            jobBoardStatus: 'Assigned', // Legacy field
+            status: 'Assigned' // Legacy field
+          } : {};
           
           return { 
             ...j, 
@@ -344,6 +374,17 @@ useEffect(() => {
     setSendMessageModalVisible(false);
   };
 
+  const openJobDelayedModal = job => {
+    console.log('[JobBoard] Opening JobDelayedModal for project:', job);
+    setSelectedJob(job);
+    setJobDelayedModalVisible(true);
+  };
+  
+  const closeJobDelayedModal = () => {
+    setSelectedJob(null);
+    setJobDelayedModalVisible(false);
+  };
+
   const handleSelectMessageType = (messageType, project) => {
     console.log('[JobBoard] Selected message type:', messageType, 'for project:', project || selectedJob);
     
@@ -356,6 +397,11 @@ useEffect(() => {
       console.log('[JobBoard] Opening EstimateCompleteModal');
       setSelectedJob(project || selectedJob);
       setEstimateModalVisible(true);
+    } else if (messageType.id === 'job-delayed') {
+      // Open the JobDelayedModal for delay notifications
+      console.log('[JobBoard] Opening JobDelayedModal');
+      setSelectedJob(project || selectedJob);
+      setJobDelayedModalVisible(true);
     } else {
       // For other message types, we can add handlers here later
       console.log('[JobBoard] Message type not yet implemented:', messageType.id);
@@ -371,13 +417,13 @@ useEffect(() => {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
+    <div className="flex flex-col pb-8">
       {/* Jobs table - Now self-contained with all features */}
-      <div className="flex-1 min-h-0 mt-8">
+      <div className="mt-8" style={{ height: 'calc((100vh - 160px) / var(--app-zoom))' }}>
         <JobTable
           jobs={jobs} // Pass raw jobs - table handles all filtering internally
           config={dataConfig}
-          exchangeRate={exchangeRate}
+          exchangeRate={exchangeRates.NOK}
           clients={clients}
           estimators={estimators}
           openColumn={openColumn}
@@ -400,8 +446,25 @@ useEffect(() => {
           // Zoom control with persistence
           zoomLevel={zoomLevel || 100}
           onZoomChange={setZoomLevel}
+          // Admin analytics
+          onFilteredRowsChange={handleFilteredRowsChange}
         />
       </div>
+
+      {/* Admin Analytics Panel - Only visible to Admin users */}
+      {user?.role === 'Admin' && (
+        <AdminAnalyticsPanel 
+          filteredJobs={filteredJobs}
+          exchangeRates={exchangeRates}
+        />
+      )}
+
+      {/* Estimator Analytics Panel - Only visible to Estimator users */}
+      {user?.role === 'Estimator' && (
+        <EstimatorAnalyticsPanel 
+          filteredJobs={filteredJobs}
+        />
+      )}
 
       {/* Assign‐Client modal */}
       {isClientModalVisible && selectedJob && (
@@ -441,6 +504,15 @@ useEffect(() => {
           onClose={closeSendMessageModal}
           project={selectedJob}
           onSelectMessageType={handleSelectMessageType}
+        />
+      )}
+
+      {/* Job Delayed modal */}
+      {isJobDelayedModalVisible && selectedJob && (
+        <JobDelayedModal
+          isVisible={isJobDelayedModalVisible}
+          onClose={closeJobDelayedModal}
+          project={selectedJob}
         />
       )}
     </div>

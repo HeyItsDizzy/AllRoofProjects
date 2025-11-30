@@ -31,6 +31,11 @@ const quickbooksRoutes = require('./routes/quickbooksRoutes');
 const linkingRoutes = require('./routes/linkingRoutes');
 const errorHandler = require("./routes/errorHandler");
 const fileRoutes = require("./features/fileManager/routes/fileRoutes");
+const projectDashboardRoutes = require("./routes/projectDashboardRoutes");
+
+// Import RecycleBin System
+const { initializeRecycleBinSystem } = require('./recycleBinIntegration');
+// Note: recycleBinRoutes will be imported after service initialization
 
 // Import Socket App
 const { server: socketServer, createSocketIO } = require("./features/socketApp/socketApp");
@@ -175,7 +180,9 @@ app.use('/api/linking', linkingRoutes);   // Now: /api/linking
 console.log('✅ linkingRoutes registered');
 app.use("/api/files", fileRoutes);        // Now: /api/files
 console.log('✅ fileRoutes registered');
-console.log('🎉 All routes registered successfully!');
+app.use("/api", projectDashboardRoutes); // Now: /api/projects/:id/dashboard
+console.log('✅ projectDashboardRoutes registered');
+console.log('🎉 All basic routes registered successfully!');
 
 
 
@@ -183,13 +190,37 @@ console.log('🎉 All routes registered successfully!');
 // Error handling middleware
 app.use(errorHandler);
 
-// Test MongoDB Connection
+// Test MongoDB Connection and Initialize Systems
 (async function run() {
   try {
     await client.connect();
     console.log("Successfully connected to MongoDB!");
     console.log("==================================");
     await client.db("admin").command({ ping: 1 });
+    
+    // Initialize RecycleBin System after DB connection
+    const db = client.db(process.env.DB_NAME || 'projectManager');
+    let io = null; // Will be set up later when socket server starts
+    
+    try {
+      const recycleBinService = await initializeRecycleBinSystem(db, io);
+      
+      // Initialize recycle bin routes with the service instance
+      const { router: recycleBinRoutes, initializeRecycleBinRoutes } = require('./routes/recycleBinRoutes');
+      initializeRecycleBinRoutes(recycleBinService);
+      
+      // Register recycle bin routes now that service is initialized
+      app.use('/api/recycle-bin', recycleBinRoutes);
+      console.log('✅ recycleBinRoutes registered with service');
+      
+      console.log("✅ RecycleBin system initialized successfully");
+      
+      // Store recycle bin service globally for file operations
+      global.recycleBinService = recycleBinService;
+    } catch (recycleBinError) {
+      console.warn("⚠️ RecycleBin system initialization failed:", recycleBinError.message);
+    }
+    
   } catch (err) {
     console.error("MongoDB connection error:", err);
     console.log("==================================");

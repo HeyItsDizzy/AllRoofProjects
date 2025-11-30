@@ -109,7 +109,7 @@ const FolderSidebar = ({
     }, {}),
   };
 
-  debouncedLog("🔒 FolderSidebar role:", role);
+  // debouncedLog("🔒 FolderSidebar role:", role);
 
   return (
     <div className="flex flex-col h-full">

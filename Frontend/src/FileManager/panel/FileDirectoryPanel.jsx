@@ -4,7 +4,8 @@ import Swal from '../../shared/swalConfig';
 import FolderSidebar from "./FolderSidebar";
 import FolderContents from "./FolderContents";
 import { getSubfoldersAtPath, isVisibleFolderKey, renameFolderPath, getLiveFileNames, downloadToZIP } from "../utils/FMFunctions";
-import useAxiosSecure from "../../hooks/AxiosSecure/useAxiosSecure";           
+import useAxiosSecure from "../../hooks/AxiosSecure/useAxiosSecure";
+import useAxiosFile from "../../hooks/AxiosFile/useAxiosFile";           
 import { IconDelete, IconSidebarMenu, IconDownload  } from "../../shared/IconSet.jsx"; 
 import UploadButton from "../components/UploadButton";
 import { createLoadingSpinner } from "../../shared/components/LoadingSpinner";
@@ -35,6 +36,7 @@ const FileDirectoryPanel = ({
   setGhostFilesByPath,
 }) => {
   const axiosSecure = useAxiosSecure();
+  const axiosFile = useAxiosFile(); // For file operations
   const folderListRef = useRef(null);
   const panelRef = useRef(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -114,7 +116,7 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
     try {
       await renameFolderPath({
         projectId,
-        axiosSecure,
+        axiosSecure: axiosFile,
         folderPath: path,
         newName,
         onSuccess: () => renameTempFolder(oldName, newName, parentPath),
@@ -173,7 +175,7 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
       console.log("  - Full URL:", `/files/${projectId}/folders/${encodeURIComponent(path)}`);
       console.log("  - Project ID:", projectId);
       
-      const response = await axiosSecure.delete(
+      const response = await axiosFile.delete(
         `/files/${projectId}/folders/${encodeURIComponent(path)}`
       );
       
@@ -320,7 +322,7 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
             zipSpinner.startAutoProgress();
             
             try {
-              await downloadToZIP({ axiosSecure, selectedPath: normalizedSelectedPath, projectId });
+              await downloadToZIP({ axiosSecure: axiosFile, selectedPath: normalizedSelectedPath, projectId });
               zipSpinner.complete();
               setTimeout(() => {
                 zipSpinner.fadeOut();
@@ -419,7 +421,7 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
             setSelectedPath={setSelectedPath}
             setIsEditModalOpen={setIsEditModalOpen}
             onDropFiles={onDropFiles}
-            axiosSecure={axiosSecure}
+            axiosSecure={axiosFile}
             projectId={projectId}
             editable={editable}
             files={currentPathFiles}
@@ -454,7 +456,7 @@ console.log("🗂️ [FDPANEL] liveFiles (merged):", liveFiles);*/
           key={`upload-${normalizedSelectedPath}`}
           selectedPath={normalizedSelectedPath}
           projectId={projectId}
-          axiosSecure={axiosSecure}
+          axiosSecure={axiosFile}
           setFiles={setFiles}
           setGhostFilesByPath={setGhostFilesByPath}
           liveFiles={files}

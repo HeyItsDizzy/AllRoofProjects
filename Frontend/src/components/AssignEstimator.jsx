@@ -17,7 +17,7 @@ const AssignEstimator = ({ estimators = [], projectId, project, closeModal, upda
   const unassignUrl = `/projects/unassignEstimator/${projectId.trim()}`;
   const [filteredEstimators, setFilteredEstimators] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [multiAssignMode, setMultiAssignMode] = useState(false);
+  const [multiAssignMode, setMultiAssignMode] = useState(true); // Default to multi-assign for multiple estimators
   const [linkedEstimators, setLinkedEstimators] = useState(project?.linkedEstimators || []);
 
   const handleSearchChange = (e) => setSearchTerm(e.target.value);
@@ -93,24 +93,7 @@ const AssignEstimator = ({ estimators = [], projectId, project, closeModal, upda
     }
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "Shift") {
-        setMultiAssignMode(true);
-      }
-    };
-    const handleKeyUp = (e) => {
-      if (e.key === "Shift") {
-        setMultiAssignMode(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, []);
+  // Multi-assign mode is now controlled by toggle button instead of Shift key
 
   return (
     <>
@@ -158,13 +141,33 @@ const AssignEstimator = ({ estimators = [], projectId, project, closeModal, upda
         forceRender
       >
         <div className="my-4">
-          <input
-            type="text"
-            placeholder="Search estimators..."
-            className="w-full p-2 mb-4 border rounded-md"
-            value={searchTerm}
-            onChange={handleSearchChange}
-          />
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <input
+              type="text"
+              placeholder="Search estimators..."
+              className="flex-1 p-2 border rounded-md"
+              value={searchTerm}
+              onChange={handleSearchChange}
+            />
+            <button
+              onClick={() => setMultiAssignMode(!multiAssignMode)}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                multiAssignMode 
+                  ? 'bg-green-500 text-white hover:bg-green-600' 
+                  : 'bg-orange-500 text-white hover:bg-orange-600'
+              }`}
+              title={multiAssignMode ? 'Click to switch to Replace mode' : 'Click to switch to Add mode'}
+            >
+              {multiAssignMode ? '+ Add More' : '⚠️ Replace'}
+            </button>
+          </div>
+          {linkedEstimators.length > 0 && (
+            <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-md text-sm">
+              <strong>Currently assigned:</strong> {linkedEstimators.length} estimator(s)
+              {multiAssignMode && <span className="ml-2 text-green-600">• Adding to team</span>}
+              {!multiAssignMode && <span className="ml-2 text-orange-600">• Will replace existing</span>}
+            </div>
+          )}
           <div className="max-h-[600px] overflow-y-auto">
             {filteredEstimators.map((estimator) => (
               <div key={estimator._id} className="mt-1 flex justify-between items-center">

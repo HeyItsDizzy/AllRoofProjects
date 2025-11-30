@@ -1,103 +1,146 @@
 
-// AllProjects.jsx (Admin View)
-// Optimized for production with proper error handling, loading states, and performance optimizations
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+// AllProjects.jsx (Admin View) - Pagination Optimized ✅
+// Now uses server-side pagination for performance optimization
+import React, { useState, useEffect, useCallback } from "react";
 import { message } from "antd";
 import { useNavigate } from "react-router-dom";
-import { IconSearch } from "@/shared/IconSet.jsx";
 import AssignClient from "../components/AssignClient";
 import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
 import ProjectTable from "../components/ProjectTable";
-import { subscribeToProjectDataUpdates } from "@/utils/ProjectDataSync";
-import { useRenderTimer, useRenderWarning } from "@/hooks/usePerformance";
-
-// CSS-in-JS for layout shift prevention
-const layoutShiftStyles = `
-  .contain-layout {
-    contain: layout style;
-  }
-  
-  .contain-style {
-    contain: style;
-  }
-  
-  .contain-intrinsic-size {
-    contain-intrinsic-size: auto 36px;
-  }
-  
-  /* Prevent layout shifts in search and filter containers */
-  .stable-search-container {
-    min-height: 48px;
-    contain: layout style;
-  }
-  
-  .stable-filter-container {
-    min-height: 34px;
-    contain: style;
-  }
-`;
-
-// Inject styles
-if (typeof document !== 'undefined') {
-  const styleElement = document.createElement('style');
-  styleElement.textContent = layoutShiftStyles;
-  if (!document.head.querySelector('style[data-layout-shift-prevention]')) {
-    styleElement.setAttribute('data-layout-shift-prevention', 'true');
-    document.head.appendChild(styleElement);
-  }
-}
 
 const AllProjects = () => {
-  // Add performance monitoring
-  useRenderTimer('AllProjects', 10); // Warn if render >10ms
-  useRenderWarning('AllProjects', 5); // Warn if >5 renders/second
-  
-  const [projects, setProjects] = useState([]); // Holds all projects
   const [users, setUsers] = useState([]); // Holds users for assignment (future feature)
   const [clients, setClients] = useState([]); // Holds clients for assignment
   const [userData, setUserData] = useState({}); // Holds user details (avatars & names)
-  const [search, setSearch] = useState(""); // Search query
-  const [activeButton, setActiveButton] = useState("All Projects"); // Filter state
   const navigate = useNavigate(); // Navigate function
-  const [isModalVisible, setIsModalVisible] = useState(false); // Modal visibility state
-  const [selectedProject, setSelectedProject] = useState(null); // Selected project for modal
   const [isClientModalVisible, setIsClientModalVisible] = useState(false); // ClientModal visibility state
   const [selectedClientProject, setSelectedClientProject] = useState(null); // Selected Client Project for modal
-  const [loading, setLoading] = useState(false); // Loading state
-  const [error, setError] = useState(null); // Error state
 
   const axiosSecure = useAxiosSecure();
 
-  // Sorting and filtering states
-  const [filteredProjects, setFilteredProjects] = useState([]); // Stores filtered projects
-  const [sortColumn, setSortColumn] = useState(null); // Stores active sort column
-  const [sortOrder, setSortOrder] = useState("asc"); // Stores sorting order
-  const [filters, setFilters] = useState({}); // Stores applied filters
-
-  // Memoized open project statuses
-  const openProjectStatuses = useMemo(() => [
-    "New Lead",
-    "Estimate Requested", 
-    "Estimate Completed",
-    "Quote Sent",
-    "Approved",
-    "Project Active"
-  ], []);
-
-  // Fetch projects with error handling
-  const fetchProjects = useCallback(async () => {
+  // Fetch supporting data (clients, users)
+  const fetchClients = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await axiosSecure.get("/projects/get-projects");
-      setProjects(response.data.data || []);
+      const response = await axiosSecure.get("/clients");
+      setClients(response.data || []);
     } catch (error) {
-      setError("Failed to fetch projects");
-      message.error("Failed to load projects. Please try again.");
-    } finally {
-      setLoading(false);
+      console.error("Failed to fetch clients:", error);
+      message.error("Failed to load clients");
     }
   }, [axiosSecure]);
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await axiosSecure.get("/users");
+      setUsers(response.data || []);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+    }
+  }, [axiosSecure]);
+
+  const fetchUserData = useCallback(async () => {
+    try {
+      const response = await axiosSecure.get("/users/all-user-data");
+      setUserData(response.data || {});
+    } catch (error) {
+      console.error("Failed to fetch user data:", error);
+    }
+  }, [axiosSecure]);
+
+  // Initialize data on component mount
+  useEffect(() => {
+    fetchClients();
+    fetchUsers();
+    fetchUserData();
+  }, [fetchClients, fetchUsers, fetchUserData]);
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🎛️ MODAL HANDLERS
+  // ══════════════════════════════════════════════════════════════════
+
+  // Open assign client modal
+  const openAssignClientModal = useCallback((project) => {
+    setSelectedClientProject(project);
+    setIsClientModalVisible(true);
+  }, []);
+
+  // Close assign client modal
+  const closeAssignClientModal = useCallback(() => {
+    setIsClientModalVisible(false);
+    setSelectedClientProject(null);
+  }, []);
+
+  // Update project clients (callback for modal)
+  const updateProjectClients = useCallback((projectId, newClients) => {
+    // Note: With pagination, this will trigger a refresh automatically
+    // The ProjectTable component handles its own state management
+    console.log(`Updated clients for project ${projectId}:`, newClients);
+    message.success("Client assignment updated successfully!");
+  }, []);
+
+  // Handle status changes (callback for ProjectTable)
+  const handleStatusChange = useCallback((projectId, newStatus) => {
+    console.log(`Status changed for project ${projectId}: ${newStatus}`);
+    // ProjectTable handles optimistic updates internally
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════════
+  // 🎨 RENDER
+  // ══════════════════════════════════════════════════════════════════
+
+  return (
+    <div className="w-full max-w-7xl mx-auto px-4 py-6">
+      {/* Page Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">All Projects</h1>
+        <p className="text-gray-600">
+          Manage and view all projects with server-side pagination for optimal performance.
+        </p>
+      </div>
+
+      {/* Paginated Project Table */}
+      <ProjectTable
+        userData={userData}
+        clients={clients}
+        openAssignClient={openAssignClientModal}
+        onStatusChange={handleStatusChange}
+        userRole="Admin"
+        columnConfig={{
+          assignClient: true,
+          projectName: true,
+          dueDate: true,
+          cost: true,
+          status: true,
+          postingDate: true
+        }}
+        isUserView={false}
+      />
+
+      {/* Assign Client Modal */}
+      {isClientModalVisible && selectedClientProject && (
+        <AssignClient
+          clients={clients}
+          projectId={selectedClientProject._id}
+          project={selectedClientProject}
+          closeModal={closeAssignClientModal}
+          updateProjectClients={updateProjectClients}
+        />
+      )}
+    </div>
+  );
+};
+
+export default AllProjects;
+
+const AllProjects = () => {
+  const [users, setUsers] = useState([]); // Holds users for assignment (future feature)
+  const [clients, setClients] = useState([]); // Holds clients for assignment
+  const [userData, setUserData] = useState({}); // Holds user details (avatars & names)
+  const navigate = useNavigate(); // Navigate function
+  const [isClientModalVisible, setIsClientModalVisible] = useState(false); // ClientModal visibility state
+  const [selectedClientProject, setSelectedClientProject] = useState(null); // Selected Client Project for modal
+
+  const axiosSecure = useAxiosSecure();
 
   // Fetch clients with error handling
   const fetchClients = useCallback(async () => {

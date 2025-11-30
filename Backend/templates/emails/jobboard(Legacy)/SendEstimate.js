@@ -16,7 +16,7 @@
  * @returns {object} - Email subject and HTML content
  */
 const SendEstimate = (data) => {
-  const { projectAddress, estimateDescription, projectNumber, clientName, projectViewUrl, companyLogoUrl, optionalBody } = data;
+  const { projectAddress, estimateDescription, projectNumber, clientName, projectViewUrl, companyLogoUrl, optionalBody, textColor = '#4B5563' } = data;
   
   const subject = `Estimate Complete - ${projectAddress} - Ref: ${projectNumber}`;
   
@@ -77,9 +77,9 @@ const html = `
                   ? `
               <!-- Optional note -->
               <div style="margin:16px 0; padding:12px 14px; background-color:#F8FFFE; border-left:3px solid #009245; border-radius:0;">
-                <p style="margin:0; color:#4B5563; font-size:15px; line-height:1.6; font-family:Arial, sans-serif; white-space:pre-wrap;">
-                  ${optionalBody}
-                </p>
+                ${optionalBody.split('\n\n').map(paragraph => 
+                  paragraph.trim() ? `<p style="margin:0 0 12px 0; color:${textColor}; font-size:15px; line-height:1.6; font-family:Arial, sans-serif;">${paragraph.trim().replace(/\n/g, '<br>')}</p>` : ''
+                ).filter(p => p).join('')}
               </div>`
                   : ''
               }

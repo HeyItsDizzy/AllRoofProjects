@@ -15,15 +15,17 @@
     {
       "name": "🗂️ Recovered Files",
       "path": "../recovered-files"
+    },
+    {
+      "name": "🧱 Read-only Backend (Mirror Mount)",
+      "uri": "vscode-remote://ssh-remote+myvps/mnt/readonly-backend"
     }
   ],
   "remoteAuthority": "ssh-remote+myvps",
   "settings": {
-    // ==============================
-    // FILE & SEARCH EXCLUDES
-    // ==============================
     "files.exclude": {
-      //"Backend/**": true,
+      "/mnt/readonly-backend/**": false,
+      "/root/ART/ProjectManagerApp/Backend/**": true,
       "**/node_modules": true,
       "**/.git": true,
       "**/.DS_Store": true,
@@ -38,7 +40,6 @@
     },
     "search.exclude": {
       "**/node_modules": true,
-      "Backend/**": true,
       "**/.git": true,
       "**/logs/**": true,
       "**/.archive*/**": true,
@@ -46,17 +47,10 @@
       "**/tmp/**": true,
       "**/build/**": true,
       "**/dist/**": true,
-      "**/coverage/**": true,
-      "**/AU/2025/01. Jan/**": true,
-      "**/AU/2025/02. Feb/**": true,
-      "**/AU/2025/04. Apr/**": true,
-      "**/AU/2025/10. Oct/**": true,
-      "**/AU/2025/11. Nov/**": true,
-      "**/AU/2025/12. Dec/**": true
+      "**/coverage/**": true
     },
     "files.watcherExclude": {
       "**/node_modules/**": true,
-      "Backend/**": true,
       "**/.git/**": true,
       "**/logs/**": true,
       "**/.archive*/**": true,
@@ -65,16 +59,8 @@
       "**/build/**": true,
       "**/dist/**": true
     },
-
-    // ==============================
-    // EXPLORER SETTINGS
-    // ==============================
     "explorer.compactFolders": false,
     "explorer.sortOrder": "type",
-
-    // ==============================
-    // REMOVE OLD SSH FS CONFIG
-    // ==============================
     "sshfs.configs": []
   }
 }

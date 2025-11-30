@@ -25,6 +25,18 @@ import {
   MdFilterList as IconFilter,
   MdEmail as IconMail,
   MdPhone as IconPhone,
+  MdHome as IconHome,
+  MdContentCopy as IconDuplicate,
+  MdShoppingCart as IconCart,
+  MdBarChart as IconChart,
+  MdChatBubble as IconChat,
+  MdSettings as IconSettings,
+  MdAutoAwesome as IconSparkles,
+  MdAccessTime as IconClock,
+  MdInfoOutline as IconInfo,
+  MdAttachMoney as IconDollar,
+  MdCloud as IconCloud,
+  MdPalette as IconPalette,
 } from "react-icons/md";
 
 // Font Awesome v5
@@ -40,6 +52,7 @@ import {
   FaPlusSquare as IconExpandBox,
   FaMinusSquare as IconCollapseBox,
   FaRegSave as IconSave,
+  FaRuler as IconScale,
 } from "react-icons/fa";
 
 // Font Awesome v6
@@ -171,6 +184,21 @@ export {
   // Communication
   IconMail,
   IconPhone,
+
+  // Dashboard & General UI
+  IconHome,
+  IconScale,
+  IconDuplicate,
+  IconCart,
+  IconChart,
+  IconChat,
+  IconSettings,
+  IconSparkles,
+  IconClock,
+  IconInfo,
+  IconDollar,
+  IconCloud,
+  IconPalette,
 
   // Utility
   getFileIcon,

@@ -1,8 +1,8 @@
 // pathUtils.js
 const path = require("path");
 
-// Root of all uploaded project files
-const uploadsRoot = path.resolve(__dirname, "../../../.FM");
+// Root of all uploaded project files - ALWAYS use VPS path where files actually live
+const uploadsRoot = "/root/ART/ProjectManagerApp/Backend/.FM";
 
 function getProjectDiskPath(project, folderName = "", region = "AU") {
   if (!project || !project.projectNumber || !project.name) {

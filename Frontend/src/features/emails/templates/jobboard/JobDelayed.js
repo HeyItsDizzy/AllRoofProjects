@@ -6,8 +6,9 @@
 /**
  * Generate job delayed notification email
  * @param {object} data - Template data
- * @param {string} data.clientName - Name of the client receiving the email
- * @param {string} data.projectName - Project name/description
+ * @param {string} data.contactName - Name of the client receiving the email (updated from clientName)
+ * @param {string} data.projectAddress - Project address/description (updated for consistency)
+ * @param {string} data.projectName - Project name/description (fallback)
  * @param {string} data.projectNumber - Project number (used as reference)
  * @param {string} data.delayReason - Reason for the delay
  * @param {string} data.newCompletionDate - New expected completion date (formatted)
@@ -17,9 +18,19 @@
  * @returns {object} - Email subject and HTML content
  */
 const jobDelayed = (data) => {
-  const { clientName, projectName, projectNumber, delayReason, newCompletionDate, dayOfWeek, companyLogoUrl, optionalMessage } = data;
+  const { 
+    contactName, 
+    projectAddress, 
+    projectName, 
+    projectNumber, 
+    delayReason, 
+    newCompletionDate, 
+    dayOfWeek, 
+    companyLogoUrl, 
+    optionalMessage 
+  } = data;
   
-  const subject = `Project Update: Delayed Completion - ${projectName} - Ref: ${projectNumber}`;
+  const subject = `Project Update: Delayed Completion - ${projectAddress || projectName} - Ref: ${projectNumber}`;
   
   // Header logo - company logo or fallback to All Roof Takeoffs
   const headerLogoUrl = companyLogoUrl 
@@ -51,119 +62,165 @@ const html = `
     <tr>
       <td align="center" style="padding:24px 12px;">
         <!-- Container -->
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%; max-width:600px; background-color:#FFFFFF;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width: 100%; max-width: 600px; background-color: #ffffff; border-radius: 8px;">
+          
           <!-- Header: logo only, subtle spacing -->
           <tr>
-            <td align="center" style="padding:18px 20px;">
+            <td align="center" style="padding: 30px 20px 20px 20px;">
               <img src="${headerLogoUrl}"
                    alt="All Roof Takeoffs"
                    width="150"
-                   style="display:block; width:150px; height:auto; border:0; outline:none; text-decoration:none;">
+                   style="display: block; width: 150px; height: auto; border: 0; outline: none; text-decoration: none;">
             </td>
           </tr>
 
           <!-- Body -->
           <tr>
-            <td style="padding:28px 24px 8px 24px;">
-              <h2 style="margin:0 0 16px 0; color:#dc2626; font-size:22px; font-weight:bold; line-height:1.3; font-family:Arial, sans-serif;">
-                Heads Up!<br>
-                It's in the Queue!
-              </h2>
-
-              <p style="margin:0 0 16px 0; color:#4B5563; font-size:15px; line-height:1.6; font-family:Arial, sans-serif;">
-                ${clientName ? `Dear ${clientName},` : 'Hello,'}
-              </p>
-
-              <p style="margin:0 0 16px 0; color:#4B5563; font-size:15px; line-height:1.6; font-family:Arial, sans-serif;">
-                We have received a large influx of work recently, and as a result, we have a longer than normal lead time.
-              </p>
-
-              <!-- Delay Reason Box -->
-              <div style="margin:20px 0; padding:16px 18px; background-color:#FEF2F2; border-left:4px solid #dc2626; border-radius:0;">
-                <p style="margin:0 0 8px 0; color:#7f1d1d; font-size:15px; font-weight:bold;">Reason for delay:</p>
-                <p style="margin:0; color:#991b1b; font-size:15px; line-height:1.6;">
-                  ${delayReason}
-                </p>
-              </div>
+            <td style="padding:40px 30px;">
+              
+              <!-- Greeting -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding-bottom: 20px;">
+                    Dear <strong style="color: #009245;">${contactName || 'Valued Client'}</strong>,
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Project Info -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding-bottom: 16px;">
+                    We want to update you on the status of your project: <strong style="color: #009245;">${projectAddress || projectName}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding-bottom: 20px;">
+                    ${delayReason.split('\n\n').map(paragraph => `<p style="margin: 0 0 16px 0;">${paragraph.replace(/\n/g, '<br>')}</p>`).join('')}
+                  </td>
+                </tr>
+              </table>
 
               <!-- New Completion Date -->
-              <div style="margin:24px 0; padding:18px; background-color:#F0FDF4; border:2px solid #16a34a; border-radius:8px; text-align:center;">
-                <p style="margin:0 0 8px 0; color:#15803d; font-size:16px; font-weight:bold;">
-                  You can expect this to be completed by:
-                </p>
-                <p style="margin:0; color:#15803d; font-size:20px; font-weight:bold; line-height:1.4;">
-                  The morning of ${dayOfWeek}, ${newCompletionDate}
-                </p>
-              </div>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #F0FDF4; border: 2px solid #009245; border-radius: 8px; margin: 25px 0;">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; color: #15803d; padding-bottom: 8px;">
+                          New Expected Completion Date:
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 20px; font-weight: bold; color: #15803d;">
+                          ${dayOfWeek ? `${dayOfWeek}, ` : ''}${newCompletionDate}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
 
               ${
                 optionalMessage
                   ? `
-              <!-- Optional message -->
-              <div style="margin:20px 0; padding:14px 16px; background-color:#F8FFFE; border-left:3px solid #009245; border-radius:0;">
-                <p style="margin:0; color:#4B5563; font-size:15px; line-height:1.6; font-family:Arial, sans-serif; white-space:pre-wrap;">
-                  ${optionalMessage}
-                </p>
-              </div>`
+              <!-- Additional Message -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding: 16px 0;">
+                    ${optionalMessage.split('\n\n').map(paragraph => `<p style="margin: 0 0 16px 0;">${paragraph.replace(/\n/g, '<br>')}</p>`).join('')}
+                  </td>
+                </tr>
+              </table>`
                   : ''
               }
 
-              <div style="margin:20px 0; padding:14px 16px; background-color:#F8FAFB; border-left:4px solid #009245;">
-                <p style="margin:0 0 6px 0; color:#081F13; font-size:15px; font-weight:bold;">Questions or Queries?</p>
-                <p style="margin:0; color:#4B5563; font-size:15px; line-height:1.6;">
-                  Please refer to reference number: <strong style="color:#009245;">#${projectNumber}</strong>
-                </p>
-              </div>
+              <!-- Reference Info -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding: 25px 0 8px 0;">
+                    If you have any <strong style="color: #333333;">Questions or Queries</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding-bottom: 25px;">
+                    Please refer to reference number <strong style="color: #009245;"># ${projectNumber}</strong>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Signature -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; color: #333333; padding: 30px 0 8px 0;">
+                    Thanks and Kind regards
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; color: #009245; padding-bottom: 30px;">
+                    Rodney Pedersen
+                  </td>
+                </tr>
+              </table>
 
-              <p style="margin:20px 0 8px 0; color:#4B5563; font-size:15px; line-height:1.6;">
-                Thanks and Kind regards,<br>
-                <strong style="color:#081F13;">Rodney Pedersen</strong>
-              </p>
-
-              <!-- Contact card, subtle -->
-              <div style="margin:14px 0 6px 0; padding:12px 14px; border:1px solid #E5E7EB; border-radius:6px;">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                  <tr>
-                    <td style="padding:2px 0; color:#081F13; font-size:13px; font-family:Arial, sans-serif;">
-                      <strong>ABN:</strong> 28 212 267 152
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:2px 0; color:#081F13; font-size:13px; font-family:Arial, sans-serif;">
-                      <strong>Email:</strong> <a href="mailto:requests@allrooftakeoffs.com.au" style="color:#009245; text-decoration:none;">requests@allrooftakeoffs.com.au</a>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:2px 0; color:#081F13; font-size:13px; font-family:Arial, sans-serif;">
-                      <strong>Website:</strong> <a href="https://allrooftakeoffs.com.au/" style="color:#009245; text-decoration:none;">https://allrooftakeoffs.com.au/</a>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:2px 0; color:#081F13; font-size:13px; font-family:Arial, sans-serif;">
-                      <strong>Call:</strong> Between 4:00pm–9:00pm AEST
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:2px 0; color:#081F13; font-size:13px; font-family:Arial, sans-serif;">
-                      <strong>WhatsApp:</strong> +61 438 399 983
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:2px 0; color:#6B7280; font-size:12px; font-style:italic; font-family:Arial, sans-serif;">
-                      (I travel internationally — WhatsApp will always reach me)
-                    </td>
-                  </tr>
-                </table>
-              </div>
+              
+              <!-- Contact Information -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f8f9fa; border-radius: 8px; margin-top: 30px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #666666; padding-bottom: 12px;">
+                          <strong style="color: #333333;">Contact Information:</strong>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #666666; padding: 2px 0;">
+                          <strong>ABN:</strong> 28 212 267 152
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #666666; padding: 2px 0;">
+                          <strong>Email:</strong> <a href="mailto:requests@allrooftakeoffs.com.au" style="color: #009245; text-decoration: none;">requests@allrooftakeoffs.com.au</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #666666; padding: 2px 0;">
+                          <strong>Website:</strong> <a href="https://allrooftakeoffs.com.au/" style="color: #009245; text-decoration: none;">allrooftakeoffs.com.au</a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #666666; padding: 2px 0;">
+                          <strong>Call:</strong> Between 4:00pm–9:00pm AEST
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #666666; padding: 2px 0;">
+                          <strong>WhatsApp:</strong> +61 438 399 983
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; color: #999999; padding: 8px 0 0 0; font-style: italic;">
+                          (I travel internationally — WhatsApp will always reach me)
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
-          <!-- Footer: single subtle line -->
+          <!-- Footer -->
           <tr>
-            <td align="center" style="padding:18px 20px; background-color:#FAFAFA; border-top:1px solid #E5E7EB;">
-              <p style="margin:0; color:#9CA3AF; font-size:12px; font-family:Arial, sans-serif;">
-                All Roof Takeoffs — Professional Roof Takeoff Services
-              </p>
+            <td align="center" style="padding: 30px 20px; background-color: #f8f9fa; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; color: #999999; text-align: center;">
+                    All Roof Takeoffs — Professional Roof Takeoff Services
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
         </table>

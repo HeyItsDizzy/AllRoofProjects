@@ -70,7 +70,44 @@
     scrollbar-color: #009245 #f1f1f1;
   }
 
+  :root {
+    /* Global zoom level - change this one value to adjust entire app zoom */
+    --app-zoom: 0.8;
+    
+    /* Responsive breakpoints - automatically adjusted for zoom level */
+    /* These are the "visual" breakpoints at which columns should hide */
+    /* Change these values and they'll automatically scale with zoom */
+    /* At 0.8 zoom: Posted hides at 1064px, Due Date at 960px, Cost at 840px */
+    --bp-hide-posted: 1330;
+    --bp-hide-due-date: 1200;
+    --bp-hide-cost: 1050;
+  }
+  
+  /* Responsive table column visibility - dynamically adjusts with zoom */
+  /* Calculated: 1330 * 0.8 = 1064px */
+  @media (max-width: 1064px) {
+    .table-col-posted {
+      display: none !important;
+    }
+  }
+  
+  /* Calculated: 1200 * 0.8 = 960px */
+  @media (max-width: 960px) {
+    .table-col-due-date {
+      display: none !important;
+    }
+  }
+  
+  /* Calculated: 1050 * 0.8 = 840px */
+  @media (max-width: 840px) {
+    .table-col-cost {
+      display: none !important;
+    }
+  }
+
   html {
+    /* Global zoom for entire app */
+    zoom: var(--app-zoom);
     /* Prevent zoom on input focus on iOS */
     font-size: 16px;
     /* Improve text rendering and prevent auto-zoom */

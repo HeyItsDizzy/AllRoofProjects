@@ -59,7 +59,7 @@ const Templates = () => {
       template: JobDelayedTemplate,
       description: 'Notification email when job timelines are delayed',
       templatePath: 'JobDelayed.js',
-      isActive: false
+      isActive: true  // ✅ Activated for Templates page
     },
     'SendEstimate': {
       name: 'Send Estimate',
@@ -320,10 +320,42 @@ const Templates = () => {
     console.log('[DEBUG] Templates.jsx contactName:', formValues.contactName);
     console.log('[DEBUG] Templates.jsx contactEmail:', formValues.contactEmail);
     
+    // Calculate estimateDescription like the live modal does
+    let estimateDescription = "${estimateDescription}"; // Default placeholder
+    
+    if (formValues.planType && formValues.qty) {
+      // Find the selected plan type
+      const selectedPlanType = basePlanTypes.find(plan => plan.label === formValues.planType);
+      
+      if (selectedPlanType) {
+        const { label, uom } = selectedPlanType;
+        
+        // Check if this is Manual Price (no UOM or Manual Price label)
+        if (label === 'Manual Price' || !uom) {
+          // For Manual Price: "1x $[amount] Manual Price"
+          const amount = formValues.qty || 0;
+          estimateDescription = `1x $${amount} Manual Price`;
+        } else if (formValues.qty) {
+          if (uom === 'ea') {
+            // For "ea" UOM: "[QTY]x [label]"
+            estimateDescription = `${formValues.qty}x ${label}`;
+          } else if (uom === 'hr') {
+            // For "hr" UOM: "[QTY] hr [label]"
+            const hourText = formValues.qty === 1 ? 'hr' : 'hrs';
+            estimateDescription = `${formValues.qty} ${hourText} ${label}`;
+          } else {
+            // For other UOMs: "[QTY] [UOM] [label]"
+            estimateDescription = `${formValues.qty} ${uom} ${label}`;
+          }
+        }
+      }
+    }
+    
     // Use form values directly - no duplication, single source of truth
     setSampleData(prev => ({
       ...prev,
-      ...formValues // Use form values directly from modal wrapper
+      ...formValues, // Use form values directly from modal wrapper
+      estimateDescription: estimateDescription // Add calculated estimateDescription
     }));
   };
 
@@ -615,6 +647,14 @@ const Templates = () => {
       {/* Live Modal for Testing */}
       {selectedModal === 'EstimateComplete' && (
         <EstimateCompleteModal
+          isVisible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          project={sampleProject}
+        />
+      )}
+      
+      {selectedModal === 'JobDelayed' && (
+        <JobDelayedModal
           isVisible={modalVisible}
           onClose={() => setModalVisible(false)}
           project={sampleProject}

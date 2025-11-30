@@ -13,6 +13,7 @@ import { formatLocalDate } from "@/utils/dateUtils";
 import { planTypes } from "@/shared/planPricing";
 import Swal from '@/shared/swalConfig';
 import { COMPONENT_Z_INDEX } from '@/shared/styles/zIndexManager';
+import { getClientLocalDate, getClientLocalDateTime } from '@/utils/timezoneUtils';
 
 // Custom filter function to handle blank/empty values
 const customFilterFn = (row, columnId, filterValue) => {
@@ -252,133 +253,136 @@ Profit */
 
     // 3) cell shows avatar + name, but looks up by ID
     cell: ({ row }) => {
-      const [eid] = row.original.linkedEstimators ?? [];
+      const linkedEstimators = row.original.linkedEstimators ?? [];
       const isEstimator = userRole === "Estimator";
+      const isAssignedToCurrentUser = isEstimator && linkedEstimators.includes(currentUserId);
       
-      // Debug logging for estimator avatar issue (limited to first 3 projects)
-      if (isEstimator && eid && row.index < 3) {
-        // Limited debug logging for production troubleshooting
-      }
-      
-      if (eid) {
-        const estimator = estimators.find(e => e._id === eid) || {};
-        const isAssignedToCurrentUser = isEstimator && eid === currentUserId;
-        
-        // For estimators
-        if (isEstimator) {
-          if (isAssignedToCurrentUser) {
-            // Clickable avatar to unassign yourself
+      // For estimators: only show their own name, not other estimators
+      if (isEstimator) {
+        if (isAssignedToCurrentUser) {
+          const estimator = estimators.find(e => e._id === currentUserId) || {};
+          // Show current user's name with unassign button
+          return (
+            <button
+              onClick={async () => {
+                const result = await Swal.fire({
+                  title: 'Unassign Yourself?',
+                  text: 'Are you sure you want to unassign yourself from this project?',
+                  icon: 'question',
+                  showCancelButton: true,
+                  confirmButtonColor: '#d33',
+                  cancelButtonColor: '#3085d6',
+                  confirmButtonText: 'Yes, unassign me'
+                });
+                
+                if (result.isConfirmed) {
+                  // Remove current user from linkedEstimators
+                  const updatedEstimators = linkedEstimators.filter(id => id !== currentUserId);
+                  updateRow(row.original._id, 'linkedEstimators', updatedEstimators);
+                  
+                  Swal.fire({
+                    title: 'Unassigned!',
+                    text: 'You have been unassigned from this project.',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                  });
+                }
+              }}
+              className="flex items-center gap-2 px-3 h-full w-full bg-gray-100 hover:bg-gray-200 transition-colors"
+              title="Click to unassign yourself from this project"
+            >
+              <Avatar
+                name={`${estimator.firstName || ''} ${estimator.lastName || ''}`}
+                avatarUrl={estimator.avatar}
+                size="sm"
+              />
+              <span className="truncate max-w-[1000px]">
+                {`${estimator.firstName || ''} ${estimator.lastName || ''}`.trim() || estimator.email}
+              </span>
+              {linkedEstimators.length > 1 && (
+                <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                  +{linkedEstimators.length - 1}
+                </span>
+              )}
+            </button>
+          );
+        } else {
+          // Not assigned to current user - show "Claim" button if no one assigned, otherwise hide
+          if (linkedEstimators.length === 0) {
+            // Show "Claim" button for estimators on unassigned projects
             return (
               <button
                 onClick={async () => {
                   const result = await Swal.fire({
-                    title: 'Unassign Yourself?',
-                    text: 'Are you sure you want to unassign yourself from this project?',
+                    title: 'Claim this project?',
+                    text: 'Are you sure you want to assign yourself to this project?',
                     icon: 'question',
                     showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#3085d6',
-                    confirmButtonText: 'Yes, unassign me'
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Yes, claim it!'
                   });
                   
                   if (result.isConfirmed) {
-                    // Remove current user from linkedEstimators
-                    const updatedEstimators = row.original.linkedEstimators.filter(id => id !== currentUserId);
+                    // Add current user to linkedEstimators
+                    const updatedEstimators = [...linkedEstimators, currentUserId];
                     updateRow(row.original._id, 'linkedEstimators', updatedEstimators);
                     
+                    // 🎯 SMART STATUS UPDATE: Only set to "Assigned" if project hasn't been worked on yet
+                    const currentEstimateStatus = row.original.estimateStatus || row.original.status;
+                    const shouldUpdateStatus = !currentEstimateStatus || 
+                                              currentEstimateStatus === 'Estimate Requested' || 
+                                              currentEstimateStatus === 'Unknown';
+                    
+                    if (shouldUpdateStatus) {
+                      updateRow(row.original._id, 'estimateStatus', 'Assigned');
+                      updateRow(row.original._id, 'status', 'Assigned');
+                    }
+                    
                     Swal.fire({
-                      title: 'Unassigned!',
-                      text: 'You have been unassigned from this project.',
+                      title: 'Claimed!',
+                      text: shouldUpdateStatus 
+                        ? 'You have been assigned to this project and estimate status updated to "Assigned".'
+                        : 'You have been assigned to this project. Status remains unchanged.',
                       icon: 'success',
-                      timer: 2000,
+                      timer: 3000,
                       showConfirmButton: false
                     });
                   }
                 }}
-                className="flex items-center gap-2 px-3 h-full w-full bg-gray-100 hover:bg-gray-200 transition-colors"
-                title="Click to unassign yourself from this project"
+                className="h-full w-full px-3 bg-green-500 hover:bg-green-600 text-white transition-colors text-sm"
               >
-                <Avatar
-                  name={`${estimator.firstName || ''} ${estimator.lastName || ''}`}
-                  avatarUrl={estimator.avatar}
-                  size="sm"
-                />
-                <span className="truncate max-w-[1000px]">
-                  {`${estimator.firstName || ''} ${estimator.lastName || ''}`.trim() || estimator.email}
-                </span>
+                Claim Project
               </button>
             );
-          } else {
-            // Read-only display for other estimators
-            return (
-              <div className="flex items-center gap-2 px-3 h-full w-full bg-gray-50">
-                <Avatar
-                  name={`${estimator.firstName || ''} ${estimator.lastName || ''}`}
-                  avatarUrl={estimator.avatar}
-                  size="sm"
-                />
-                <span className="truncate max-w-[1000px] text-gray-700">
-                  {`${estimator.firstName || ''} ${estimator.lastName || ''}`.trim() || estimator.email}
-                </span>
-              </div>
-            );
           }
+          // Note: Projects assigned to OTHER estimators are filtered out at JobBoard level
+          // so this branch should never be reached for estimators
         }
-        
-        // For admins, show clickable button
+      }
+      
+      // For admins - show all estimators or assign button
+      if (linkedEstimators.length > 0) {
+        const firstEstimator = estimators.find(e => e._id === linkedEstimators[0]) || {};
         return (
           <button
             className="flex items-center gap-2 px-3 h-full w-full bg-gray-100 hover:bg-gray-200 transition-colors"
             onClick={() => openAssignEstimator(row.original)}
           >
             <Avatar
-              name={`${estimator.firstName || ''} ${estimator.lastName || ''}`}
-              avatarUrl={estimator.avatar}
+              name={`${firstEstimator.firstName || ''} ${firstEstimator.lastName || ''}`}
+              avatarUrl={firstEstimator.avatar}
               size="sm"
             />
             <span className="truncate max-w-[1000px]">
-              {`${estimator.firstName || ''} ${estimator.lastName || ''}`.trim() || estimator.email}
+              {`${firstEstimator.firstName || ''} ${firstEstimator.lastName || ''}`.trim() || firstEstimator.email}
             </span>
-          </button>
-        );
-      }
-      
-      // No estimator assigned
-      if (isEstimator) {
-        // Show "Claim" button for estimators on unassigned projects
-        return (
-          <button
-            onClick={async () => {
-              const result = await Swal.fire({
-                title: 'Claim this project?',
-                text: 'Are you sure you want to assign yourself to this project?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, claim it!'
-              });
-              
-              if (result.isConfirmed) {
-                // Add current user to linkedEstimators
-                const updatedEstimators = [...(row.original.linkedEstimators || []), currentUserId];
-                updateRow(row.original._id, 'linkedEstimators', updatedEstimators);
-                
-                // 🎯 Auto-set status to "Assigned" when estimator claims project
-                updateRow(row.original._id, 'status', 'Assigned');
-                
-                Swal.fire({
-                  title: 'Claimed!',
-                  text: 'You have been assigned to this project and status updated to "Assigned".',
-                  icon: 'success',
-                  timer: 3000,
-                  showConfirmButton: false
-                });
-              }
-            }}
-            className="h-full w-full px-3 bg-green-500 hover:bg-green-600 text-white transition-colors text-sm"
-          >
-            Claim Project
+            {linkedEstimators.length > 1 && (
+              <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                +{linkedEstimators.length - 1}
+              </span>
+            )}
           </button>
         );
       }
@@ -550,24 +554,41 @@ Profit */
     enableColumnFilter: true,
   },
     // ─── Status column (KISS: Only use main status field) ────
-  {    accessorKey: 'status',
+  {    accessorKey: 'estimateStatus',
     accessorFn: row => {
-      // Show "Sent" if DateCompleted exists AND status is "Estimate Completed"
-      return (row.DateCompleted && row.status === 'Estimate Completed') ? 'Sent' : (row.status || 'Estimate Requested');
+      // DEV MODE: Fallback chain for status
+      // 1. estimateStatus (new field) - check if exists (not undefined)
+      // 2. jobBoardStatus (legacy field) - fallback for old projects
+      // 3. null means "not assigned to estimator yet" (legitimate state)
+      // 4. undefined means missing field (error state)
+      const effectiveStatus = row.estimateStatus !== undefined 
+        ? row.estimateStatus 
+        : (row.jobBoardStatus !== undefined ? row.jobBoardStatus : '⚠️ Error: Legacy Check');
+      
+      // Show "Sent" if DateCompleted exists AND status is "Sent"
+      return (row.DateCompleted && effectiveStatus === 'Sent') ? 'Sent' : (effectiveStatus || 'Estimate Requested');
     },
     header: props => <FilterSortHeader {...props} label="Status" filterHandlers={filterDropdownHandlers} />,
     cell: ({ row, getValue }) => {
       const rowId = row.original._id;
-      const mainStatus = row.original.status || 'Estimate Requested';
-      // Display "Sent" if DateCompleted exists AND status is "Estimate Completed"
-      const displayStatus = (row.original.DateCompleted && row.original.status === 'Estimate Completed') ? 'Sent' : mainStatus;
+      // DEV MODE: Fallback chain for status
+      const mainStatus = row.original.estimateStatus !== undefined 
+        ? row.original.estimateStatus 
+        : (row.original.jobBoardStatus !== undefined ? row.original.jobBoardStatus : '⚠️ Error: Legacy Check');
+      
+      // Display "Sent" if DateCompleted exists AND status is "Sent"
+      const displayStatus = (row.original.DateCompleted && mainStatus === 'Sent') ? 'Sent' : (mainStatus || 'Estimate Requested');
       const [status, setStatus] = useState(displayStatus);
 
       useEffect(() => {
-        // Display "Sent" if DateCompleted exists AND status is "Estimate Completed"
-        const currentDisplayStatus = (row.original.DateCompleted && row.original.status === 'Estimate Completed') ? 'Sent' : (row.original.status || 'Estimate Requested');
+        // DEV MODE: Fallback chain for status
+        const effectiveStatus = row.original.estimateStatus !== undefined 
+          ? row.original.estimateStatus 
+          : (row.original.jobBoardStatus !== undefined ? row.original.jobBoardStatus : '⚠️ Error: Legacy Check');
+        
+        const currentDisplayStatus = (row.original.DateCompleted && effectiveStatus === 'Sent') ? 'Sent' : (effectiveStatus || 'Estimate Requested');
         setStatus(currentDisplayStatus);
-      }, [row.original.status, row.original.DateCompleted]);
+      }, [row.original.estimateStatus, row.original.jobBoardStatus, row.original.DateCompleted]);
 
       const handleChange = (e) => {
         const newStatus = e.target.value;
@@ -579,7 +600,9 @@ Profit */
           const finalStatus = "Awaiting Review";
           setStatus(finalStatus);
           console.log(`🔄 Estimator auto-status change: "Estimate Completed" → "Awaiting Review" for project ${rowId}`);
-          updateRow(rowId, 'status', finalStatus); // 🎯 KISS: Only update main status field
+          updateRow(rowId, 'estimateStatus', finalStatus); // 🎯 Update estimateStatus for dual-status system
+          updateRow(rowId, 'status', finalStatus); // ✅ Legacy field for live build
+          updateRow(rowId, 'jobBoardStatus', finalStatus); // ✅ Legacy field for live build
           
           // Show notification to estimator
           if (typeof Swal !== 'undefined') {
@@ -598,36 +621,50 @@ Profit */
           // Status-specific client view mapping
           if (newStatus === "Sent") {
             // "Sent" appends to estimateSent array and sets/updates DateCompleted
+            // Also sets projectStatus to "Estimate Completed" so client can see and progress
             const now = new Date();
             const isoTimestamp = now.toISOString();
-            const dateOnly = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+            
+            // ✅ Get date in CLIENT'S LOCAL TIMEZONE (not UTC)
+            const clientLocalDate = getClientLocalDate(row.original, clients);
             
             // Get existing estimateSent array or initialize empty array
             const existingEstimateSent = row.original.estimateSent || [];
             const updatedEstimateSent = [...existingEstimateSent, isoTimestamp];
             
-            console.log(`📤 "Sent" status → Appending to estimateSent: [${updatedEstimateSent.join(', ')}], DateCompleted: ${dateOnly}, keeping status as "Estimate Completed"`);
-            updateRow(rowId, 'status', "Estimate Completed");
+            console.log(`📤 "Sent" status → Appending to estimateSent: [${updatedEstimateSent.join(', ')}], DateCompleted: ${clientLocalDate} (client's local date), setting estimateStatus to "Sent" and projectStatus to "Estimate Completed"`);
+            updateRow(rowId, 'estimateStatus', "Sent");
+            updateRow(rowId, 'projectStatus', "Estimate Completed"); // ✅ Unlock client - they see "Estimate Completed"
+            updateRow(rowId, 'status', "Estimate Completed"); // ✅ Legacy field MUST match projectStatus for live build
+            updateRow(rowId, 'jobBoardStatus', "Estimate Completed"); // ✅ Legacy field MUST match projectStatus for live build
             updateRow(rowId, 'estimateSent', updatedEstimateSent);
-            updateRow(rowId, 'DateCompleted', dateOnly);
+            updateRow(rowId, 'DateCompleted', clientLocalDate); // ✅ Use client's local date
           } else if (newStatus === "Estimate Completed" && userRole === "Admin") {
             // Admin manually sets "Estimate Completed" → Client sees plain "Estimate Completed" (no ART prefix)
+            // Set BOTH estimateStatus and projectStatus to "Estimate Completed"
             // Only clear DateCompleted, preserve estimateSent audit trail
-            console.log(`✅ Admin "Estimate Completed" → Client sees "Estimate Completed"`);
-            updateRow(rowId, 'status', "Estimate Completed");
+            console.log(`✅ Admin "Estimate Completed" → Client sees "Estimate Completed", setting both estimateStatus and projectStatus`);
+            updateRow(rowId, 'estimateStatus', "Estimate Completed");
+            updateRow(rowId, 'projectStatus', "Estimate Completed"); // ✅ Client sees "Estimate Completed" (no ART prefix)
+            updateRow(rowId, 'status', "Estimate Completed"); // ✅ Legacy field for live build
+            updateRow(rowId, 'jobBoardStatus', "Estimate Completed"); // ✅ Legacy field for live build
             updateRow(rowId, 'DateCompleted', null);
           } else if (newStatus === "Cancelled") {
             // Cancelled → Client sees plain "Cancelled" (no ART prefix)
             // Only clear DateCompleted, preserve estimateSent audit trail
             console.log(`❌ "Cancelled" → Client sees "Cancelled"`);
-            updateRow(rowId, 'status', "Cancelled");
+            updateRow(rowId, 'estimateStatus', "Cancelled");
+            updateRow(rowId, 'status', "Cancelled"); // ✅ Legacy field for live build
+            updateRow(rowId, 'jobBoardStatus', "Cancelled"); // ✅ Legacy field for live build
             updateRow(rowId, 'DateCompleted', null);
           } else {
             // All other statuses → Client sees same status (will get "ART:" prefix in ProjectTable)
             // "In Progress", "Awaiting Review", etc.
             // Only clear DateCompleted, preserve estimateSent audit trail
             console.log(`🎯 "${newStatus}" → Client sees "ART: ${newStatus}"`);
-            updateRow(rowId, 'status', newStatus);
+            updateRow(rowId, 'estimateStatus', newStatus);
+            updateRow(rowId, 'status', newStatus); // ✅ Legacy field for live build
+            updateRow(rowId, 'jobBoardStatus', newStatus); // ✅ Legacy field for live build
             updateRow(rowId, 'DateCompleted', null);
           }
         }
@@ -637,23 +674,44 @@ Profit */
         label: status,
         color: "bg-gray-300 text-black",
       };
-
-      // 🔒 Lock estimator interaction when status is "Awaiting Review"
-      const isAwaitingReview = status === "Awaiting Review";
-      const isEstimatorLocked = userRole === "Estimator" && isAwaitingReview;
       
-      // Allow both estimators and admins to edit status (but not estimators when locked)
-      const canEdit = (userRole === "Estimator" && !isEstimatorLocked) || userRole === "Admin";
+      // 🔍 DEBUG: Log status rendering
+      if (status === "Assigned" || status === "Estimate Requested") {
+        console.log(`🎨 Rendering status cell:`, {
+          projectNumber: row.projectNumber,
+          status,
+          currentStatus,
+          colorClass: currentStatus.color
+        });
+      }
+
+      // 🔒 Lock rules:
+      // Estimator locked statuses: null, "HOLD", "Cancelled", "Awaiting Review", "Estimate Completed", "Sent"
+      // Admin locked statuses: null (in production only - DEV mode allows editing)
+      const isNotAssigned = !status; // null or empty = not assigned yet
+      
+      const estimatorLockedStatuses = ["HOLD", "Cancelled", "Awaiting Review", "Estimate Completed", "Sent"];
+      const isEstimatorLocked = userRole === "Estimator" && 
+                                (isNotAssigned || estimatorLockedStatuses.includes(status));
+      
+      // Admin: Only locked when null (TODO: DEV mode check can be added later)
+      const isAdminLocked = userRole === "Admin" && isNotAssigned;
+      
+      // Allow editing based on role and lock state
+      const canEdit = (userRole === "Estimator" && !isEstimatorLocked) || 
+                      (userRole === "Admin" && !isAdminLocked);
       
       if (!canEdit) {
         return (
-          <div className="flex items-center h-full">
-            <span className={`px-3 py-1 text-sm font-medium rounded-md ${currentStatus.color} ${isEstimatorLocked ? 'opacity-75' : ''}`}>
-              {status}
-              {isEstimatorLocked && (
-                <span className="ml-1 text-xs">🔒</span>
-              )}
-            </span>
+          <div className="relative flex items-center h-full">
+            {/* Colored background badge - same as unlocked state */}
+            <div className={`absolute inset-0 rounded-md ${currentStatus.color} opacity-75`}></div>
+            
+            {/* Locked text display - styled like dropdown but not interactive */}
+            <div className={`relative z-10 px-3 py-1 w-full text-sm font-medium ${currentStatus.color.includes('text-white') ? 'text-white' : currentStatus.color.includes('text-black') ? 'text-black' : 'text-gray-800'}`}>
+              {status || 'Not Assigned'}
+              <span className="ml-2 text-xs">🔒</span>
+            </div>
           </div>
         );
       }

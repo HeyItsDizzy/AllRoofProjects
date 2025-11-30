@@ -101,6 +101,11 @@ const ClientSchema = new Schema({
   headerFit:          { type: Boolean, default: false }, // Header image fit style (true = contain, false = cover)
   footerPlacement:    { type: String, enum: ['full', 'left', 'center', 'right'], default: 'full' }, // Footer placement
 
+  // 10) Pricing & Account Status
+  pricingTier:        { type: String, enum: ['Elite', 'Pro', 'Standard'], default: 'Standard' }, // Pricing tier (formerly Gold/Silver/Bronze)
+  accountStatus:      { type: String, enum: ['Active', 'Hold'], default: 'Active' }, // Account status (Hold = overdue invoices, prevents estimate sending)
+  useNewPricing:      { type: Boolean, default: false }, // Feature flag: true = new pricing (Elite 30% off), false = legacy pricing (Elite 40% off)
+
 }, {
   timestamps: true, // adds createdAt & updatedAt
 });

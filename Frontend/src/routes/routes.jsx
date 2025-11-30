@@ -34,6 +34,13 @@ const LiveFolderSyncTest = lazy(() => import("../pages/LiveFolderSyncTest"));
 const Invoices = lazy(() => import("../pages/InvoiceFeed"));
 const Invoicing = lazy(() => import("../pages/Invoicing"));
 
+// ─── DEV - Project Dashboard (New Feature) ─────────────────────────────────────
+const ProjectDashboard = lazy(() => import("../appprojectdash"));
+const ProjectSelector = lazy(() => import("../appprojectdash/components/ProjectSelector").then(module => ({ default: module.ProjectSelector })));
+
+// ─── File Management & Recycle Bin ────────────────────────────────────────────
+const RecycleBinPage = lazy(() => import("../pages/RecycleBinPage"));
+
 // ─── Legal & Policy Pages ──────────────────────────────────────────────────────
 const TermsOfServicePage = lazy(() => import("../pages/TermsOfServicePage"));
 const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
@@ -177,6 +184,37 @@ export const router = createBrowserRouter([
           </AdminRoutes>
         ),
         handle: { title: "User Management" },
+      },
+
+      // ─── DEV - Project Dashboard (New Feature) ─────────────────────────────────
+      {
+        path: "/project-selector",
+        element: (
+          <AdminRoutes>
+            {withSuspense(ProjectSelector)()}
+          </AdminRoutes>
+        ),
+        handle: { title: "Select Project" },
+      },
+      {
+        path: "/project-dashboard/:projectId",
+        element: (
+          <AdminRoutes>
+            {withSuspense(ProjectDashboard)()}
+          </AdminRoutes>
+        ),
+        handle: { title: "Project Dashboard" },
+      },
+
+      // ─── File Management & Recovery ─────────────────────────────────────────────
+      {
+        path: "/recycle-bin",
+        element: (
+          <PrivateRoutes>
+            {withSuspense(RecycleBinPage)()}
+          </PrivateRoutes>
+        ),
+        handle: { title: "Recycle Bin" },
       },
       {
         path: "/projects",

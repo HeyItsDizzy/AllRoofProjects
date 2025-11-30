@@ -516,6 +516,19 @@ router.patch(
         project.linkedEstimators = [];
       }
 
+      // 🎯 SMART STATUS UPDATE: Only set to "Assigned" if project hasn't been worked on yet
+      // Don't reset status if already in progress (In Progress, RFI, HOLD, Sent, etc.)
+      const currentEstimateStatus = project.estimateStatus || project.status;
+      const shouldUpdateStatus = !currentEstimateStatus || 
+                                currentEstimateStatus === 'Estimate Requested' || 
+                                currentEstimateStatus === 'Unknown';
+      
+      const statusUpdate = shouldUpdateStatus ? {
+        estimateStatus: "Assigned",
+        jobBoardStatus: "Assigned", // 🔄 DEV MODE: legacy field
+        status: "Assigned" // 🔄 DEV MODE: legacy field (will be phased out)
+      } : {};
+
       let updateProject;
       if (multiAssign) {
         if (!project.linkedEstimators.includes(estimatorId)) {
@@ -523,9 +536,14 @@ router.patch(
             { _id: new ObjectId(projectId) },
             { 
               $addToSet: { linkedEstimators: estimatorId },
-              $set: { status: "Assigned" } // 🎯 Auto-set status to "Assigned"
+              ...(Object.keys(statusUpdate).length > 0 ? { $set: statusUpdate } : {})
             }
           );
+          console.log(`🔍 Multi-assign DB write result:`, { 
+            matchedCount: updateProject.matchedCount, 
+            modifiedCount: updateProject.modifiedCount,
+            statusUpdate 
+          });
         }
       } else {
         updateProject = await projectCollectionRef.updateOne(
@@ -533,10 +551,30 @@ router.patch(
           { 
             $set: { 
               linkedEstimators: [estimatorId],
-              status: "Assigned" // 🎯 Auto-set status to "Assigned"
+              ...statusUpdate
             }
           }
         );
+        console.log(`🔍 Single-assign DB write result:`, { 
+          matchedCount: updateProject.matchedCount, 
+          modifiedCount: updateProject.modifiedCount,
+          statusUpdate 
+        });
+      }
+      
+      if (shouldUpdateStatus) {
+        console.log(`✅ Status updated to "Assigned" (estimateStatus + legacy fields)`);
+        
+        // 🔍 DEBUG: Verify the update actually wrote to the database
+        const verifyProject = await projectCollectionRef.findOne({ _id: new ObjectId(projectId) });
+        console.log(`🔍 POST-UPDATE VERIFICATION:`, {
+          estimateStatus: verifyProject.estimateStatus,
+          jobBoardStatus: verifyProject.jobBoardStatus,
+          status: verifyProject.status,
+          linkedEstimators: verifyProject.linkedEstimators
+        });
+      } else {
+        console.log(`ℹ️ Status NOT updated - project already in progress (${currentEstimateStatus})`);
       }
 
       // Optionally keep track on the estimator side too
@@ -560,8 +598,16 @@ router.patch(
         return res.status(500).json({ success: false, message: "Failed to update estimator or project." });
       }
 
-      console.log(`✅ Estimator ${estimator.firstName} ${estimator.lastName} assigned to project ${projectId} successfully. Status set to "Assigned".`);
-      res.json({ success: true, message: `Estimator ${estimator.firstName} ${estimator.lastName} assigned to project successfully. Status updated to "Assigned".` });
+      const statusMessage = shouldUpdateStatus 
+        ? `Status set to "Assigned".`
+        : `Status unchanged (already in progress).`;
+      
+      console.log(`✅ Estimator ${estimator.firstName} ${estimator.lastName} assigned to project ${projectId} successfully. ${statusMessage}`);
+      res.json({ 
+        success: true, 
+        message: `Estimator ${estimator.firstName} ${estimator.lastName} assigned to project successfully. ${statusMessage}`,
+        statusUpdated: shouldUpdateStatus
+      });
 
     } catch (error) {
       console.error("❌ Error updating project estimator assignment:", error);
@@ -707,6 +753,8 @@ router.post("/addProject", authenticateTokenOrApiKey("create_project"), async (r
     const linkedClients = req.body.linkedClients || [];
     const linkedUsers   = req.body.linkedUsers   || [];
 
+    const initialStatus = req.body.status || "New Lead";
+    
     const newProject = {
       name: req.body.name,
       location: req.body.location,
@@ -718,8 +766,21 @@ router.post("/addProject", authenticateTokenOrApiKey("create_project"), async (r
       subTotal: req.body.subTotal || 0,
       total:   req.body.total    || 0,
       gst:     req.body.gst      || 0,
-      status:  req.body.status   || "New Lead",
+      // DEV MODE: Initialize both legacy and new status fields
+      status:  initialStatus,              // Legacy client status
+      projectStatus: initialStatus,        // New client status
+      jobBoardStatus: null,                // Legacy estimator status (null until assigned)
+      estimateStatus: null,                // New estimator status (null until assigned)
+      DateCompleted: null,                 // Initialize DateCompleted
       projectNumber,
+      // 📸 Pricing Snapshot - Captured when estimate is sent
+      pricingSnapshot: {
+        capturedAt: null,               // Timestamp when pricing was locked
+        clientPricingTier: null,        // Elite/Pro/Standard at time of estimate
+        clientUseNewPricing: null,      // true/false - which pricing model was active
+        priceMultiplier: null,          // Actual multiplier used (0.6, 0.7, 0.8, or 1.0)
+        exchangeRate: null,             // NOK exchange rate if applicable
+      },
     };
 
     // 2) Insert the project
@@ -789,6 +850,17 @@ router.get("/get-projects", authenticateToken(), authorizeRole("Admin", "Estimat
 
     console.log("Projects Found:", projects.length);
     console.log("Project Order:", projects.map(p => p.projectNumber));
+    
+    // 🔍 DEBUG: Log status fields for first 3 projects to verify data structure
+    if (projects.length > 0) {
+      console.log("🔍 Sample project status fields:", projects.slice(0, 3).map(p => ({
+        projectNumber: p.projectNumber,
+        estimateStatus: p.estimateStatus,
+        jobBoardStatus: p.jobBoardStatus,
+        status: p.status,
+        linkedEstimators: p.linkedEstimators
+      })));
+    }
 
     return res.json({
       success: true,
@@ -1528,6 +1600,67 @@ router.post("/send-estimate/:id", authenticateToken(), async (req, res) => {
       return res.status(404).json({ success: false, message: "Project not found." });
     }
 
+    // 🚫 CHECK CLIENT ACCOUNT STATUS - Block sending if account is on HOLD
+    // 📸 CAPTURE PRICING SNAPSHOT - Lock in pricing at time of estimate send
+    let clientData = null;
+    if (project.linkedClients && project.linkedClients.length > 0) {
+      const Client = require('../config/Client');
+      const clientId = project.linkedClients[0]; // Get first linked client
+      
+      try {
+        clientData = await Client.findById(clientId);
+        
+        if (clientData && clientData.accountStatus === 'Hold') {
+          console.log(`🚫 Blocked estimate send for project ${projectId} - Client account on HOLD (overdue invoices)`);
+          return res.status(403).json({ 
+            success: false, 
+            message: `Cannot send estimate. Client account is on HOLD due to overdue invoices. Please contact accounting.`,
+            code: 'ACCOUNT_ON_HOLD',
+            clientId: clientData._id,
+            clientName: clientData.name
+          });
+        }
+        
+        console.log(`✅ Client account status check passed (Status: ${clientData?.accountStatus || 'Active'})`);
+      } catch (clientError) {
+        console.error(`⚠️ Error checking client account status:`, clientError);
+        // Continue with sending - don't block if there's an error checking
+      }
+    }
+
+    // 📸 CAPTURE PRICING SNAPSHOT - Only if not already captured
+    if (!project.pricingSnapshot || !project.pricingSnapshot.capturedAt) {
+      const pricingSnapshot = {
+        capturedAt: new Date(),
+        clientPricingTier: clientData?.pricingTier || 'Standard',
+        clientUseNewPricing: clientData?.useNewPricing || false,
+        // Calculate actual multiplier based on tier and pricing model
+        priceMultiplier: (() => {
+          const tier = clientData?.pricingTier || 'Standard';
+          const useNew = clientData?.useNewPricing || false;
+          
+          if (tier === 'Elite') return useNew ? 0.7 : 0.6; // New: 30% off, Legacy: 40% off
+          if (tier === 'Pro') return 0.8; // 20% off (same for both)
+          return 1.0; // Standard - full price
+        })(),
+        exchangeRate: null, // Will be set if NOK pricing is used
+      };
+
+      // Update project with pricing snapshot
+      await collection.updateOne(
+        { _id: new ObjectId(projectId) },
+        { $set: { pricingSnapshot } }
+      );
+
+      console.log(`📸 Pricing snapshot captured for project ${projectId}:`, {
+        tier: pricingSnapshot.clientPricingTier,
+        useNewPricing: pricingSnapshot.clientUseNewPricing,
+        multiplier: pricingSnapshot.priceMultiplier
+      });
+    } else {
+      console.log(`ℹ️ Pricing snapshot already exists for project ${projectId} (captured ${project.pricingSnapshot.capturedAt})`);
+    }
+
     // Send the email using the email service with frontend-generated content
     const emailService = require('../services/emailService');
     
@@ -2001,6 +2134,139 @@ router.post(
 console.log("✅ projectRoutes.js successfully registered!");
 
 console.log("🔍 Routes in projectRoutes.js:");
+
+// ✅ NEW PAGINATED GET-PROJECTS ENDPOINT - Solves Performance Issues
+router.get("/get-projects", authenticateToken(), async (req, res) => {
+  try {
+    console.log("✅ Reached the /get-projects route handler");
+    
+    // Extract pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Max 100 items per page
+    const skip = (page - 1) * limit;
+    
+    // Extract filter parameters
+    const status = req.query.status;
+    const search = req.query.search;
+    const monthFilter = req.query.month; // e.g., "2025-10" for October 2025
+    const estimatorId = req.query.estimatorId;
+    
+    console.log(`📄 Pagination: Page ${page}, Limit ${limit}, Skip ${skip}`);
+    console.log(`🔍 Filters: Status=${status}, Search=${search}, Month=${monthFilter}, EstimatorId=${estimatorId}`);
+
+    const projectCollectionRef = await projectsCollection();
+    const userRole = req.user?.role || "User";
+    const userId = req.user?._id;
+    
+    // Build query based on user role and filters
+    let query = {};
+    
+    // Role-based filtering
+    if (userRole === "Estimator") {
+      query.linkedEstimators = { $in: [userId.toString()] };
+      console.log(`🎯 Estimator filter applied for user: ${userId}`);
+    } else if (userRole === "User") {
+      // For regular users, show projects they have access to
+      query.$or = [
+        { linkedUsers: { $in: [userId.toString()] } },
+        { linkedClients: { $exists: true, $ne: [] } } // Projects with clients assigned
+      ];
+    }
+    // Admin sees all projects (no additional filtering)
+    
+    // Apply additional filters
+    if (status && status !== 'All') {
+      query.status = status;
+    }
+    
+    if (estimatorId && estimatorId !== 'all') {
+      query.linkedEstimators = { $in: [estimatorId] };
+    }
+    
+    if (monthFilter) {
+      // Month filter: "2025-10" -> projects posted in October 2025
+      const year = parseInt(monthFilter.split('-')[0]);
+      const month = parseInt(monthFilter.split('-')[1]);
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+      
+      query.posting_date = {
+        $gte: startDate.toISOString().split('T')[0],
+        $lte: endDate.toISOString().split('T')[0]
+      };
+    }
+    
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      query.$or = [
+        { name: searchRegex },
+        { projectNumber: searchRegex },
+        { description: searchRegex },
+        { 'location.full_address': searchRegex }
+      ];
+      
+      // Merge with existing $or conditions if they exist
+      if (query.$or && userRole === "User") {
+        query.$and = [
+          { $or: query.$or }, // User role conditions
+          { $or: [ // Search conditions
+            { name: searchRegex },
+            { projectNumber: searchRegex },
+            { description: searchRegex },
+            { 'location.full_address': searchRegex }
+          ]}
+        ];
+        delete query.$or;
+      }
+    }
+    
+    console.log("🔍 Final MongoDB Query:", JSON.stringify(query, null, 2));
+    
+    // Get total count for pagination
+    const totalProjects = await projectCollectionRef.countDocuments(query);
+    const totalPages = Math.ceil(totalProjects / limit);
+    
+    // Get paginated projects with sorting (newest first)
+    const projects = await projectCollectionRef
+      .find(query)
+      .sort({ posting_date: -1, projectNumber: -1 }) // Sort by newest first
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+    
+    console.log(`📊 Found ${projects.length} projects (page ${page} of ${totalPages}, total: ${totalProjects})`);
+    
+    // Return paginated response
+    res.json({
+      success: true,
+      message: "Projects retrieved successfully",
+      data: projects,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalProjects: totalProjects,
+        projectsPerPage: limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      },
+      filters: {
+        status: status || 'All',
+        search: search || '',
+        month: monthFilter || '',
+        estimatorId: estimatorId || ''
+      }
+    });
+    
+  } catch (error) {
+    console.error("❌ Error in get-projects:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve projects",
+      error: error.message
+    });
+  }
+});
+
 // ✅ CLEANUP ROUTE: Convert ObjectId entries to strings in linkedProjects arrays
 router.post("/cleanup-linked-projects", authenticateToken(), authorizeRole("Admin"), async (req, res) => {
   try {
@@ -2052,6 +2318,205 @@ router.post("/cleanup-linked-projects", authenticateToken(), authorizeRole("Admi
       success: false, 
       message: "Cleanup failed", 
       error: error.message 
+    });
+  }
+});
+
+// ✅ DUAL-STATUS SYSTEM: Update Project Status and/or Estimate Status
+router.patch("/:projectId", authenticateToken(), async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const { projectStatus, estimateStatus, status, linkedEstimators } = req.body; // Accept legacy 'status' + linkedEstimators
+    
+    if (!ObjectId.isValid(projectId)) {
+      return res.status(400).json({ success: false, message: "Invalid Project ID." });
+    }
+
+    const projectCollectionRef = await projectsCollection();
+    const project = await projectCollectionRef.findOne({ _id: new ObjectId(projectId) });
+
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+
+    const userRole = req.user?.role || "User";
+    const userId = req.user?._id?.toString();
+    const updateFields = {};
+    
+    // Handle linkedEstimators updates (for Estimators claiming/unclaiming and Admins)
+    if (linkedEstimators !== undefined) {
+      if (userRole === "Estimator") {
+        // Estimators can only add/remove themselves
+        const currentEstimators = project.linkedEstimators || [];
+        const isAddingSelf = linkedEstimators.includes(userId) && !currentEstimators.includes(userId);
+        const isRemovingSelf = !linkedEstimators.includes(userId) && currentEstimators.includes(userId);
+        
+        if (isAddingSelf || isRemovingSelf) {
+          updateFields.linkedEstimators = linkedEstimators;
+          console.log(`👷 Estimator ${isAddingSelf ? 'claiming' : 'unclaiming'} project ${projectId}`);
+        } else {
+          return res.status(403).json({ 
+            success: false, 
+            message: "Estimators can only add or remove themselves from projects." 
+          });
+        }
+      } else if (userRole === "Admin") {
+        // Admins can update any estimator assignments
+        updateFields.linkedEstimators = linkedEstimators;
+        console.log(`🔧 Admin updating linkedEstimators for project ${projectId}`);
+      } else {
+        return res.status(403).json({ 
+          success: false, 
+          message: "Users cannot update estimator assignments." 
+        });
+      }
+    }
+    
+    // Handle legacy single-status updates
+    if (status && !projectStatus && !estimateStatus) {
+      // Legacy mode: Update old 'status' field only
+      updateFields.status = status;
+      console.log(`🔄 Legacy status update for project ${projectId}: ${status}`);
+    } else {
+      // NEW DUAL-STATUS SYSTEM
+      
+      // Migrate legacy status to new fields on first dual-status update
+      if (project.status && !project.projectStatus && !project.estimateStatus) {
+        console.log(`🔄 Migrating legacy status "${project.status}" to dual-status fields`);
+        // Determine which field the legacy status belongs to
+        const isEstimateStatus = [
+          "Assigned", "In Progress", "In Progress: Walls", "RFI", "HOLD", 
+          "Small Fix", "Awaiting Review", "Sent"
+        ].includes(project.status);
+        
+        if (isEstimateStatus) {
+          updateFields.estimateStatus = project.status;
+          updateFields.projectStatus = "Estimate Requested"; // Default client status
+        } else {
+          updateFields.projectStatus = project.status;
+          updateFields.estimateStatus = null;
+        }
+      }
+      
+      // ROLE-BASED UPDATE PERMISSIONS
+      if (userRole === "Admin") {
+        // Admins can update both (for testing/dev)
+        if (projectStatus !== undefined) {
+          updateFields.projectStatus = projectStatus;
+          updateFields.status = projectStatus; // 🔄 DEV MODE: Also update legacy field
+          console.log(`🔧 Admin updating projectStatus: ${projectStatus} (also updating legacy 'status')`);
+          
+          // SPECIAL: "Estimate Requested" sets BOTH fields simultaneously
+          if (projectStatus === "Estimate Requested") {
+            updateFields.estimateStatus = "Estimate Requested";
+            updateFields.jobBoardStatus = "Estimate Requested"; // 🔄 DEV MODE: Also update legacy field
+            console.log(`✨ Setting estimateStatus to "Estimate Requested" (dual-field update + legacy)`);
+          }
+        }
+        if (estimateStatus !== undefined) {
+          updateFields.estimateStatus = estimateStatus;
+          updateFields.jobBoardStatus = estimateStatus; // 🔄 DEV MODE: Also update legacy field
+          console.log(`🔧 Admin updating estimateStatus: ${estimateStatus} (also updating legacy 'jobBoardStatus')`);
+          
+          // AUTO-UPDATE projectStatus when estimate is "Sent"
+          if (estimateStatus === "Sent") {
+            updateFields.projectStatus = "Estimate Completed";
+            updateFields.status = "Estimate Completed"; // 🔄 DEV MODE: Also update legacy field
+            console.log(`✨ Auto-updating projectStatus to "Estimate Completed" (also updating legacy 'status')`);
+          }
+        }
+      } else if (userRole === "User") {
+        // Users can ONLY update projectStatus
+        if (projectStatus !== undefined) {
+          updateFields.projectStatus = projectStatus;
+          updateFields.status = projectStatus; // 🔄 DEV MODE: Also update legacy field
+          console.log(`👤 User updating projectStatus: ${projectStatus} (also updating legacy 'status')`);
+          
+          // SPECIAL: "Estimate Requested" sets BOTH fields simultaneously
+          if (projectStatus === "Estimate Requested") {
+            updateFields.estimateStatus = "Estimate Requested";
+            updateFields.jobBoardStatus = "Estimate Requested"; // 🔄 DEV MODE: Also update legacy field
+            console.log(`✨ Setting estimateStatus to "Estimate Requested" (dual-field update + legacy)`);
+          }
+          
+          // CANCEL REQUEST LOGIC: User selects "Cancel Request" from locked dropdown
+          if (projectStatus === "Cancel Request") {
+            updateFields.estimateStatus = "Cancelled";
+            updateFields.jobBoardStatus = "Cancelled"; // 🔄 DEV MODE: Also update legacy field
+            updateFields.projectStatus = project.projectStatus || "Estimate Requested";
+            updateFields.status = project.projectStatus || project.status || "Estimate Requested"; // 🔄 DEV MODE
+            console.log(`❌ User cancelled estimate request - estimateStatus set to "Cancelled" (also updating legacy)`);
+          }
+        }
+        if (estimateStatus !== undefined) {
+          return res.status(403).json({ 
+            success: false, 
+            message: "Users cannot update estimate status." 
+          });
+        }
+      } else if (userRole === "Estimator") {
+        // Estimators can ONLY update estimateStatus
+        if (estimateStatus !== undefined) {
+          updateFields.estimateStatus = estimateStatus;
+          updateFields.jobBoardStatus = estimateStatus; // 🔄 DEV MODE: Also update legacy field
+          updateFields.status = estimateStatus; // 🔄 DEV MODE: Also update legacy 'status' field (will be phased out)
+          console.log(`👷 Estimator updating estimateStatus: ${estimateStatus} (also updating legacy 'jobBoardStatus' + 'status')`);
+          
+          // AUTO-UPDATE projectStatus when estimate is "Sent"
+          if (estimateStatus === "Sent") {
+            updateFields.projectStatus = "Estimate Completed";
+            updateFields.status = "Estimate Completed"; // 🔄 DEV MODE: Also update legacy field
+            console.log(`✨ Auto-updating projectStatus to "Estimate Completed" (also updating legacy 'status')`);
+          }
+        }
+        if (projectStatus !== undefined) {
+          return res.status(403).json({ 
+            success: false, 
+            message: "Estimators cannot update project status." 
+          });
+        }
+      }
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "No valid fields to update." 
+      });
+    }
+
+    // 🔄 DEV MODE COMPATIBILITY: Log what's being updated
+    console.log(`📝 Updating fields:`, Object.keys(updateFields).join(', '));
+
+    // Update project in database
+    const result = await projectCollectionRef.updateOne(
+      { _id: new ObjectId(projectId) },
+      { $set: updateFields }
+    );
+
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found or no changes made",
+      });
+    }
+
+    // Fetch updated project
+    const updatedProject = await projectCollectionRef.findOne({ _id: new ObjectId(projectId) });
+
+    console.log(`✅ Project ${projectId} status updated successfully`);
+    res.json({
+      success: true,
+      message: "Project status updated successfully",
+      data: updatedProject
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating project status:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update project status",
+      error: error.message
     });
   }
 });
