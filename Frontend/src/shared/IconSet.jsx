@@ -37,6 +37,8 @@ import {
   MdAttachMoney as IconDollar,
   MdCloud as IconCloud,
   MdPalette as IconPalette,
+  MdRestore as IconRestore,
+  MdUndo as IconUndo,
 } from "react-icons/md";
 
 // Font Awesome v5
@@ -180,6 +182,10 @@ export {
   IconDemote,
   IconSend,
   IconClose,
+
+  // Recycle Bin & Undo
+  IconRestore,
+  IconUndo,
 
   // Communication
   IconMail,

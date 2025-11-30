@@ -18,7 +18,6 @@ import {
   Avatar
 } from 'antd';
 import { 
-  RestoreOutlined, 
   DeleteOutlined, 
   SearchOutlined, 
   FileOutlined, 
@@ -29,8 +28,9 @@ import {
   DownloadOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
+import { IconRestore } from '@/shared/IconSet';
 import useAxiosSecure from '@/hooks/AxiosSecure/useAxiosSecure';
-import useAuth from '@/hooks/Auth/useAuth';
+import { AuthContext } from '../auth/AuthProvider';
 import { formatDistance, format } from 'date-fns';
 import './RecycleBinPage.css';
 
@@ -60,7 +60,7 @@ const RecycleBinPage = () => {
   const [deleting, setDeleting] = useState(new Set());
 
   const axiosSecure = useAxiosSecure();
-  const { user } = useAuth();
+  const { user } = React.useContext(AuthContext);
 
   // Fetch recycle bin items
   const fetchItems = useCallback(async () => {
@@ -368,7 +368,7 @@ const RecycleBinPage = () => {
             <Button
               type="primary"
               size="small"
-              icon={<RestoreOutlined />}
+              icon={<IconRestore size={16} />}
               loading={restoring.has(record._id)}
               onClick={() => handleRestore(record)}
             >
@@ -536,7 +536,7 @@ const RecycleBinPage = () => {
             <Space>
               <Button
                 type="primary"
-                icon={<RestoreOutlined />}
+                icon={<IconRestore size={16} />}
                 disabled={selectedRowKeys.length === 0}
                 onClick={handleBulkRestore}
               >
