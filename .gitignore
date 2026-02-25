@@ -36,11 +36,13 @@ node_modules/
 Backend/node_modules/
 Frontend/node_modules/
 
-# Build outputs
+# Build outputs - NEVER commit (contain baked-in secrets)
 Backend/dist/
 Frontend/dist/
 Frontend/build/
 Frontend/dist*/
+Frontend/dist (Rollback)/
+Backend/dist (Rollback)/
 
 # Coverage and test reports
 coverage/

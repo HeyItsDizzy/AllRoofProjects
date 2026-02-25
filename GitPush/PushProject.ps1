@@ -29,14 +29,19 @@ Write-Host "📋 Checking git status..." -ForegroundColor Yellow
 git status --short
 
 Write-Host ""
-Write-Host "� Removing secrets from git history..." -ForegroundColor Yellow
-git rm --cached Frontend/.env.development -ErrorAction SilentlyContinue
-git rm -r --cached "Frontend/dist (Rollback)" -ErrorAction SilentlyContinue
-git rm --cached Backend/.env -ErrorAction SilentlyContinue
-git rm --cached Backend/apikeys.json -ErrorAction SilentlyContinue
+Write-Host "🔒 Removing secrets and build files from git..." -ForegroundColor Yellow
+Write-Host "   (Build files contain baked-in secrets and should never be committed)" -ForegroundColor Cyan
+git rm --cached Frontend/.env.development 2>$null
+git rm --cached Frontend/.env.production 2>$null
+git rm --cached Frontend/.env 2>$null
+git rm -r --cached "Frontend/dist" 2>$null
+git rm -r --cached "Frontend/dist (Rollback)" 2>$null
+git rm -r --cached "Frontend/build" 2>$null
+git rm --cached Backend/.env 2>$null
+git rm --cached Backend/apikeys.json 2>$null
 
 Write-Host ""
-Write-Host "📝 Adding all files..." -ForegroundColor Yellow
+Write-Host "📝 Adding source files only (no builds, no secrets)..." -ForegroundColor Yellow
 git add .
 
 Write-Host ""
@@ -45,10 +50,11 @@ $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 git commit -m "🏠 Push current local frontend + backend - $timestamp
 
 Local Development State:
-- Frontend: Current local development version  
-- Backend: Current local development version
-- Security: .env files removed from git tracking
-- Ready for live backend sync overlay"
+- Frontend: Source code only (no build files)
+- Backend: Source code only
+- Security: All .env files excluded
+- Build files: Excluded (build locally, deploy via FileZilla)
+- Ready for live deployment"
 
 Write-Host ""
 Write-Host "📤 Pushing to GitHub..." -ForegroundColor Yellow

@@ -28,14 +28,19 @@ echo "📋 Checking git status..."
 git status --short
 
 echo ""
-echo "� Removing secrets from git history..."
+echo "🔒 Removing secrets and build files from git..."
+echo "   (Build files contain baked-in secrets and should never be committed)"
 git rm --cached Frontend/.env.development 2>/dev/null || true
+git rm --cached Frontend/.env.production 2>/dev/null || true
+git rm --cached Frontend/.env 2>/dev/null || true
+git rm -r --cached "Frontend/dist" 2>/dev/null || true
 git rm -r --cached "Frontend/dist (Rollback)" 2>/dev/null || true
+git rm -r --cached "Frontend/build" 2>/dev/null || true
 git rm --cached Backend/.env 2>/dev/null || true
 git rm --cached Backend/apikeys.json 2>/dev/null || true
 
 echo ""
-echo "📝 Adding all files..."
+echo "📝 Adding source files only (no builds, no secrets)..."
 git add .
 
 echo ""
@@ -44,10 +49,11 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 git commit -m "🏠 Push current local frontend + backend - $TIMESTAMP
 
 Local Development State:
-- Frontend: Current local development version  
-- Backend: Current local development version
-- Security: .env files removed from git tracking
-- Ready for live backend sync overlay"
+- Frontend: Source code only (no build files)
+- Backend: Source code only
+- Security: All .env files excluded
+- Build files: Excluded (build locally, deploy via FileZilla)
+- Ready for live deployment"
 
 echo ""
 echo "📤 Pushing to GitHub..."
