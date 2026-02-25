@@ -1,0 +1,713 @@
+// src/pages/UserManagement.jsx
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from "../auth/AuthProvider";
+import useAxiosSecure from "@/hooks/AxiosSecure/useAxiosSecure";
+import Swal from '@/shared/swalConfig';
+import Avatar from "@/shared/Avatar";
+import { 
+  IconEdit, 
+  IconDelete, 
+  IconBlock, 
+  IconUnblock, 
+  IconInvite,
+  IconRefresh
+} from "@/shared/IconSet";
+import InviteUserModal from "../components/InviteUserModal";
+import EditUserModal from "../components/EditUserModal";
+import { getStrengthColors, getStrengthLevel, calculateUserProfileStrength } from "../utils/profileStrength";
+
+export default function UserManagement() {
+  const { user: currentUser } = useContext(AuthContext);
+  const axiosSecure = useAxiosSecure();
+  
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterRole, setFilterRole] = useState("All");
+  const [filterStatus, setFilterStatus] = useState("Active");
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [usersPerPage, setUsersPerPage] = useState(10);
+
+  // Sorting
+  const [sortField, setSortField] = useState('updatedAt');
+  const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc' - default newest first
+  const [contactSortBy, setContactSortBy] = useState('email'); // 'email' or 'phone'
+
+  // Fetch all users
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosSecure.get("/users/get-users");
+      if (response.data.success) {
+        setUsers(response.data.data);
+        setFilteredUsers(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to fetch users",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  // Apply filters
+  useEffect(() => {
+    let filtered = [...users];
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(user => 
+        user.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.company?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Role filter
+    if (filterRole !== "All") {
+      filtered = filtered.filter(user => user.role === filterRole);
+    }
+
+    // Status filter
+    if (filterStatus !== "All") {
+      if (filterStatus === "Active") {
+        filtered = filtered.filter(user => !user.isBlock && !user.isDeleted);
+      } else if (filterStatus === "Blocked") {
+        filtered = filtered.filter(user => user.isBlock);
+      } else if (filterStatus === "Deleted") {
+        filtered = filtered.filter(user => user.isDeleted);
+      }
+    }
+
+    setFilteredUsers(filtered);
+    setCurrentPage(1); // Reset to first page when filtering
+  }, [users, searchTerm, filterRole, filterStatus]);
+
+  // Sorting function
+  const handleSort = (field) => {
+    if (sortField === field) {
+      // Toggle direction if clicking same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Apply sorting to filtered users
+  const sortedUsers = React.useMemo(() => {
+    if (!sortField) return filteredUsers;
+
+    return [...filteredUsers].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (sortField) {
+        case 'name':
+          aValue = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
+          bValue = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
+          break;
+        case 'contact':
+          if (contactSortBy === 'email') {
+            aValue = (a.email || '').toLowerCase();
+            bValue = (b.email || '').toLowerCase();
+          } else {
+            aValue = (a.phone || '').toLowerCase();
+            bValue = (b.phone || '').toLowerCase();
+          }
+          break;
+        case 'company':
+          aValue = (a.company || '').toLowerCase();
+          bValue = (b.company || '').toLowerCase();
+          break;
+        case 'role':
+          aValue = (a.role || '').toLowerCase();
+          bValue = (b.role || '').toLowerCase();
+          break;
+        case 'status':
+          // Status sorting: Active < Blocked < Deleted
+          aValue = a.isDeleted ? 2 : a.isBlock ? 1 : 0;
+          bValue = b.isDeleted ? 2 : b.isBlock ? 1 : 0;
+          break;
+        case 'updatedAt':
+          aValue = new Date(a.updatedAt || 0).getTime();
+          bValue = new Date(b.updatedAt || 0).getTime();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredUsers, sortField, sortDirection, contactSortBy]);
+
+  // Sort indicator component
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <span className="ml-1 text-gray-400">⇅</span>;
+    return sortDirection === 'asc' ? <span className="ml-1">↑</span> : <span className="ml-1">↓</span>;
+  };
+
+  // Pagination
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  const currentUsers = sortedUsers.slice(indexOfFirstUser, indexOfLastUser);
+  const totalPages = Math.ceil(sortedUsers.length / usersPerPage);
+
+  // Helper function to get user name safely
+  const getUserName = (user) => {
+    const firstName = user.firstName || '';
+    const lastName = user.lastName || '';
+    return `${firstName} ${lastName}`.trim() || user.email || 'Unknown User';
+  };
+
+  // User Actions
+  const handleBlockUser = async (userId, userName) => {
+    try {
+      const result = await Swal.fire({
+        title: `Block ${userName}?`,
+        text: "This user will not be able to access the system.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6",
+        confirmButtonText: "Yes, block!",
+      });
+
+      if (result.isConfirmed) {
+        const response = await axiosSecure.patch(`/users/block-user/${userId}`);
+        if (response.data.success) {
+          // Update local state immediately
+          setUsers(prevUsers => 
+            prevUsers.map(u => u._id === userId ? { ...u, isBlock: true } : u)
+          );
+          Swal.fire("Blocked!", `${userName} has been blocked.`, "success");
+        }
+      }
+    } catch (error) {
+      console.error("Error blocking user:", error);
+      Swal.fire("Error", "Failed to block user", "error");
+    }
+  };
+
+  const handleUnblockUser = async (userId, userName) => {
+    try {
+      const response = await axiosSecure.patch(`/users/unblock-user/${userId}`);
+      if (response.data.success) {
+        // Update local state immediately
+        setUsers(prevUsers => 
+          prevUsers.map(u => u._id === userId ? { ...u, isBlock: false } : u)
+        );
+        Swal.fire("Unblocked!", `${userName} has been unblocked.`, "success");
+      }
+    } catch (error) {
+      console.error("Error unblocking user:", error);
+      Swal.fire("Error", "Failed to unblock user", "error");
+    }
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    try {
+      const result = await Swal.fire({
+        title: `Delete ${userName}?`,
+        text: "This action cannot be undone!",
+        icon: "error",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6",
+        confirmButtonText: "Yes, delete!",
+      });
+
+      if (result.isConfirmed) {
+        const response = await axiosSecure.patch(`/users/delete-user/${userId}`);
+        if (response.data.success) {
+          // Update local state immediately
+          setUsers(prevUsers => 
+            prevUsers.map(u => u._id === userId ? { ...u, isDeleted: true } : u)
+          );
+          Swal.fire("Deleted!", `${userName} has been marked as deleted.`, "success");
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      Swal.fire("Error", "Failed to delete user", "error");
+    }
+  };
+
+  const handleSyncRelationships = async () => {
+    try {
+      const result = await Swal.fire({
+        title: 'Sync User-Company Relationships?',
+        text: "This will fix any users showing 'No company' when they are actually linked to a company.",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, sync now!'
+      });
+
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Syncing...',
+          text: 'Please wait while we sync the relationships.',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const response = await axiosSecure.post('/users/sync-company-relationships');
+        
+        if (response.data.success) {
+          await fetchUsers(); // Refresh the user list
+          
+          Swal.fire({
+            icon: 'success',
+            title: 'Sync Complete!',
+            html: `
+              <p>${response.data.message}</p>
+              ${response.data.errorCount > 0 ? `<p class="text-red-600">Errors: ${response.data.errorCount}</p>` : ''}
+            `
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing relationships:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Sync Failed',
+        text: error.response?.data?.message || 'Failed to sync relationships'
+      });
+    }
+  };
+
+  const handleEditUser = (user) => {
+    setSelectedUser(user);
+    setShowEditModal(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setSelectedUser(null);
+  };
+
+  const getUserStatusBadge = (user) => {
+    if (user.isDeleted) {
+      return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Deleted</span>;
+    }
+    if (user.isBlock) {
+      return <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">Blocked</span>;
+    }
+    return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Active</span>;
+  };
+
+  const getRoleBadge = (role) => {
+    const roleStr = String(role || 'User');
+    const colors = {
+      Admin: "bg-purple-100 text-purple-800",
+      User: "bg-blue-100 text-blue-800",
+      Estimator: "bg-green-100 text-green-800",
+    };
+    return (
+      <span className={`px-2 py-1 text-xs rounded-full ${colors[roleStr] || colors.User}`}>
+        {roleStr}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bgGray flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-textGray">Loading users...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-bgGray p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-textBlack">User Management</h1>
+            <p className="text-textGray mt-1">Manage users, roles, and permissions</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center gap-2"
+            >
+              <IconInvite className="w-6 h-6" />
+              Invite User
+            </button>
+            <button
+              onClick={handleSyncRelationships}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+              title="Fix users showing 'No company' when they are linked"
+            >
+              <IconRefresh className="w-6 h-6" />
+              Sync Companies
+            </button>
+            <button
+              onClick={fetchUsers}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition flex items-center gap-2"
+            >
+              <IconRefresh className="w-6 h-6" />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-textBlack mb-1">Search</label>
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-textBlack mb-1">Role</label>
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="All">All Roles</option>
+                <option value="Admin">Admin</option>
+                <option value="User">User</option>
+                <option value="Estimator">Estimator</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-textBlack mb-1">Status</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="Active">Active</option>
+                <option value="Blocked">Blocked</option>
+                <option value="Deleted">Deleted</option>
+                <option value="All">All Status</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <div className="text-sm text-textGray">
+                Showing {sortedUsers.length} of {users.length} users
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Users Table */}
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">  
+                <tr>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center">
+                      User
+                      <SortIcon field="name" />
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <div className="flex items-center justify-between">
+                      <div 
+                        className="flex items-center cursor-pointer hover:text-gray-700"
+                        onClick={() => handleSort('contact')}
+                      >
+                        Contact
+                        <SortIcon field="contact" />
+                      </div>
+                      <select
+                        value={contactSortBy}
+                        onChange={(e) => {
+                          setContactSortBy(e.target.value);
+                          if (sortField === 'contact') {
+                            // Re-trigger sort with new criteria
+                            setSortField('contact');
+                          }
+                        }}
+                        className="ml-2 text-xs border border-gray-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="email">Email</option>
+                        <option value="phone">Phone</option>
+                      </select>
+                    </div>
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('company')}
+                  >
+                    <div className="flex items-center">
+                      Company
+                      <SortIcon field="company" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('role')}
+                  >
+                    <div className="flex items-center">
+                      Role
+                      <SortIcon field="role" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center">
+                      Status
+                      <SortIcon field="status" />
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentUsers.map((user) => (
+                  <tr key={user._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Avatar
+                          name={`${String(user.firstName || '')} ${String(user.lastName || '')}`}
+                          avatarUrl={user.avatar}
+                          size="lg"
+                        />
+                        <div className="ml-3">
+                          <div className="text-sm font-medium text-textBlack">
+                            {String(user.firstName || '')} {String(user.lastName || '')}
+                          </div>
+                          <div className="text-sm text-textGray mt-2">
+                            {(() => {
+                              const profileData = calculateUserProfileStrength(user);
+                              const strengthData = getStrengthLevel(profileData.percentage);
+                              const colorClasses = getStrengthColors(strengthData.color);
+                              return (
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs font-medium border ${colorClasses.bg} ${colorClasses.text} ${colorClasses.border}`}
+                                  title={`Profile completion: ${profileData.percentage}%`}
+                                >
+                                  {strengthData.icon} {profileData.percentage}% {strengthData.level}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-textBlack">{String(user.phone || 'No phone')}</div>
+                      <div className="text-sm text-textGray">{String(user.email || 'No email')}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-textBlack">{String(user.company || 'No company')}</div>
+                      {Boolean(user.companyAdmin) && (
+                        <div className="text-xs text-primary">Company Admin</div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getRoleBadge(user.role)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getUserStatusBadge(user)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        {/* Block/Unblock */}
+                        {!user.isDeleted && String(user._id) !== String(currentUser._id) && (
+                          <>
+                            {user.isBlock ? (
+                              <button
+                                onClick={() => handleUnblockUser(user._id, getUserName(user))}
+                                className="p-1 text-blue-600 hover:text-blue-800 transition"
+                                title="Unblock User"
+                              >
+                                <IconUnblock className="w-6 h-6" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleBlockUser(user._id, getUserName(user))}
+                                className="p-1 text-yellow-600 hover:text-yellow-800 transition"
+                                title="Block User"
+                              >
+                                <IconBlock className="w-6 h-6" />
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Delete */}
+                        {!user.isDeleted && String(user._id) !== String(currentUser._id) && (
+                          <button
+                            onClick={() => handleDeleteUser(user._id, getUserName(user))}
+                            className="p-1 text-red-600 hover:text-red-800 transition"
+                            title="Delete User"
+                          >
+                            <IconDelete className="w-6 h-6" />
+                          </button>
+                        )}
+
+                        {/* Edit */}
+                        <button
+                          onClick={() => handleEditUser(user)}
+                          className="p-1 text-gray-600 hover:text-gray-800 transition"
+                          title="Edit User"
+                        >
+                          <IconEdit className="w-6 h-6" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{indexOfFirstUser + 1}</span> to{' '}
+                    <span className="font-medium">{Math.min(indexOfLastUser, sortedUsers.length)}</span> of{' '}
+                    <span className="font-medium">{sortedUsers.length}</span> results
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="perPage" className="text-sm text-gray-700">Per page:</label>
+                    <select
+                      id="perPage"
+                      value={usersPerPage}
+                      onChange={(e) => {
+                        setUsersPerPage(Number(e.target.value));
+                        setCurrentPage(1); // Reset to first page when changing items per page
+                      }}
+                      className="border border-gray-300 rounded-md text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    {[...Array(totalPages)].map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentPage(index + 1)}
+                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                          currentPage === index + 1
+                            ? 'z-10 bg-primary border-primary text-white'
+                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                        }`}
+                      >
+                        {index + 1}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Empty State */}
+        {filteredUsers.length === 0 && !loading && (
+          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="text-gray-400 text-6xl mb-4">👥</div>
+            <h3 className="text-lg font-medium text-textBlack mb-2">No users found</h3>
+            <p className="text-textGray mb-4">
+              {searchTerm || filterRole !== "All" || filterStatus !== "All"
+                ? "Try adjusting your filters"
+                : "Start by inviting your first user"}
+            </p>
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition"
+            >
+              Invite User
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* TODO: Add Invite User Modal Component */}
+      <InviteUserModal
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        onInviteSent={fetchUsers}
+      />
+
+      {/* Edit User Modal */}
+      <EditUserModal
+        isOpen={showEditModal}
+        onClose={handleCloseEditModal}
+        user={selectedUser}
+        onUserUpdated={fetchUsers}
+      />
+    </div>
+  );
+}

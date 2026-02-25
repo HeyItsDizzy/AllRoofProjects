@@ -1,0 +1,70 @@
+{
+  "folders": [
+    {
+      "name": "📱 Project Manager (Local)",
+      "path": "."
+    },
+    {
+      "name": "🤖 Rusty_AI Mailer (VPS)",
+      "uri": "vscode-remote://ssh-remote+myvps/root/rusty_ai"
+    },
+    {
+      "name": "📂 .FM (Live VPS Files)",
+      "uri": "vscode-remote://ssh-remote+myvps/root/ART/.FM"
+    },
+    {
+      "name": "🗂️ Recovered Files",
+      "path": "../recovered-files"
+    },
+    {
+      "name": "🧱 Read-only Backend (Mirror Mount)",
+      "uri": "vscode-remote://ssh-remote+myvps/mnt/readonly-backend"
+    },
+    {
+      "name": "🌐 PublicWebsite (VPS)",
+      "uri": "vscode-remote://ssh-remote+myvps/root/ART/PublicWebsite"
+    }
+  ],
+  "remoteAuthority": "ssh-remote+myvps",
+  "settings": {
+    "files.exclude": {
+      "/mnt/readonly-backend/**": false,
+      "/root/ART/ProjectManagerApp/Backend/**": true,
+      "**/node_modules": true,
+      "**/.git": true,
+      "**/.DS_Store": true,
+      "**/Thumbs.db": true,
+      "**/.archive*/**": true,
+      "**/temp/**": true,
+      "**/tmp/**": true,
+      "**/build/**": true,
+      "**/dist/**": true,
+      "**/coverage/**": true,
+      "**/.nyc_output/**": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/.git": true,
+      "**/logs/**": true,
+      "**/.archive*/**": true,
+      "**/temp/**": true,
+      "**/tmp/**": true,
+      "**/build/**": true,
+      "**/dist/**": true,
+      "**/coverage/**": true
+    },
+    "files.watcherExclude": {
+      "**/node_modules/**": true,
+      "**/.git/**": true,
+      "**/logs/**": true,
+      "**/.archive*/**": true,
+      "**/temp/**": true,
+      "**/tmp/**": true,
+      "**/build/**": true,
+      "**/dist/**": true
+    },
+    "explorer.compactFolders": false,
+    "explorer.sortOrder": "type",
+    "sshfs.configs": []
+  }
+}

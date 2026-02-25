@@ -1,0 +1,34 @@
+# documents (legacy-safe)
+pdf
+doc,cfb
+docx
+xls,cfb
+xlsx
+ppt,cfb
+txt
+
+# images
+jpg
+jpeg
+png
+gif
+webp
+
+# cad / Applicad File types
+dwg
+dxf
+dab
+dbk 
+
+# archives
+zip
+rar
+7z
+
+# data & code
+csv
+json
+
+# email files
+eml
+msg

@@ -1,0 +1,89 @@
+# 🔒 ProjectManagerApp - .gitignore
+# Protects sensitive files across Backend and Frontend
+
+# Critical Security - NEVER commit these
+Backend/.FM/
+Backend/apikeys.json
+Backend/config/api-keys.json
+Backend/.env
+Frontend/.env
+Frontend/.env.development
+Frontend/.env.production
+*.env
+*.env.local
+*.env.production
+*.env.development
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+Backend/logs/
+Frontend/logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+Backend/node_modules/
+Frontend/node_modules/
+
+# Build outputs
+Backend/dist/
+Frontend/dist/
+Frontend/build/
+Frontend/dist*/
+
+# Coverage and test reports
+coverage/
+.nyc_output
+.coverage
+
+# IDE and OS files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Package manager files
+package-lock.json
+yarn.lock
+.pnpm-lock.yaml
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Development only
+.cache/
+.parcel-cache/
+.vite/
+
+# Don't commit deployment artifacts
+deploy-*.log
+deployment-*.json
+
+# OS specific
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems

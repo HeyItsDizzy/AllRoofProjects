@@ -1,0 +1,49 @@
+{
+  "name": "antd-optimization-config",
+  "description": "Configuration for optimizing Ant Design imports and bundle size",
+  "dependencies": {
+    "babel-plugin-import": "^1.13.8"
+  },
+  "devDependencies": {
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-env": "^7.24.0"
+  },
+  "babel": {
+    "presets": [
+      "@babel/preset-env",
+      "@babel/preset-react"
+    ],
+    "plugins": [
+      [
+        "import",
+        {
+          "libraryName": "antd",
+          "libraryDirectory": "es",
+          "style": "css"
+        },
+        "antd"
+      ]
+    ]
+  },
+  "vite": {
+    "optimizeDeps": {
+      "include": [
+        "antd/es/locale/en_US",
+        "antd/es/button",
+        "antd/es/modal", 
+        "antd/es/form",
+        "antd/es/input",
+        "antd/es/select",
+        "antd/es/message",
+        "antd/es/grid",
+        "antd/es/input-number",
+        "antd/es/checkbox"
+      ]
+    }
+  },
+  "instructions": {
+    "tree-shaking": "Modern bundlers like Vite automatically tree-shake Ant Design when using destructuring imports",
+    "bundle-analysis": "Run 'npm run build' to see actual bundle sizes in dist/stats.html",
+    "performance": "The key is to import only what you need and let Vite handle the rest"
+  }
+}

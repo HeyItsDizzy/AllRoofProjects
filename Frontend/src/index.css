@@ -1,0 +1,210 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global Green Scrollbars */
+@layer base {
+  /* Webkit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 6px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #009245;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.6) 1px, transparent 1px);
+    background-size: 6px 6px;
+    border-radius: 6px;
+    border: 2px solid #f1f1f1;
+  }
+
+  /*::-webkit-scrollbar-thumb:hover {
+    background: #009245;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.6) 1px, transparent 1px);
+  }*/
+
+  ::-webkit-scrollbar-corner {
+    background: #f1f1f1;
+  }
+
+  /* Scrollbar arrow buttons */
+  ::-webkit-scrollbar-button {
+    background: #e0e0e0;
+    border: 1px solid #c0c0c0;
+    width: 12px;
+    height: 12px;
+  }
+
+  /*::-webkit-scrollbar-button:hover {
+    background: #e0e0e0;
+  }*/
+
+  /* Top arrow (vertical scrollbar) */
+  ::-webkit-scrollbar-button:vertical:start {
+    background: #e0e0e0 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><path d="M4 2L2 6h4z" fill="%23666"/></svg>') center no-repeat;
+  }
+
+  /* Bottom arrow (vertical scrollbar) */
+  ::-webkit-scrollbar-button:vertical:end {
+    background: #e0e0e0 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><path d="M4 6L2 2h4z" fill="%23666"/></svg>') center no-repeat;
+  }
+
+  /* Left arrow (horizontal scrollbar) */
+  ::-webkit-scrollbar-button:horizontal:start {
+    background: #e0e0e0 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><path d="M2 4L6 2v4z" fill="%23666"/></svg>') center no-repeat;
+  }
+
+  /* Right arrow (horizontal scrollbar) */
+  ::-webkit-scrollbar-button:horizontal:end {
+    background: #e0e0e0 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><path d="M6 4L2 2v4z" fill="%23666"/></svg>') center no-repeat;
+  }
+
+  /* Firefox scrollbars */
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: #009245 #f1f1f1;
+  }
+
+  :root {
+    /* Global zoom level - change this one value to adjust entire app zoom */
+    --app-zoom: 0.8;
+    
+    /* Responsive breakpoints - automatically adjusted for zoom level */
+    /* These are the "visual" breakpoints at which columns should hide */
+    /* Change these values and they'll automatically scale with zoom */
+    /* At 0.8 zoom: Posted hides at 1064px, Due Date at 960px, Cost at 840px */
+    --bp-hide-posted: 1330;
+    --bp-hide-due-date: 1200;
+    --bp-hide-cost: 1050;
+  }
+  
+  /* Responsive table column visibility - dynamically adjusts with zoom */
+  /* Calculated: 1330 * 0.8 = 1064px */
+  @media (max-width: 1064px) {
+    .table-col-posted {
+      display: none !important;
+    }
+  }
+  
+  /* Calculated: 1200 * 0.8 = 960px */
+  @media (max-width: 960px) {
+    .table-col-due-date {
+      display: none !important;
+    }
+  }
+  
+  /* Calculated: 1050 * 0.8 = 840px */
+  @media (max-width: 840px) {
+    .table-col-cost {
+      display: none !important;
+    }
+  }
+
+  html {
+    /* Global zoom for entire app */
+    zoom: var(--app-zoom);
+    /* Prevent zoom on input focus on iOS */
+    font-size: 16px;
+    /* Improve text rendering and prevent auto-zoom */
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Prevent zoom */
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+  }
+
+  body {
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
+    /* Improve touch scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent zoom on double tap */
+    touch-action: manipulation;
+  }
+
+  /* Improve mobile interactions */
+  * {
+    /* Better touch targets and prevent zoom on tap */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Input elements - prevent zoom on focus */
+  input, textarea, select {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
+  /* Orientation change handling - PREVENT AUTO ZOOM */
+  @media screen and (orientation: landscape) {
+    html, body {
+      /* Lock zoom level during orientation change */
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      /* Ensure proper layout on landscape */
+      min-height: 100vh;
+      max-height: 100vh;
+    }
+  }
+
+  @media screen and (orientation: portrait) {
+    html, body {
+      /* Lock zoom level during orientation change */
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      min-height: 100vh;
+    }
+  }
+
+  /* Fix iOS safari viewport issues */
+  @supports (-webkit-touch-callout: none) {
+    html {
+      /* iOS Safari specific - prevent zoom */
+      -webkit-text-size-adjust: 100% !important;
+    }
+    
+    body {
+      /* iOS Safari specific fixes */
+      position: relative;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Prevent zoom on form elements */
+  @media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    textarea,
+    select {
+      font-size: 16px !important;
+      transform: scale(1);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+  }
+}
+
+/* Line clamp utility */
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
