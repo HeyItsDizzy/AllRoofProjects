@@ -23,7 +23,18 @@ class CompanyQBService {
     try {
       this.settings = await CompanyQBSettings.getDefault();
       
-      if (this.settings.isConnected() && !this.settings.needsTokenRefresh()) {
+      if (this.settings.isConnected()) {
+        // Check if token needs refresh
+        if (this.settings.needsTokenRefresh()) {
+          console.log('[QB SERVICE] Access token expired, refreshing...');
+          const refreshed = await this.refreshAccessToken();
+          if (!refreshed) {
+            console.error('[QB SERVICE] Token refresh failed');
+            return false;
+          }
+        }
+        
+        // Initialize QuickBooks client
         this.qbo = new QuickBooks(
           process.env.QB_CLIENT_ID,
           process.env.QB_CLIENT_SECRET,
@@ -41,11 +52,62 @@ class CompanyQBService {
         console.log('[QB SERVICE] Company QB Service initialized successfully');
         return true;
       } else {
-        console.log('[QB SERVICE] QB not connected or token needs refresh');
+        console.log('[QB SERVICE] QB not connected');
         return false;
       }
     } catch (error) {
       console.error('[QB SERVICE] Failed to initialize QB service:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Refresh QuickBooks access token using refresh token
+   */
+  async refreshAccessToken() {
+    try {
+      if (!this.settings || !this.settings.quickbooks?.refresh_token) {
+        throw new Error('No refresh token available');
+      }
+
+      console.log('[QB SERVICE] Refreshing QB access token...');
+      
+      const OAuthClient = require('intuit-oauth');
+      const oauthClient = new OAuthClient({
+        clientId: process.env.QB_CLIENT_ID,
+        clientSecret: process.env.QB_CLIENT_SECRET,
+        environment: process.env.QB_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production',
+        redirectUri: process.env.QB_REDIRECT_URI
+      });
+
+      // Use the refresh token
+      const authResponse = await oauthClient.refreshUsingToken(this.settings.quickbooks.refresh_token);
+      const newToken = authResponse.getToken();
+
+      // Update settings with new tokens
+      this.settings.quickbooks.access_token = newToken.access_token;
+      this.settings.quickbooks.refresh_token = newToken.refresh_token;
+      this.settings.quickbooks.expires_in = newToken.expires_in;
+      this.settings.quickbooks.access_token_expires_at = new Date(Date.now() + (newToken.expires_in * 1000));
+      this.settings.quickbooks.lastConnected = new Date();
+      this.settings.quickbooks.consecutiveFailures = 0;
+
+      await this.settings.save();
+
+      console.log('[QB SERVICE] Access token refreshed successfully');
+      console.log('[QB SERVICE] New expiry:', this.settings.quickbooks.access_token_expires_at);
+      
+      return true;
+    } catch (error) {
+      console.error('[QB SERVICE] Token refresh failed:', error.message);
+      
+      // Increment failure counter
+      if (this.settings) {
+        this.settings.quickbooks.consecutiveFailures = (this.settings.quickbooks.consecutiveFailures || 0) + 1;
+        this.settings.quickbooks.lastSyncError = error.message;
+        await this.settings.save();
+      }
+      
       return false;
     }
   }

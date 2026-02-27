@@ -115,6 +115,8 @@ router.get('/connect', authenticateToken(), authenticateAdmin(), async (req, res
       clientId: QB_CONFIG.clientId ? '***' + QB_CONFIG.clientId.slice(-4) : 'MISSING',
       clientSecret: QB_CONFIG.clientSecret ? '***' + QB_CONFIG.clientSecret.slice(-4) : 'MISSING',
       redirectUri: QB_CONFIG.redirectUri,
+      redirectUriLength: QB_CONFIG.redirectUri?.length,
+      redirectUriEncoded: encodeURIComponent(QB_CONFIG.redirectUri),
       environment: QB_CONFIG.environment
     });
 
@@ -131,7 +133,8 @@ router.get('/connect', authenticateToken(), authenticateAdmin(), async (req, res
     });
 
     console.log('[QB CONNECT] QB OAuth URL generated successfully');
-    console.log('[QB CONNECT] Auth URI:', authUri);
+    console.log('[QB CONNECT] Full Auth URI:', authUri);
+    console.log('[QB CONNECT] Redirect URI in Auth URI:', authUri.includes(QB_CONFIG.redirectUri) ? 'FOUND' : 'NOT FOUND');
     
     res.json({ success: true, authUri });
   } catch (error) {
@@ -342,13 +345,55 @@ router.get('/client-mappings', authenticateToken(), authenticateAdmin(), async (
 });
 
 /**
+ * GET /api/qb-company/customers
+ * Get all QuickBooks customers for manual mapping dropdown
+ */
+router.get('/customers', authenticateToken(), authenticateAdmin(), async (req, res) => {
+  try {
+    console.log('[QB CUSTOMERS] Fetching all QB customers...');
+    
+    const initialized = await companyQBService.initialize();
+    if (!initialized) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'QuickBooks not connected' 
+      });
+    }
+    
+    const customers = await companyQBService.getAllQBCustomers();
+    console.log(`[QB CUSTOMERS] Found ${customers.length} QB customers`);
+    
+    // Return simplified customer data for dropdown
+    const customerList = customers.map(customer => ({
+      id: customer.Id,
+      name: customer.DisplayName || customer.FullyQualifiedName || customer.CompanyName || 'Unnamed Customer',
+      companyName: customer.CompanyName,
+      active: customer.Active
+    })).filter(c => c.active !== false); // Filter out inactive customers
+    
+    res.json({ 
+      success: true, 
+      customers: customerList 
+    });
+  } catch (error) {
+    console.error('[QB CUSTOMERS] Failed to fetch customers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * POST /api/qb-company/verify-mapping/:clientId
- * Manually verify a client-to-customer mapping
+ * Manually verify or update a client-to-customer mapping
+ * Body: { qbCustomerId: string, qbCustomerName: string } (optional - updates mapping)
  */
 router.post('/verify-mapping/:clientId', authenticateToken(), authenticateAdmin(), async (req, res) => {
   try {
     const { clientId } = req.params;
-    const { qbCustomerId } = req.body;
+    const { qbCustomerId, qbCustomerName } = req.body;
+    
+    console.log('[QB VERIFY] Verifying mapping for client:', clientId);
+    console.log('[QB VERIFY] QB Customer ID:', qbCustomerId);
+    console.log('[QB VERIFY] QB Customer Name:', qbCustomerName);
     
     const settings = await CompanyQBSettings.getDefault();
     const mapping = settings.getClientMapping(clientId);
@@ -356,20 +401,37 @@ router.post('/verify-mapping/:clientId', authenticateToken(), authenticateAdmin(
     if (!mapping) {
       return res.status(404).json({ 
         success: false, 
-        error: 'Mapping not found' 
+        error: 'Mapping not found for this client' 
       });
     }
     
+    // Update mapping if new QB customer provided
     if (qbCustomerId) {
       mapping.qbCustomerId = qbCustomerId;
+      mapping.autoMapped = false; // Mark as manually mapped
     }
     
+    if (qbCustomerName) {
+      mapping.qbCustomerName = qbCustomerName;
+    }
+    
+    // Mark as verified
     mapping.verified = true;
+    mapping.mappedAt = new Date();
+    
     await settings.save();
+    
+    console.log('[QB VERIFY] Mapping updated and verified successfully');
     
     res.json({ 
       success: true, 
-      message: 'Mapping verified successfully' 
+      message: 'Mapping verified successfully',
+      mapping: {
+        clientId: mapping.mongoClientId.toString(),
+        qbCustomerId: mapping.qbCustomerId,
+        qbCustomerName: mapping.qbCustomerName,
+        verified: mapping.verified
+      }
     });
   } catch (error) {
     console.error('[QB VERIFY] Failed to verify mapping:', error);
@@ -411,17 +473,38 @@ router.delete('/disconnect', authenticateToken(), authenticateAdmin(), async (re
  */
 router.get('/test-connection', authenticateToken(), authenticateAdmin(), async (req, res) => {
   try {
+    console.log('[QB TEST] Testing connection...');
+    
+    // Get current settings first
+    const settings = await CompanyQBSettings.getDefault();
+    console.log('[QB TEST] Settings exist:', !!settings);
+    console.log('[QB TEST] Has access token:', !!settings.quickbooks?.access_token);
+    console.log('[QB TEST] Has realm ID:', !!settings.quickbooks?.realmId);
+    console.log('[QB TEST] Token expires at:', settings.quickbooks?.access_token_expires_at);
+    console.log('[QB TEST] Needs refresh:', settings.needsTokenRefresh());
+    
     const initialized = await companyQBService.initialize();
     
     if (!initialized) {
+      console.error('[QB TEST] Service failed to initialize');
       return res.status(400).json({ 
         success: false, 
-        error: 'QuickBooks not connected' 
+        error: 'QuickBooks not connected or token refresh failed',
+        details: {
+          hasSettings: !!settings,
+          hasAccessToken: !!settings.quickbooks?.access_token,
+          hasRealmId: !!settings.quickbooks?.realmId,
+          tokenExpired: settings.needsTokenRefresh()
+        }
       });
     }
     
+    console.log('[QB TEST] Service initialized, testing API call...');
+    
     // Try to get company info as connection test
     const qbCustomers = await companyQBService.getAllQBCustomers();
+    
+    console.log('[QB TEST] API call successful, found', qbCustomers.length, 'customers');
     
     res.json({ 
       success: true, 
